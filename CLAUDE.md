@@ -45,8 +45,49 @@ Solo project by a single developer. Priced at £3.99/device.
 ### Navigation — two layers
 Top-level routing uses a sealed `Screen` class (`Loading`, `Main`, `AddPlaylist`, `player/{channelUrl}`) in `NexStreamNavGraph`. Inside `MainScreen`, sub-navigation uses the sealed interface `AppRoute` (`Guide`, `Movies`, `Series`, `CatchUp`, `Search`, `MyList`, `Downloads`, `Settings/*`). `AppRoute` extensions (`rootSection()`, `hasCategoryPanel`, `isSettings`) drive sidebar and panel behaviour.
 
-### Focus / Zone model
-`MainScreen` manages a tri-zone focus state (`Zone.RAIL`, `Zone.PANEL`, `Zone.CONTENT`). D-pad navigation flows Rail → Panel → Content; Back collapses in reverse. Focus is passed to content screens via `FocusRequester` callbacks and `restoreTick` integer counters that increment to trigger `LaunchedEffect` re-focus after player closes.
+### Three-pane layout & focus model
+All screens use `ThreePaneLayout` (`ui/components/ThreePaneLayout.kt`). Navigation state lives entirely in `NavigationViewModel` (`ui/navigation/NavigationViewModel.kt`) — a Hilt singleton shared across all screens.
+
+**Layout:** `[Rail 80dp always visible] [Panel 0↔280dp animated] [Content fills rest]`
+
+All rail items have a panel — `hasPanel` does not exist anywhere in the codebase.
+
+| Zone | Input | Result |
+|------|-------|--------|
+| Rail | Center/OK | Selects rail item, expands panel — focus stays on rail |
+| Rail | DPad Right | Expands panel, moves focus to panel (last selected → "All" → first) |
+| Panel | Center/OK | Selects panel item, updates content — focus stays on panel |
+| Panel | DPad Right | Selects panel item, moves focus to content |
+| Panel | DPad Left / Back | Hides panel (width→0), returns focus to rail |
+| Content | Back | Returns focus to panel (panel stays visible) |
+| Content | DPad Left | Blocked — no DPad back-path from content to panel |
+
+Last selected panel item is persisted per rail item in `NavigationState.lastSelectedPanelItemPerRail: Map<String, String>`.
+
+**Key event pattern (do not deviate):**
+```kotlin
+Box(
+    modifier = Modifier
+        .focusRequester(focusRequester)
+        .onFocusChanged { isFocused = it.isFocused }
+        .onKeyEvent { keyEvent ->
+            if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
+            when (keyEvent.key) {
+                Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { /* confirm */ true }
+                Key.DirectionRight -> { /* zone-specific right action */ true }
+                Key.DirectionLeft  -> { /* zone-specific left action  */ true }
+                else -> false
+            }
+        }
+)
+```
+
+**Hard rules for navigation:**
+- Never send focus to content when Center/OK is pressed on a panel item
+- Never use `Modifier.clickable` alone on TV — always pair with `onFocusChanged` + `onKeyEvent`
+- Never duplicate navigation logic in screen-level composables — all state lives in `NavigationViewModel`
+- Never add a `hasPanel` parameter — all rail items have a panel
+- Back behaviour is handled by `BackHandler` in `ThreePaneLayout`, not in individual screens
 
 ### Theming system
 `ThemeManager` loads JSON themes from the nexstream.uk API (keyed by licence token) and caches them to `filesDir/themes/`. It falls back to bundled asset defaults (`assets/themes/theme-{dark,light}-default.json`). Themes can include custom font download URLs. `NexStreamThemeProvider` exposes the active theme as a `CompositionLocal`.
