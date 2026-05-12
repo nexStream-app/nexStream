@@ -128,9 +128,10 @@ private fun EPGContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope             = rememberCoroutineScope()
 
-    var showPlayer            by remember { mutableStateOf(false) }
-    var playerChannel         by remember { mutableStateOf<ChannelEntity?>(null) }
-    var playerCatchupDuration by remember { mutableStateOf(0L) }
+    var showPlayer             by remember { mutableStateOf(false) }
+    var playerChannel          by remember { mutableStateOf<ChannelEntity?>(null) }
+    var playerCatchupDuration  by remember { mutableStateOf(0L) }
+    var playerCatchupProgramme by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProgramEntity?>(null) }
 
     var dialogChannel       by remember { mutableStateOf<ChannelEntity?>(null) }
     var dialogProgram       by remember { mutableStateOf<ProgramEntity?>(null) }
@@ -313,15 +314,22 @@ private fun EPGContent(
                 seriesId              = null,
                 startPosition         = 0L,
                 catchupDuration       = playerCatchupDuration,
-                nowPlayingTitle       = playerChannel!!.name,
-                nowPlayingSubtitle    = null,
-                nowPlayingDescription = null,
+                nowPlayingTitle       = if (playerCatchupProgramme != null) playerCatchupProgramme!!.title else playerChannel!!.name,
+                nowPlayingSubtitle    = if (playerCatchupProgramme != null) {
+                    val prog = playerCatchupProgramme!!
+                    val tf   = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    val mins = ((prog.endTime - prog.startTime) / 60_000L).toInt()
+                    val dur  = if (mins / 60 > 0 && mins % 60 > 0) "${mins / 60}h ${mins % 60}m" else if (mins / 60 > 0) "${mins / 60}h" else "${mins}m"
+                    "${tf.format(java.util.Date(prog.startTime))} · $dur · ${playerChannel!!.name}"
+                } else null,
+                nowPlayingDescription = playerCatchupProgramme?.description,
                 onPlayNextEpisode     = {},
                 onBack = {
                     scope.launch { playerChannel?.let { mainViewModel.repository.recordRecentlyWatchedChannel(it) } }
-                    showPlayer            = false
-                    playerChannel         = null
-                    playerCatchupDuration = 0L
+                    showPlayer             = false
+                    playerChannel          = null
+                    playerCatchupDuration  = 0L
+                    playerCatchupProgramme = null
                     onPlayerVisibilityChanged?.invoke(false)
                     scope.launch {
                         kotlinx.coroutines.delay(300)
@@ -356,9 +364,10 @@ private fun EPGContent(
                     scope.launch {
                         val url = viewModel.buildTimeshiftUrl(dc, dp)
                         if (url != null) {
-                            playerChannel         = dc.copy(streamUrl = url)
-                            playerCatchupDuration = dp.endTime - dp.startTime
-                            showPlayer            = true
+                            playerChannel          = dc.copy(streamUrl = url)
+                            playerCatchupDuration  = dp.endTime - dp.startTime
+                            playerCatchupProgramme = dp
+                            showPlayer             = true
                             onPlayerVisibilityChanged?.invoke(true)
                         } else {
                             snackbarHostState.showSnackbar("Catch up unavailable for this programme")
