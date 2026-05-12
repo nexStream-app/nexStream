@@ -495,7 +495,15 @@ fun MainScreen(
                     panelFR = panelFR,
                     sidebarRefocusTick = sidebarRefocusTick,
                     panelFocusTick     = panelFocusTick,
-                    onRailFocusChanged  = { if (it) zone = Zone.RAIL },
+                    onRailFocusChanged  = { hasFocus ->
+                        if (hasFocus) {
+                            if (zone == Zone.CONTENT) {
+                                scope.launch { kotlinx.coroutines.delay(16); focusContent() }
+                            } else {
+                                zone = Zone.RAIL
+                            }
+                        }
+                    },
                     onPanelFocusChanged = { if (it) zone = Zone.PANEL },
                     onEnterPanel   = { zone = Zone.PANEL; panelFocusTick++ },
                     onEnterContent = { zone = Zone.CONTENT; focusContent() },

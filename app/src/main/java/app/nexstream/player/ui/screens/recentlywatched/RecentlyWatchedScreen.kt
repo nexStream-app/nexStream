@@ -52,12 +52,6 @@ fun RecentlyWatchedScreen(
     }
 
     val firstItemFR = firstItemFocusRequester ?: remember { FocusRequester() }
-    LaunchedEffect(filteredItems.size) {
-        if (filteredItems.isNotEmpty()) {
-            kotlinx.coroutines.delay(150)
-            try { firstItemFR.requestFocus() } catch (_: Exception) {}
-        }
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
