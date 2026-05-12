@@ -97,7 +97,7 @@ app/src/main/java/app/nexstream/player/
 
 ### Kotlin / Compose
 - **All coroutine work** in ViewModels via `viewModelScope`; never launch coroutines in Composables
-- **D-pad / focus navigation pattern** (established, do not deviate):
+- **D-pad / focus navigation pattern** (established, do not deviate) :
   ```kotlin
   Box(
       modifier = Modifier
