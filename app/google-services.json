@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "878464310829",
+    "project_id": "nexstream-bb100",
+    "storage_bucket": "nexstream-bb100.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:878464310829:android:82e3d5f2e33310da6e62a4",
+        "android_client_info": {
+          "package_name": "app.nexstream.player"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApFK5s4IFn-2aQ1AJ0nAO-vS9xIvbdA6w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

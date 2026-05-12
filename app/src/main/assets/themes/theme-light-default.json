@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "mode": "light",
+  "identity": {
+    "app_name": "nexStream",
+    "logo_mode": "text",
+    "logo_url": null,
+    "font_family": "exo2"
+  },
+  "typography": {
+    "scale": 1.15,
+    "weight": "bold"
+  },
+  "sidebar": {
+    "background": "#F0F2F8",
+    "rail_background": "#E4E8F4",
+    "rail_item_active_bg": "#C8D4F0",
+    "rail_item_focused_bg": "#D4DCF4",
+    "rail_icon": "#4A6AAF",
+    "rail_icon_active": "#2A4A9F",
+    "panel_background": "#E8EDF8",
+    "category_selected_bg": "#C0CFF0",
+    "category_focused_bg": "#CCD8F4",
+    "category_text": "#4A6AAF",
+    "category_text_selected": "#1A3A8F",
+    "category_text_focused": "#0A2A7F",
+    "divider": "#C8D4EC",
+    "account_bar_bg": "#D8E2F4",
+    "account_bar_text": "#1A3A8F",
+    "account_bar_text_secondary": "#4A6AAF"
+  },
+  "epg": {
+    "background": "#F4F6FC",
+    "header_background": "#E8EDF8",
+    "header_time_text": "#4A6AAF",
+    "header_day_text": "#2A4A9F",
+    "header_divider": "#C8D4EC",
+    "channel_column_bg": "#EDF0FA",
+    "channel_name_text": "#1A3A8F",
+    "channel_divider": "#C8D4EC",
+    "row_focused_tint": "#DCE8FF",
+    "program_cell_bg": "#FFFFFF",
+    "program_cell_now_bg": "#F0F5FF",
+    "program_cell_placeholder_bg": "#F0F2FA",
+    "program_cell_focused_bg": "#C8D8FF",
+    "program_cell_focused_border": "#3A6ADF",
+    "program_text": "#4A6AAF",
+    "program_text_now": "#2A4A9F",
+    "program_text_focused": "#0A2A7F",
+    "program_text_placeholder": "#9AAAD0",
+    "now_line": "#D04040",
+    "divider": "#C8D4EC",
+    "badge_catchup_bg": "#C8E0F8",
+    "badge_catchup_text": "#1A5AAF",
+    "badge_reminder_bg": "#FFF0C8",
+    "badge_reminder_text": "#8A5000"
+  },
+  "player": {
+    "controls_bg": "#CC000000",
+    "progress_played": "#3A6ADF",
+    "progress_buffered": "#C8D8FF",
+    "progress_bg": "#E0E8FF",
+    "text_primary": "#0A1A4F",
+    "text_secondary": "#3A5A9F"
+  },
+  "global": {
+    "primary": "#3A6ADF",
+    "primary_container": "#C8D8FF",
+    "on_primary": "#FFFFFF",
+    "on_primary_container": "#0A2A7F",
+    "surface": "#F4F6FC",
+    "surface_variant": "#E8EDF8",
+    "on_surface": "#0A1A4F",
+    "on_surface_variant": "#3A5A9F",
+    "outline": "#C8D4EC",
+    "error": "#D04040"
+  }
+}
