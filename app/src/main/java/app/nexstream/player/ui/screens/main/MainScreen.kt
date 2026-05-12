@@ -122,7 +122,6 @@ fun MainScreen(
     var showPlayer by remember { mutableStateOf(false) }
     var epgPlayerVisible by remember { mutableStateOf(false) }
     var playerClosedFromRoute by remember { mutableStateOf<AppRoute?>(null) }
-    var lastSettingsRoute by remember { mutableStateOf<AppRoute?>(null) }
     var currentCatchupDuration by rememberSaveable { mutableStateOf(0L) }
 
     var lastMovieIndex by rememberSaveable { mutableStateOf(0) }
@@ -247,7 +246,7 @@ fun MainScreen(
             seriesGridViewRef?.blockFocus()
             catchUpGridViewRef?.blockFocus()
             sidebarPanelExpanded = true
-            sidebarExpandedRoute = currentRoute
+            sidebarExpandedRoute = if (currentRoute.isSettings) AppRoute.Settings else currentRoute
             android.util.Log.d("NexStreamFocus", "navigate route=$currentRoute zone=RAIL panel=OPEN")
         } else {
             sidebarPanelExpanded = false
@@ -499,11 +498,16 @@ fun MainScreen(
                     onExitPanelToRail = { zone = Zone.RAIL; sidebarPanelExpanded = false; sidebarExpandedRoute = null; sidebarRefocusTick++ },
                     onNavigate = { route -> currentRoute = route },
                     onBackToMainMenu = {
-                        if (currentRoute in setOf(AppRoute.SettingsPlaylists, AppRoute.SettingsAppearance, AppRoute.SettingsPlayer)) {
-                            currentRoute = AppRoute.Settings
-                        } else {
-                            closeAllPanels()
-                            selectedGuideCategory = null; selectedMovieCategory = null; selectedSeriesCategory = null
+                        closeAllPanels()
+                        selectedGuideCategory = null; selectedMovieCategory = null; selectedSeriesCategory = null
+                        try { contentFR.requestFocus() } catch (_: Exception) {}
+                    },
+                    selectedSettingsRoute = if (currentRoute.isSettings && currentRoute != AppRoute.Settings) currentRoute else null,
+                    onSettingsItemSelected = { route ->
+                        currentRoute = route
+                        zone = Zone.CONTENT
+                        scope.launch {
+                            kotlinx.coroutines.delay(100)
                             try { contentFR.requestFocus() } catch (_: Exception) {}
                         }
                     },
@@ -852,49 +856,13 @@ fun MainScreen(
                         }
                     )
 
-                    AppRoute.Settings -> {
-                        val playlistsFocus  = remember { FocusRequester() }
-                        val appearanceFocus = remember { FocusRequester() }
-                        val licenceFocus    = remember { FocusRequester() }
-                        val playerFocus     = remember { FocusRequester() }
-                        LaunchedEffect(lastSettingsRoute) {
-                            kotlinx.coroutines.delay(100)
-                            try {
-                                when (lastSettingsRoute) {
-                                    AppRoute.SettingsPlaylists  -> playlistsFocus.requestFocus()
-                                    AppRoute.SettingsAppearance -> appearanceFocus.requestFocus()
-                                    AppRoute.SettingsLicence    -> licenceFocus.requestFocus()
-                                    AppRoute.SettingsPlayer     -> playerFocus.requestFocus()
-                                    else                        -> playlistsFocus.requestFocus()
-                                }
-                            } catch (_: Exception) { }
-                        }
-                        SettingsMenuScreen(
-                            onNavigate               = { route -> currentRoute = route },
-                            playlistsFocusRequester  = playlistsFocus,
-                            appearanceFocusRequester = appearanceFocus,
-                            licenceFocusRequester    = licenceFocus,
-                            playerFocusRequester     = playerFocus
-                        )
-                    }
-
-                    AppRoute.SettingsPlaylists -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        SettingsScreen(
-                            onNavigateToAddPlaylist = onNavigateToAddPlaylist,
-                            firstItemFocusRequester = contentFR
-                        )
-                    }
-                    AppRoute.SettingsAppearance -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        AppearanceScreen(firstItemFocusRequester = contentFR)
-                    }
-                    AppRoute.SettingsLicence -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        LicenceScreen(firstItemFocusRequester = contentFR)
-                    }
+                    AppRoute.SettingsPlaylists -> SettingsScreen(
+                        onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                        firstItemFocusRequester = contentFR
+                    )
+                    AppRoute.SettingsAppearance -> AppearanceScreen(firstItemFocusRequester = contentFR)
+                    AppRoute.SettingsLicence    -> LicenceScreen(firstItemFocusRequester = contentFR)
                     AppRoute.SettingsProfiles -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
                         var editingProfile by remember { mutableStateOf<ProfileEntity?>(null) }
                         var showEdit by remember { mutableStateOf(false) }
                         if (showEdit) {
@@ -909,25 +877,9 @@ fun MainScreen(
                             )
                         }
                     }
-                    AppRoute.SettingsPlayer -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        app.nexstream.player.ui.screens.settings.PlayerSettingsScreen(
-                            firstItemFocusRequester = contentFR
-                        )
-                    }
-
-                    AppRoute.SettingsAccount -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        app.nexstream.player.ui.screens.settings.AccountScreen(
-                            firstItemFocusRequester = contentFR
-                        )
-                    }
-                    AppRoute.SettingsAbout -> {
-                        BackHandler { currentRoute = AppRoute.Settings }
-                        app.nexstream.player.ui.screens.settings.AboutScreen(
-                            firstItemFocusRequester = contentFR
-                        )
-                    }
+                    AppRoute.SettingsPlayer  -> app.nexstream.player.ui.screens.settings.PlayerSettingsScreen(firstItemFocusRequester = contentFR)
+                    AppRoute.SettingsAccount -> app.nexstream.player.ui.screens.settings.AccountScreen(firstItemFocusRequester = contentFR)
+                    AppRoute.SettingsAbout   -> app.nexstream.player.ui.screens.settings.AboutScreen(firstItemFocusRequester = contentFR)
                     else -> Unit
                 }
 

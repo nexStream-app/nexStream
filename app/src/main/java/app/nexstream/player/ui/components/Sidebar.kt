@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.screens.main.hasCategoryPanel
+import app.nexstream.player.ui.screens.main.isSettings
 import app.nexstream.player.ui.screens.main.rootSection
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
@@ -73,6 +74,8 @@ fun Sidebar(
     onGuideCategorySelected: (String?) -> Unit,
     onSeriesCategorySelected: (String?) -> Unit,
     onCatchUpDateSelected: (String?) -> Unit = {},
+    selectedSettingsRoute: AppRoute? = null,
+    onSettingsItemSelected: (AppRoute) -> Unit = {},
     onBackToMainMenu: () -> Unit,
     panelExpanded: Boolean = false,
     contentActive: Boolean = false,  // true only when user is in content — collapses rail
@@ -218,8 +221,18 @@ fun Sidebar(
                         translationX = -panelWidthPx * (1f - panelProgress.value)
                     }
             ) {
-                if (expandedRoute == AppRoute.CatchUp) {
-                    CatchUpDatePanel(
+                when {
+                    expandedRoute?.isSettings == true -> SettingsPanel(
+                        selectedRoute         = selectedSettingsRoute,
+                        onItemSelected        = onSettingsItemSelected,
+                        panelFR               = panelFR,
+                        onPanelFocusChanged   = onPanelFocusChanged,
+                        focusTick             = panelFocusTick,
+                        onRequestContentFocus = { onEnterContent() },
+                        onRequestRailFocus    = { onExitPanelToRail() },
+                        modifier              = Modifier.width(PANEL_WIDTH)
+                    )
+                    expandedRoute == AppRoute.CatchUp -> CatchUpDatePanel(
                         availableDates        = catchUpAvailableDates,
                         channels              = catchUpChannels,
                         selectedChannel       = selectedCatchUpChannel,
@@ -233,20 +246,19 @@ fun Sidebar(
                         onRequestRailFocus    = { onExitPanelToRail() },
                         modifier              = Modifier.width(PANEL_WIDTH)
                     )
-                } else {
-                    CategoryPanel(
-                        categories         = categories,
-                        selectedCategory   = selectedCategory,
-                        onCategorySelected = { cat -> onCategorySelected(cat) },
-                        panelFR            = panelFR,
-                        onPanelFocusChanged = onPanelFocusChanged,
-                        focusTick          = panelFocusTick,
+                    else -> CategoryPanel(
+                        categories            = categories,
+                        selectedCategory      = selectedCategory,
+                        onCategorySelected    = { cat -> onCategorySelected(cat) },
+                        panelFR               = panelFR,
+                        onPanelFocusChanged   = onPanelFocusChanged,
+                        focusTick             = panelFocusTick,
                         onRequestContentFocus = { onEnterContent() },
                         onRequestRailFocus    = { onExitPanelToRail() },
-                        onSearchRequest         = onSearchRequest,
-                        onFavouritesSelected    = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
-                        showSearch              = expandedRoute != AppRoute.Guide,
-                        modifier                = Modifier.width(PANEL_WIDTH)
+                        onSearchRequest       = onSearchRequest,
+                        onFavouritesSelected  = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
+                        showSearch            = expandedRoute != AppRoute.Guide,
+                        modifier              = Modifier.width(PANEL_WIDTH)
                     )
                 }
             }
@@ -922,6 +934,99 @@ private fun ProfileInfo(
                 contentAlignment = Alignment.Center
             ) {
                 Text(activeProfileEmoji, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+// ── Settings panel ────────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsPanel(
+    selectedRoute: AppRoute?,
+    onItemSelected: (AppRoute) -> Unit,
+    panelFR: FocusRequester,
+    onPanelFocusChanged: (Boolean) -> Unit,
+    focusTick: Int,
+    onRequestContentFocus: () -> Unit,
+    onRequestRailFocus: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme  = nsTheme.sidebar
+    val textScale = nsTheme.typography.scale.coerceIn(0.85f, 1.5f)
+    val headerHeight = (56 * textScale).dp
+
+    data class SettingsEntry(val label: String, val route: AppRoute, val fr: FocusRequester)
+
+    val playlistsFR   = remember { FocusRequester() }
+    val appearanceFR  = remember { FocusRequester() }
+    val playerFR      = remember { FocusRequester() }
+    val licenceFR     = remember { FocusRequester() }
+    val accountFR     = remember { FocusRequester() }
+    val profilesFR    = remember { FocusRequester() }
+    val aboutFR       = remember { FocusRequester() }
+
+    val entries = remember {
+        listOf(
+            SettingsEntry("Playlists",   AppRoute.SettingsPlaylists,  playlistsFR),
+            SettingsEntry("Appearance",  AppRoute.SettingsAppearance, appearanceFR),
+            SettingsEntry("Player",      AppRoute.SettingsPlayer,     playerFR),
+            SettingsEntry("Licence",     AppRoute.SettingsLicence,    licenceFR),
+            SettingsEntry("Account",     AppRoute.SettingsAccount,    accountFR),
+            SettingsEntry("Profiles",    AppRoute.SettingsProfiles,   profilesFR),
+            SettingsEntry("About",       AppRoute.SettingsAbout,      aboutFR),
+        )
+    }
+
+    LaunchedEffect(focusTick) {
+        if (focusTick == 0) return@LaunchedEffect
+        val target = entries.firstOrNull { it.route == selectedRoute }?.fr ?: entries.first().fr
+        try { target.requestFocus() } catch (_: Exception) {}
+    }
+
+    val scrollState = androidx.compose.foundation.rememberScrollState(0)
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(sTheme.panelBackground)
+            .focusRequester(panelFR)
+            .onFocusChanged { fs -> onPanelFocusChanged(fs.hasFocus) }
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(headerHeight),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text     = "Settings",
+                style    = MaterialTheme.typography.bodyMedium,
+                color    = sTheme.categoryText,
+                modifier = Modifier.padding(horizontal = 10.dp)
+            )
+        }
+
+        HorizontalDivider(color = sTheme.divider)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(vertical = 4.dp)
+        ) {
+            entries.forEachIndexed { index, entry ->
+                val prevFR = if (index > 0) entries[index - 1].fr else entries.last().fr
+                val nextFR = if (index < entries.lastIndex) entries[index + 1].fr else entries.first().fr
+                PanelItem(
+                    text                  = entry.label,
+                    isSelected            = selectedRoute == entry.route,
+                    focusRequester        = entry.fr,
+                    prevFR                = prevFR,
+                    nextFR                = nextFR,
+                    onRequestContentFocus = onRequestContentFocus,
+                    onRequestRailFocus    = onRequestRailFocus,
+                    onClick               = { onItemSelected(entry.route) }
+                )
             }
         }
     }

@@ -51,7 +51,7 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
 
 /** True for routes that have a category panel. */
 val AppRoute.hasCategoryPanel: Boolean
-    get() = this == AppRoute.Guide || this == AppRoute.Movies || this == AppRoute.Series || this == AppRoute.CatchUp
+    get() = this == AppRoute.Guide || this == AppRoute.Movies || this == AppRoute.Series || this == AppRoute.CatchUp || this.isSettings
 
 /** True for routes in the settings sub-tree. */
 val AppRoute.isSettings: Boolean
