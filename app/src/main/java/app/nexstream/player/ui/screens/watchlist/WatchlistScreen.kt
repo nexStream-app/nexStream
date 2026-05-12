@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import coil.compose.AsyncImage
 
 @Composable
@@ -29,63 +30,85 @@ fun WatchlistScreen(
     onChannelClick: (streamUrl: String, channelName: String) -> Unit,
     onMovieClick: (item: WatchlistEntity) -> Unit,
     onSeriesClick: (item: WatchlistEntity) -> Unit,
+    selectedType: String? = null,
     firstItemFocusRequester: FocusRequester? = null,
     viewModel: WatchlistViewModel = hiltViewModel()
 ) {
-    val allItems by viewModel.allItems.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
-    val channels = allItems.filter { it.type == WatchlistType.CHANNEL }
-    val movies = allItems.filter { it.type == WatchlistType.MOVIE }
-    val series = allItems.filter { it.type == WatchlistType.SERIES }
+    val allItems by viewModel.allItems.collectAsState()
+
+    val filteredItems = remember(allItems, selectedType) {
+        when (selectedType) {
+            "Live TV" -> allItems.filter { it.type == WatchlistType.CHANNEL }
+            "Movies"  -> allItems.filter { it.type == WatchlistType.MOVIE }
+            "Series"  -> allItems.filter { it.type == WatchlistType.SERIES }
+            else      -> allItems
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(headerHeight)
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = selectedType ?: "All",
+                style = MaterialTheme.typography.titleMedium,
+                color = sTheme.categoryText
+            )
+        }
+        HorizontalDivider(color = sTheme.divider)
+
         if (allItems.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                    Text("Your list is empty", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Bookmark channels, movies and series to add them here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    Icon(Icons.Default.BookmarkBorder, contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = sTheme.categoryText.copy(alpha = 0.3f))
+                    Text("Your list is empty",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = sTheme.categoryText.copy(alpha = 0.6f))
+                    Text("Bookmark channels, movies and series to add them here",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = sTheme.categoryText.copy(alpha = 0.4f))
                 }
             }
-        } else {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Channels (${channels.size})") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Movies (${movies.size})") })
-                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Series (${series.size})") })
-            }
-            when (selectedTab) {
-                0 -> WatchlistItemList(items = channels, emptyMessage = "No channels saved", icon = Icons.Default.Tv, firstItemFocusRequester = firstItemFocusRequester, onClick = { item -> item.streamUrl?.let { onChannelClick(it, item.name) } }, onRemove = { viewModel.removeFromWatchlist(it.id, it.type) })
-                1 -> WatchlistItemList(items = movies, emptyMessage = "No movies saved", icon = Icons.Default.Movie, firstItemFocusRequester = firstItemFocusRequester, onClick = { onMovieClick(it) }, onRemove = { viewModel.removeFromWatchlist(it.id, it.type) })
-                2 -> WatchlistItemList(items = series, emptyMessage = "No series saved", icon = Icons.Default.VideoLibrary, firstItemFocusRequester = firstItemFocusRequester, onClick = { onSeriesClick(it) }, onRemove = { viewModel.removeFromWatchlist(it.id, it.type) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun WatchlistItemList(
-    items: List<WatchlistEntity>,
-    emptyMessage: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    firstItemFocusRequester: FocusRequester? = null,
-    onClick: (WatchlistEntity) -> Unit,
-    onRemove: (WatchlistEntity) -> Unit
-) {
-    if (items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(emptyMessage, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    } else {
-        LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                WatchlistRow(
-                    item = item,
-                    defaultIcon = icon,
-                    focusRequester = if (index == 0) firstItemFocusRequester else null,
-                    onClick = { onClick(item) },
-                    onRemove = { onRemove(item) }
+        } else if (filteredItems.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "No ${selectedType?.lowercase() ?: "items"} in your list",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                itemsIndexed(filteredItems, key = { _, item -> item.id }) { index, item ->
+                    val icon = when (item.type) {
+                        WatchlistType.CHANNEL -> Icons.Default.Tv
+                        WatchlistType.MOVIE   -> Icons.Default.Movie
+                        WatchlistType.SERIES  -> Icons.Default.VideoLibrary
+                    }
+                    WatchlistRow(
+                        item = item,
+                        defaultIcon = icon,
+                        focusRequester = if (index == 0) firstItemFocusRequester else null,
+                        onClick = {
+                            when (item.type) {
+                                WatchlistType.CHANNEL -> item.streamUrl?.let { onChannelClick(it, item.name) }
+                                WatchlistType.MOVIE   -> onMovieClick(item)
+                                WatchlistType.SERIES  -> onSeriesClick(item)
+                            }
+                        },
+                        onRemove = { viewModel.removeFromWatchlist(item.id, item.type) }
+                    )
+                }
             }
         }
     }

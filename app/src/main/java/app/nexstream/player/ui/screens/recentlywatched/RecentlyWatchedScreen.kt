@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.data.local.entity.RecentlyWatchedEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import coil.compose.AsyncImage
 
 @Composable
@@ -30,27 +31,57 @@ fun RecentlyWatchedScreen(
     onChannelClick: (streamUrl: String, name: String) -> Unit,
     onMovieClick: (item: RecentlyWatchedEntity) -> Unit,
     onEpisodeClick: (item: RecentlyWatchedEntity) -> Unit,
+    selectedType: String? = null,
     firstItemFocusRequester: FocusRequester? = null,
     viewModel: RecentlyWatchedViewModel = hiltViewModel()
 ) {
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+
     val items by viewModel.recentlyWatched.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
-    val channels = items.filter { it.type == RecentlyWatchedType.CHANNEL }
-    val movies   = items.filter { it.type == RecentlyWatchedType.MOVIE }
-    val episodes = items.filter { it.type == RecentlyWatchedType.EPISODE }
+    val filteredItems = remember(items, selectedType) {
+        when (selectedType) {
+            "Live TV"  -> items.filter { it.type == RecentlyWatchedType.CHANNEL }
+            "Movies"   -> items.filter { it.type == RecentlyWatchedType.MOVIE }
+            "Episodes" -> items.filter { it.type == RecentlyWatchedType.EPISODE }
+            else       -> items
+        }
+    }
 
-    // Auto-focus first item when content loads, not the tab row
     val firstItemFR = firstItemFocusRequester ?: remember { FocusRequester() }
-    LaunchedEffect(items.size) {
-        if (items.isNotEmpty()) {
+    LaunchedEffect(filteredItems.size) {
+        if (filteredItems.isNotEmpty()) {
             kotlinx.coroutines.delay(150)
             try { firstItemFR.requestFocus() } catch (_: Exception) {}
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(headerHeight)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = selectedType ?: "All",
+                style = MaterialTheme.typography.titleMedium,
+                color = sTheme.categoryText
+            )
+            if (items.isNotEmpty()) {
+                TextButton(onClick = { showClearConfirm = true }) {
+                    Icon(Icons.Default.ClearAll, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Clear All", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        HorizontalDivider(color = sTheme.divider)
 
         if (items.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -58,62 +89,49 @@ fun RecentlyWatchedScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.History, contentDescription = null,
                         modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        tint = sTheme.categoryText.copy(alpha = 0.3f))
                     Text("Nothing watched yet",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = sTheme.categoryText.copy(alpha = 0.6f))
                     Text("Content you watch will appear here",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        color = sTheme.categoryText.copy(alpha = 0.4f))
                 }
+            }
+        } else if (filteredItems.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "No ${selectedType?.lowercase() ?: "items"} watched recently",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
-                horizontalArrangement = Arrangement.End
+            LazyColumn(
+                contentPadding = PaddingValues(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                TextButton(onClick = { showClearConfirm = true }) {
-                    Icon(imageVector = Icons.Default.ClearAll, contentDescription = null,
-                        modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Clear All")
+                items(filteredItems, key = { it.id }) { item ->
+                    val isFirst = filteredItems.indexOf(item) == 0
+                    val icon = when (item.type) {
+                        RecentlyWatchedType.CHANNEL -> Icons.Default.Tv
+                        RecentlyWatchedType.MOVIE   -> Icons.Default.Movie
+                        RecentlyWatchedType.EPISODE -> Icons.Default.VideoLibrary
+                    }
+                    RecentItemRow(
+                        item = item,
+                        defaultIcon = icon,
+                        focusRequester = if (isFirst) firstItemFR else null,
+                        onClick = {
+                            when (item.type) {
+                                RecentlyWatchedType.CHANNEL -> onChannelClick(item.streamUrl, item.name)
+                                RecentlyWatchedType.MOVIE   -> onMovieClick(item)
+                                RecentlyWatchedType.EPISODE -> onEpisodeClick(item)
+                            }
+                        },
+                        onRemove = { viewModel.delete(item.id) }
+                    )
                 }
-            }
-
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
-                    text = { Text("Channels (${channels.size})") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
-                    text = { Text("Movies (${movies.size})") })
-                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 },
-                    text = { Text("Series (${episodes.size})") })
-            }
-
-            when (selectedTab) {
-                0 -> RecentItemList(
-                    items = channels,
-                    emptyMessage = "No channels watched recently",
-                    defaultIcon = Icons.Default.Tv,
-                    firstItemFocusRequester = firstItemFR,
-                    onClick = { onChannelClick(it.streamUrl, it.name) },
-                    onRemove = { viewModel.delete(it.id) }
-                )
-                1 -> RecentItemList(
-                    items = movies,
-                    emptyMessage = "No movies watched recently",
-                    defaultIcon = Icons.Default.Movie,
-                    firstItemFocusRequester = firstItemFR,
-                    onClick = { onMovieClick(it) },
-                    onRemove = { viewModel.delete(it.id) }
-                )
-                2 -> RecentItemList(
-                    items = episodes,
-                    emptyMessage = "No series watched recently",
-                    defaultIcon = Icons.Default.VideoLibrary,
-                    firstItemFocusRequester = firstItemFR,
-                    onClick = { onEpisodeClick(it) },
-                    onRemove = { viewModel.delete(it.id) }
-                )
             }
         }
     }
@@ -132,37 +150,6 @@ fun RecentlyWatchedScreen(
                 TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
             }
         )
-    }
-}
-
-@Composable
-private fun RecentItemList(
-    items: List<RecentlyWatchedEntity>,
-    emptyMessage: String,
-    defaultIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    firstItemFocusRequester: FocusRequester? = null,
-    onClick: (RecentlyWatchedEntity) -> Unit,
-    onRemove: (RecentlyWatchedEntity) -> Unit
-) {
-    if (items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(emptyMessage, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    } else {
-        LazyColumn(contentPadding = PaddingValues(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(items, key = { it.id }) { item ->
-                val isFirst = items.indexOf(item) == 0
-                RecentItemRow(
-                    item = item,
-                    defaultIcon = defaultIcon,
-                    focusRequester = if (isFirst) firstItemFocusRequester else null,
-                    onClick = { onClick(item) },
-                    onRemove = { onRemove(item) }
-                )
-            }
-        }
     }
 }
 

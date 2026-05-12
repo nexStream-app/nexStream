@@ -3,7 +3,6 @@ package app.nexstream.player.ui.screens.search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,11 +29,9 @@ import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.ui.components.TvKeyboard
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import androidx.compose.material3.HorizontalDivider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -47,13 +44,17 @@ fun SearchScreen(
     onChannelClick: (streamUrl: String, channelName: String) -> Unit,
     onMovieClick: (movie: MovieEntity) -> Unit,
     onSeriesClick: (series: SeriesEntity) -> Unit,
+    selectedType: String? = null,
     firstItemFocusRequester: FocusRequester? = null,
     viewModel: SearchViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
     val firstResultFocus = remember { FocusRequester() }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -61,10 +62,23 @@ fun SearchScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
 
+            // ── Themed header ────────────────────────────────────────────────
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = selectedType ?: "All",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = sTheme.categoryText
+                )
+            }
+            HorizontalDivider(color = sTheme.divider)
+
             // ── Search bar — full width, opens TvKeyboard dialog on select ────
             var searchBarFocused by remember { mutableStateOf(false) }
             var showKeyboard by remember { mutableStateOf(false) }
-            val searchFocusRequester = remember { FocusRequester() }
+            val searchFocusRequester = firstItemFocusRequester ?: remember { FocusRequester() }
 
             Surface(
                 modifier = Modifier
@@ -183,7 +197,7 @@ fun SearchScreen(
                 }
             }
 
-            // ── Results — full width ──────────────────────────────────────────
+            // ── Results — filtered by panel selection ────────────────────────
             Column(modifier = Modifier.fillMaxSize()) {
                 if (query.length < 2) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -204,32 +218,15 @@ fun SearchScreen(
                         }
                     }
                 } else {
-                    val tabs = listOf(
-                        "Channels (${results.channels.size})",
-                        "Programmes (${results.programmes.size})",
-                        "Movies (${results.movies.size})",
-                        "Series (${results.series.size})"
-                    )
-                    TabRow(selectedTabIndex = selectedTab) {
-                        tabs.forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedTab == index,
-                                onClick = { selectedTab = index },
-                                text = {
-                                    Text(
-                                        title,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1
-                                    )
-                                }
-                            )
-                        }
-                    }
+                    val showChannels = selectedType == null || selectedType == "Live TV"
+                    val showMovies   = selectedType == null || selectedType == "Movies"
+                    val showSeries   = selectedType == null || selectedType == "Series"
 
-                    val totalResults = results.channels.size + results.programmes.size +
-                            results.movies.size + results.series.size
+                    val hasAny = (showChannels && (results.channels.isNotEmpty() || results.programmes.isNotEmpty())) ||
+                                 (showMovies && results.movies.isNotEmpty()) ||
+                                 (showSeries && results.series.isNotEmpty())
 
-                    if (totalResults == 0) {
+                    if (!hasAny) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 "No results for \"$query\"",
@@ -238,37 +235,101 @@ fun SearchScreen(
                             )
                         }
                     } else {
-                        when (selectedTab) {
-                            0 -> ChannelResults(
-                                channels = results.channels,
-                                firstResultFocus = firstResultFocus,
-                                onChannelClick = onChannelClick,
-                                watchlistViewModel = watchlistViewModel,
-                                snackbarHostState = snackbarHostState,
-                                scope = scope
-                            )
-                            1 -> ProgrammeResults(
-                                programmes = results.programmes,
-                                firstResultFocus = firstResultFocus,
-                                channels = results.channels,
-                                onChannelClick = onChannelClick
-                            )
-                            2 -> MovieResults(
-                                movies = results.movies,
-                                firstResultFocus = firstResultFocus,
-                                onMovieClick = onMovieClick,
-                                watchlistViewModel = watchlistViewModel,
-                                snackbarHostState = snackbarHostState,
-                                scope = scope
-                            )
-                            3 -> SeriesResults(
-                                series = results.series,
-                                firstResultFocus = firstResultFocus,
-                                onSeriesClick = onSeriesClick,
-                                watchlistViewModel = watchlistViewModel,
-                                snackbarHostState = snackbarHostState,
-                                scope = scope
-                            )
+                        // Determine first focus target: first non-empty visible section
+                        val firstSectionHasChannels = showChannels && (results.channels.isNotEmpty() || results.programmes.isNotEmpty())
+                        val firstSectionHasMovies   = !firstSectionHasChannels && showMovies && results.movies.isNotEmpty()
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            if (showChannels && results.channels.isNotEmpty()) {
+                                item {
+                                    ResultSectionHeader("Channels (${results.channels.size})")
+                                }
+                                results.channels.forEachIndexed { index, channel ->
+                                    item(key = "ch_${channel.id}") {
+                                        val isBookmarked by watchlistViewModel.isInWatchlist(channel.id).collectAsState(initial = false)
+                                        SearchResultRow(
+                                            imageUrl = channel.logoUrl, title = channel.name, subtitle = channel.groupTitle,
+                                            icon = Icons.Default.Tv, isBookmarked = isBookmarked,
+                                            focusRequester = if (firstSectionHasChannels && index == 0) firstResultFocus else null,
+                                            onBookmark = {
+                                                watchlistViewModel.toggleWatchlist(
+                                                    WatchlistEntity(id = channel.id,
+                                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                                        type = WatchlistType.CHANNEL, name = channel.name,
+                                                        posterUrl = channel.logoUrl, streamUrl = channel.streamUrl), isBookmarked)
+                                                scope.launch { snackbarHostState.showSnackbar(if (!isBookmarked) "${channel.name} added to My List" else "${channel.name} removed from My List") }
+                                            },
+                                            onClick = { onChannelClick(channel.streamUrl, channel.name) }
+                                        )
+                                    }
+                                }
+                            }
+                            if (showChannels && results.programmes.isNotEmpty()) {
+                                item {
+                                    ResultSectionHeader("Programmes (${results.programmes.size})")
+                                }
+                                results.programmes.forEachIndexed { index, programme ->
+                                    item(key = "prog_${programme.id}") {
+                                        val timeFormat = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
+                                        val timeRange = "${timeFormat.format(java.util.Date(programme.startTime))} – ${timeFormat.format(java.util.Date(programme.endTime))}"
+                                        SearchResultRow(
+                                            imageUrl = programme.icon, title = programme.title, subtitle = timeRange,
+                                            icon = Icons.Default.CalendarToday,
+                                            focusRequester = if (firstSectionHasChannels && results.channels.isEmpty() && index == 0) firstResultFocus else null,
+                                            onClick = {
+                                                val ch = results.channels.firstOrNull { it.epgChannelId == programme.channelId }
+                                                if (ch != null) onChannelClick(ch.streamUrl, ch.name)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            if (showMovies && results.movies.isNotEmpty()) {
+                                item { ResultSectionHeader("Movies (${results.movies.size})") }
+                                results.movies.forEachIndexed { index, movie ->
+                                    item(key = "mov_${movie.id}") {
+                                        val isBookmarked by watchlistViewModel.isInWatchlist(movie.id).collectAsState(initial = false)
+                                        SearchResultRow(
+                                            imageUrl = movie.posterUrl, title = movie.name, subtitle = movie.categoryName,
+                                            icon = Icons.Default.Movie, isBookmarked = isBookmarked,
+                                            focusRequester = if (firstSectionHasMovies && index == 0) firstResultFocus else null,
+                                            onBookmark = {
+                                                watchlistViewModel.toggleWatchlist(
+                                                    WatchlistEntity(id = movie.id,
+                                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                                        type = WatchlistType.MOVIE, name = movie.name,
+                                                        posterUrl = movie.posterUrl, streamUrl = movie.streamUrl), isBookmarked)
+                                                scope.launch { snackbarHostState.showSnackbar(if (!isBookmarked) "${movie.name} added to My List" else "${movie.name} removed from My List") }
+                                            },
+                                            onClick = { onMovieClick(movie) }
+                                        )
+                                    }
+                                }
+                            }
+                            if (showSeries && results.series.isNotEmpty()) {
+                                item { ResultSectionHeader("Series (${results.series.size})") }
+                                results.series.forEachIndexed { index, s ->
+                                    item(key = "ser_${s.id}") {
+                                        val isBookmarked by watchlistViewModel.isInWatchlist(s.id).collectAsState(initial = false)
+                                        SearchResultRow(
+                                            imageUrl = s.posterUrl, title = s.name,
+                                            subtitle = if (s.seasonCount > 0) "${s.seasonCount} season${if (s.seasonCount > 1) "s" else ""}" else s.categoryName,
+                                            icon = Icons.Default.VideoLibrary, isBookmarked = isBookmarked,
+                                            focusRequester = if (!firstSectionHasChannels && !firstSectionHasMovies && index == 0) firstResultFocus else null,
+                                            onBookmark = {
+                                                watchlistViewModel.toggleWatchlist(
+                                                    WatchlistEntity(id = s.id,
+                                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                                        type = WatchlistType.SERIES, name = s.name,
+                                                        posterUrl = s.posterUrl, streamUrl = null), isBookmarked)
+                                                scope.launch { snackbarHostState.showSnackbar(if (!isBookmarked) "${s.name} added to My List" else "${s.name} removed from My List") }
+                                            },
+                                            onClick = { onSeriesClick(s) }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -283,152 +344,14 @@ fun SearchScreen(
 }
 
 @Composable
-private fun ChannelResults(
-    channels: List<ChannelEntity>,
-    firstResultFocus: FocusRequester,
-    onChannelClick: (streamUrl: String, channelName: String) -> Unit,
-    watchlistViewModel: WatchlistViewModel,
-    snackbarHostState: SnackbarHostState,
-    scope: kotlinx.coroutines.CoroutineScope
-) {
-    if (channels.isEmpty()) { EmptyTabMessage("No channels found"); return }
-    LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        itemsIndexed(channels, key = { _, c -> c.id }) { index, channel ->
-            val isBookmarked by watchlistViewModel.isInWatchlist(channel.id).collectAsState(initial = false)
-            SearchResultRow(
-                imageUrl = channel.logoUrl, title = channel.name, subtitle = channel.groupTitle,
-                icon = Icons.Default.Tv, isBookmarked = isBookmarked,
-                focusRequester = if (index == 0) firstResultFocus else null,
-                onBookmark = {
-                    watchlistViewModel.toggleWatchlist(
-                        WatchlistEntity(
-                            id = channel.id,
-                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                            type = WatchlistType.CHANNEL,
-                            name = channel.name,
-                            posterUrl = channel.logoUrl,
-                            streamUrl = channel.streamUrl
-                        ), isBookmarked
-                    )
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            if (!isBookmarked) "${channel.name} added to My List"
-                            else "${channel.name} removed from My List"
-                        )
-                    }
-                },
-                onClick = { onChannelClick(channel.streamUrl, channel.name) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProgrammeResults(
-    programmes: List<ProgramEntity>,
-    firstResultFocus: FocusRequester,
-    channels: List<ChannelEntity>,
-    onChannelClick: (streamUrl: String, channelName: String) -> Unit
-) {
-    if (programmes.isEmpty()) { EmptyTabMessage("No programmes found"); return }
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        itemsIndexed(programmes, key = { _, p -> p.id }) { index, programme ->
-            val timeRange = "${timeFormat.format(Date(programme.startTime))} – ${timeFormat.format(Date(programme.endTime))}"
-            SearchResultRow(
-                imageUrl = programme.icon, title = programme.title, subtitle = timeRange,
-                icon = Icons.Default.CalendarToday,
-                focusRequester = if (index == 0) firstResultFocus else null,
-                onClick = {
-                    val channel = channels.firstOrNull { it.epgChannelId == programme.channelId }
-                    if (channel != null) onChannelClick(channel.streamUrl, channel.name)
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun MovieResults(
-    movies: List<MovieEntity>,
-    firstResultFocus: FocusRequester,
-    onMovieClick: (MovieEntity) -> Unit,
-    watchlistViewModel: WatchlistViewModel,
-    snackbarHostState: SnackbarHostState,
-    scope: kotlinx.coroutines.CoroutineScope
-) {
-    if (movies.isEmpty()) { EmptyTabMessage("No movies found"); return }
-    LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        itemsIndexed(movies, key = { _, m -> m.id }) { index, movie ->
-            val isBookmarked by watchlistViewModel.isInWatchlist(movie.id).collectAsState(initial = false)
-            SearchResultRow(
-                imageUrl = movie.posterUrl, title = movie.name, subtitle = movie.categoryName,
-                icon = Icons.Default.Movie, isBookmarked = isBookmarked,
-                focusRequester = if (index == 0) firstResultFocus else null,
-                onBookmark = {
-                    watchlistViewModel.toggleWatchlist(
-                        WatchlistEntity(
-                            id = movie.id,
-                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                            type = WatchlistType.MOVIE,
-                            name = movie.name,
-                            posterUrl = movie.posterUrl,
-                            streamUrl = movie.streamUrl
-                        ), isBookmarked
-                    )
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            if (!isBookmarked) "${movie.name} added to My List"
-                            else "${movie.name} removed from My List"
-                        )
-                    }
-                },
-                onClick = { onMovieClick(movie) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SeriesResults(
-    series: List<SeriesEntity>,
-    firstResultFocus: FocusRequester,
-    onSeriesClick: (SeriesEntity) -> Unit,
-    watchlistViewModel: WatchlistViewModel,
-    snackbarHostState: SnackbarHostState,
-    scope: kotlinx.coroutines.CoroutineScope
-) {
-    if (series.isEmpty()) { EmptyTabMessage("No series found"); return }
-    LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        itemsIndexed(series, key = { _, s -> s.id }) { index, s ->
-            val isBookmarked by watchlistViewModel.isInWatchlist(s.id).collectAsState(initial = false)
-            SearchResultRow(
-                imageUrl = s.posterUrl, title = s.name,
-                subtitle = if (s.seasonCount > 0) "${s.seasonCount} season${if (s.seasonCount > 1) "s" else ""}" else s.categoryName,
-                icon = Icons.Default.VideoLibrary, isBookmarked = isBookmarked,
-                focusRequester = if (index == 0) firstResultFocus else null,
-                onBookmark = {
-                    watchlistViewModel.toggleWatchlist(
-                        WatchlistEntity(
-                            id = s.id,
-                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                            type = WatchlistType.SERIES,
-                            name = s.name,
-                            posterUrl = s.posterUrl,
-                            streamUrl = null
-                        ), isBookmarked
-                    )
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            if (!isBookmarked) "${s.name} added to My List"
-                            else "${s.name} removed from My List"
-                        )
-                    }
-                },
-                onClick = { onSeriesClick(s) }
-            )
-        }
-    }
+private fun ResultSectionHeader(title: String) {
+    val nsTheme = LocalNexStreamTheme.current
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = nsTheme.sidebar.categoryText.copy(alpha = 0.7f),
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

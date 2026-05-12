@@ -38,6 +38,7 @@ import coil.request.ImageRequest
 @Composable
 fun DownloadsScreen(
     firstItemFocusRequester: FocusRequester? = null,
+    selectedType: String? = null,
     onBack: () -> Unit = {},
     onPlayFile: (filePath: String, title: String) -> Unit = { _, _ -> }
 ) {
@@ -46,8 +47,17 @@ fun DownloadsScreen(
     val sTheme = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
-    val downloads by NexStreamDownloadManager.observeDownloads(context)
+    val allDownloads by NexStreamDownloadManager.observeDownloads(context)
         .collectAsState(initial = emptyList())
+
+    val downloads = remember(allDownloads, selectedType) {
+        when (selectedType) {
+            "Active"    -> allDownloads.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.PENDING || it.status == DownloadStatus.PAUSED }
+            "Completed" -> allDownloads.filter { it.status == DownloadStatus.COMPLETED }
+            "Failed"    -> allDownloads.filter { it.status == DownloadStatus.FAILED }
+            else        -> allDownloads
+        }
+    }
 
     val active    = downloads.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.PENDING || it.status == DownloadStatus.PAUSED }
     val completed = downloads.filter { it.status == DownloadStatus.COMPLETED }
@@ -76,23 +86,16 @@ fun DownloadsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(headerHeight)
-                .background(MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
-                "Downloads",
+                text = selectedType ?: "All",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = sTheme.categoryText,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                color = sTheme.categoryText
             )
         }
-
         HorizontalDivider(color = nsTheme.sidebar.divider)
 
         if (downloads.isEmpty()) {

@@ -100,6 +100,14 @@ fun Sidebar(
     isLoadingSeries: Boolean = false,
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: (route: AppRoute) -> Unit = {},
+    selectedRecentType: String? = null,
+    onRecentTypeSelected: (String?) -> Unit = {},
+    selectedSearchType: String? = null,
+    onSearchTypeSelected: (String?) -> Unit = {},
+    selectedMyListType: String? = null,
+    onMyListTypeSelected: (String?) -> Unit = {},
+    selectedDownloadsType: String? = null,
+    onDownloadsTypeSelected: (String?) -> Unit = {},
     xtreamUsername: String? = null,
     xtreamExpiry: String? = null,
     isLicensed: Boolean = true,
@@ -112,26 +120,37 @@ fun Sidebar(
 
     val categories = remember(expandedRoute, guideCategories, movieCategories, seriesCategories) {
         when (expandedRoute) {
-            AppRoute.Guide   -> guideCategories
-            AppRoute.Movies  -> movieCategories
-            AppRoute.Series  -> seriesCategories
-            AppRoute.CatchUp -> emptyList()
-            else             -> emptyList()
+            AppRoute.Guide     -> guideCategories
+            AppRoute.Movies    -> movieCategories
+            AppRoute.Series    -> seriesCategories
+            AppRoute.Recent    -> listOf("Live TV", "Movies", "Episodes")
+            AppRoute.Search    -> listOf("Live TV", "Movies", "Series")
+            AppRoute.MyList    -> listOf("Live TV", "Movies", "Series")
+            AppRoute.Downloads -> listOf("Active", "Completed", "Failed")
+            else               -> emptyList()
         }
     }
     val selectedCategory = when (expandedRoute) {
-        AppRoute.Guide   -> selectedGuideCategory
-        AppRoute.Movies  -> selectedMovieCategory
-        AppRoute.Series  -> selectedSeriesCategory
-        AppRoute.CatchUp -> selectedCatchUpDateKey
-        else             -> null
+        AppRoute.Guide     -> selectedGuideCategory
+        AppRoute.Movies    -> selectedMovieCategory
+        AppRoute.Series    -> selectedSeriesCategory
+        AppRoute.CatchUp   -> selectedCatchUpDateKey
+        AppRoute.Recent    -> selectedRecentType
+        AppRoute.Search    -> selectedSearchType
+        AppRoute.MyList    -> selectedMyListType
+        AppRoute.Downloads -> selectedDownloadsType
+        else               -> null
     }
     val onCategorySelected: (String?) -> Unit = when (expandedRoute) {
-        AppRoute.Guide   -> onGuideCategorySelected
-        AppRoute.Movies  -> onMovieCategorySelected
-        AppRoute.Series  -> onSeriesCategorySelected
-        AppRoute.CatchUp -> onCatchUpDateSelected
-        else             -> ({})
+        AppRoute.Guide     -> onGuideCategorySelected
+        AppRoute.Movies    -> onMovieCategorySelected
+        AppRoute.Series    -> onSeriesCategorySelected
+        AppRoute.CatchUp   -> onCatchUpDateSelected
+        AppRoute.Recent    -> onRecentTypeSelected
+        AppRoute.Search    -> onSearchTypeSelected
+        AppRoute.MyList    -> onMyListTypeSelected
+        AppRoute.Downloads -> onDownloadsTypeSelected
+        else               -> ({})
     }
 
     // Single Animatable drives all panel transitions: 0f=closed, 1f=open
@@ -257,7 +276,8 @@ fun Sidebar(
                         onRequestRailFocus    = { onExitPanelToRail() },
                         onSearchRequest       = onSearchRequest,
                         onFavouritesSelected  = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
-                        showSearch            = expandedRoute != AppRoute.Guide,
+                        showSearch            = expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series,
+                        showFavourites        = expandedRoute == AppRoute.Guide || expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series,
                         modifier              = Modifier.width(PANEL_WIDTH)
                     )
                 }
@@ -351,16 +371,15 @@ private fun MainMenu(
 
     val menuItems = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries) {
         listOf(
-            MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,     recentFocus),
-            MenuEntry(Icons.Default.CalendarToday, "Guide",     AppRoute.Guide,      guideFocus,     isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true),
-            MenuEntry(Icons.Default.Movie,         "Movies",    AppRoute.Movies,     moviesFocus,    isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true),
-            MenuEntry(Icons.Default.VideoLibrary,  "Series",    AppRoute.Series,     seriesFocus,    isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true),
-            MenuEntry(Icons.Default.Replay,        "Catch Up",  AppRoute.CatchUp,    catchupFocus),
-            MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,     searchFocus),
-            MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,     mylistFocus),
-            MenuEntry(Icons.Default.Download,      "Downloads", AppRoute.Downloads,  downloadsFocus),
-            MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings,   settingsFocus,
-            ),
+            MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,     recentFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }),
+            MenuEntry(Icons.Default.CalendarToday, "Guide",     AppRoute.Guide,      guideFocus,     isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },      hasSubPanel = true),
+            MenuEntry(Icons.Default.Movie,         "Movies",    AppRoute.Movies,     moviesFocus,    isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },     hasSubPanel = true),
+            MenuEntry(Icons.Default.VideoLibrary,  "Series",    AppRoute.Series,     seriesFocus,    isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },     hasSubPanel = true),
+            MenuEntry(Icons.Default.Replay,        "Catch Up",  AppRoute.CatchUp,    catchupFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }),
+            MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,     searchFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }),
+            MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,     mylistFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }),
+            MenuEntry(Icons.Default.Download,      "Downloads", AppRoute.Downloads,  downloadsFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Downloads) }),
+            MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings,   settingsFocus),
         )
     }
 
@@ -627,6 +646,7 @@ private fun CategoryPanel(
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: () -> Unit = {},
     showSearch: Boolean = true,
+    showFavourites: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val nsTheme = LocalNexStreamTheme.current
@@ -704,8 +724,8 @@ private fun CategoryPanel(
 
         val entries = buildList {
             if (showSearch) add(PanelEntry("Search", "__search__", searchFR) { onSearchRequest() })
-            add(PanelEntry("Favourites", "__favourites__", favouritesFR) { onFavouritesSelected() })
-            add(PanelEntry("All", null, allFR, isDividerAbove = true) { onCategorySelected(null) })
+            if (showFavourites) add(PanelEntry("Favourites", "__favourites__", favouritesFR) { onFavouritesSelected() })
+            add(PanelEntry("All", null, allFR, isDividerAbove = showSearch || showFavourites) { onCategorySelected(null) })
             categories.forEachIndexed { i, cat ->
                 add(PanelEntry(cat, cat, catFRs[i]) { onCategorySelected(cat) })
             }

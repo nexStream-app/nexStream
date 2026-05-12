@@ -109,6 +109,10 @@ fun MainScreen(
     var selectedMovieCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedSeriesCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedGuideCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedRecentType by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedSearchType by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedMyListType by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedDownloadsType by rememberSaveable { mutableStateOf<String?>(null) }
 
     val movieCategories by movieViewModel.getCategories().collectAsState(initial = emptyList())
     val guideCategories by epgViewModel.getCategories().collectAsState(initial = emptyList())
@@ -532,6 +536,14 @@ fun MainScreen(
                     onSeriesCategorySelected = { seriesGridViewRef?.blockFocus(); selectedSeriesCategory = it; lastSeriesIndex = 0 },
                     isLoadingVOD     = isLoadingVOD,
                     isLoadingSeries  = isLoadingSeries,
+                    selectedRecentType    = selectedRecentType,
+                    onRecentTypeSelected  = { selectedRecentType = it },
+                    selectedSearchType    = selectedSearchType,
+                    onSearchTypeSelected  = { selectedSearchType = it },
+                    selectedMyListType    = selectedMyListType,
+                    onMyListTypeSelected  = { selectedMyListType = it },
+                    selectedDownloadsType = selectedDownloadsType,
+                    onDownloadsTypeSelected = { selectedDownloadsType = it },
                     xtreamUsername = xtreamPlaylist?.xtreamUsername,
                     xtreamExpiry   = xtreamPlaylist?.xtreamExpiry,
                     isLicensed     = licenceState.isActivated,
@@ -677,6 +689,7 @@ fun MainScreen(
 
                     AppRoute.Downloads -> app.nexstream.player.ui.screens.downloads.DownloadsScreen(
                         firstItemFocusRequester = contentFR,
+                        selectedType = selectedDownloadsType,
                         onBack = { zone = Zone.RAIL; sidebarPanelExpanded = false; sidebarExpandedRoute = null; sidebarRefocusTick++ },
                         onPlayFile = { filePath, title ->
                             // DownloadManager returns localUri as "file:///path/to/file"
@@ -699,6 +712,7 @@ fun MainScreen(
 
                     AppRoute.Search -> SearchScreen(
                         firstItemFocusRequester = contentFR,
+                        selectedType = selectedSearchType,
                         onChannelClick = { streamUrl, channelName ->
                             currentChannelUrl            = streamUrl
                             currentNowPlayingTitle       = channelName
@@ -736,6 +750,7 @@ fun MainScreen(
 
                     AppRoute.MyList -> WatchlistScreen(
                         firstItemFocusRequester = contentFR,
+                        selectedType = selectedMyListType,
                         onChannelClick = { streamUrl, channelName ->
                             currentChannelUrl            = streamUrl
                             currentNowPlayingTitle       = channelName
@@ -809,6 +824,7 @@ fun MainScreen(
 
                     AppRoute.Recent -> RecentlyWatchedScreen(
                         firstItemFocusRequester = contentFR,
+                        selectedType = selectedRecentType,
                         onChannelClick = { streamUrl, name ->
                             currentChannelUrl            = streamUrl
                             currentNowPlayingTitle       = name
