@@ -1,8 +1,6 @@
 package app.nexstream.player.ui.screens.profile
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,10 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +24,7 @@ import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.local.entity.ProfileEntity
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +66,9 @@ fun ProfilesSettingsScreen(
 ) {
     val profiles      by viewModel.profiles.collectAsState()
     val activeProfile by viewModel.activeProfile.collectAsState()
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var profileToDelete  by remember { mutableStateOf<ProfileEntity?>(null) }
@@ -82,79 +84,122 @@ fun ProfilesSettingsScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text("Profiles", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+        }
+        HorizontalDivider(color = sTheme.divider)
 
-        // Active profile indicator
-        activeProfile?.let { active ->
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(active.emoji, fontSize = 32.sp)
-                    Column {
-                        Text("Active Profile", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
-                        Text(active.name, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Active profile indicator
+            activeProfile?.let { active ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(active.emoji, fontSize = 32.sp)
+                        Column {
+                            Text(
+                                "Active Profile",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                active.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // PIN tip card
-        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top) {
-                Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp).padding(top = 2.dp))
-                Text(
-                    "If child profiles have restricted categories, add a PIN to your default profile to prevent easy switching.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Profile list
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            items(profiles, key = { it.id }) { profile ->
-                ProfileRow(
-                    profile        = profile,
-                    isActive       = profile.id == activeProfile?.id,
-                    focusRequester = if (profiles.indexOf(profile) == 0) firstFocus else null,
-                    onEdit         = { onEditProfile(profile) },
-                    onSwitch       = {
-                        if (profile.pinHash != null) {
-                            switchTarget = profile; showSwitchPin = true; pinError = false
-                        } else {
-                            viewModel.switchProfile(profile)
-                        }
-                    },
-                    onDelete       = if (!profile.isDefault) {
-                        { profileToDelete = profile; showDeleteConfirm = true }
-                    } else null
-                )
-            }
-        }
-
-        // Add profile button (max 3)
-        if (profiles.size < 3) {
-            OutlinedButton(
-                onClick  = { onEditProfile(null) },
+            // PIN tip card
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add Profile")
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        Icons.Default.Info, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                    )
+                    Text(
+                        "If child profiles have restricted categories, add a PIN to your default profile to prevent easy switching.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Profile list
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(profiles, key = { it.id }) { profile ->
+                    ProfileRow(
+                        profile        = profile,
+                        isActive       = profile.id == activeProfile?.id,
+                        focusRequester = if (profiles.indexOf(profile) == 0) firstFocus else null,
+                        onEdit         = { onEditProfile(profile) },
+                        onSwitch       = {
+                            if (profile.pinHash != null) {
+                                switchTarget = profile; showSwitchPin = true; pinError = false
+                            } else {
+                                viewModel.switchProfile(profile)
+                            }
+                        },
+                        onDelete       = if (!profile.isDefault) {
+                            { profileToDelete = profile; showDeleteConfirm = true }
+                        } else null
+                    )
+                }
+            }
+
+            // Add profile button (max 3)
+            if (profiles.size < 3) {
+                var addFocused by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick  = { onEditProfile(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { addFocused = it.isFocused },
+                    border = BorderStroke(
+                        width = if (addFocused) 2.dp else 1.dp,
+                        color = if (addFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (addFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        contentColor = if (addFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Profile")
+                }
             }
         }
     }
@@ -169,7 +214,7 @@ fun ProfilesSettingsScreen(
                 TextButton(onClick = {
                     viewModel.deleteProfile(profileToDelete!!.id)
                     showDeleteConfirm = false; profileToDelete = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text("Delete") }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
@@ -209,39 +254,54 @@ private fun ProfileRow(
     Surface(
         modifier = Modifier.fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.hasFocus },
         onClick = onEdit,
         shape = RoundedCornerShape(12.dp),
         color = if (isFocused) MaterialTheme.colorScheme.primaryContainer
-        else if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-        else MaterialTheme.colorScheme.surface,
+                else if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                else MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(12.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(profile.emoji, fontSize = 32.sp)
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(profile.name, style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        profile.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     if (isActive) {
-                        Surface(shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primary) {
-                            Text("Active", style = MaterialTheme.typography.labelSmall,
+                        Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primary) {
+                            Text(
+                                "Active",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                     if (profile.pinHash != null) {
-                        Icon(Icons.Default.Lock, null, modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            Icons.Default.Lock, null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
                 if (profile.isDefault) {
-                    Text("Default profile", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Default profile",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             if (!isActive) {
@@ -252,8 +312,7 @@ private fun ProfileRow(
             }
             if (onDelete != null) {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(18.dp))
                 }
             }
         }

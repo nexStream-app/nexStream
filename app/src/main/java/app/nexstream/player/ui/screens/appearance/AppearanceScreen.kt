@@ -26,6 +26,7 @@ import app.nexstream.player.ui.theme.AspectRatio
 import app.nexstream.player.ui.theme.AspectRatioType
 import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.saveAspectRatio
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -65,6 +66,9 @@ fun AppearanceScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     val themeMode by context.getThemeModeFlow().collectAsState(initial = ThemeMode.SYSTEM)
     val tvAspectRatio by context.getAspectRatioFlow(AspectRatioType.TV).collectAsState(initial = AspectRatio.FILL)
@@ -80,14 +84,24 @@ fun AppearanceScreen(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Text("Appearance", style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 8.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text("Appearance", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+        }
+        HorizontalDivider(color = sTheme.divider)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
 
         // ── Theme mode ──────────────────────────────────────────
         Text("Theme", style = MaterialTheme.typography.titleMedium,
@@ -131,6 +145,7 @@ fun AppearanceScreen(
             onSelect = { scope.launch { context.saveAspectRatio(AspectRatioType.MOVIE, it) } })
         AspectRatioSection(label = "Series", selected = seriesAspectRatio,
             onSelect = { scope.launch { context.saveAspectRatio(AspectRatioType.SERIES, it) } })
+        }
     }
 }
 

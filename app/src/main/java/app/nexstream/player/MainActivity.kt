@@ -41,9 +41,13 @@ import app.nexstream.player.worker.EpgRefreshWorker
 import app.nexstream.player.worker.ReminderWorker
 import app.nexstream.player.data.profile.ProfileManager
 import dagger.hilt.android.AndroidEntryPoint
+import app.nexstream.player.ui.screens.appearance.ThemeMode
+import app.nexstream.player.ui.screens.appearance.getThemeModeFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import androidx.compose.material3.Text
 
@@ -107,8 +111,16 @@ class MainActivity : ComponentActivity() {
             syncManager.syncFromServer(profileId)
         }
 
+        // Read the saved theme preference synchronously before the first frame so
+        // NexStreamThemeProvider starts with the correct dark/light mode and avoids a
+        // one-frame flash on the profile selection screen (and anywhere else themed colours
+        // appear before DataStore emits asynchronously).
+        val initialThemeMode = runBlocking {
+            try { applicationContext.getThemeModeFlow().first() } catch (_: Exception) { ThemeMode.SYSTEM }
+        }
+
         setContent {
-            NexStreamThemeProvider(themeViewModel = themeViewModel) {
+            NexStreamThemeProvider(themeViewModel = themeViewModel, initialThemeMode = initialThemeMode) {
                 var accessState by remember { mutableStateOf(AppAccessState.LOADING) }
                 val overlayData by reminderOverlayData
 

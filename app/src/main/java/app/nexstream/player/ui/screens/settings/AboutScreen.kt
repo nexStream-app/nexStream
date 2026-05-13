@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,18 +18,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
@@ -60,8 +62,10 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val isSyncing = viewModel.isSyncing
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     val androidId = remember {
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "null"
@@ -78,78 +82,93 @@ fun AboutScreen(
 
     val firstFR = firstItemFocusRequester ?: remember { FocusRequester() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .focusRequester(firstFR)
-            .focusable()
-            .onKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown) {
-                    when (e.key) {
-                        Key.DirectionDown -> { scope.launch { scrollState.animateScrollTo(scrollState.value + 200) }; true }
-                        Key.DirectionUp   -> { scope.launch { scrollState.animateScrollTo(scrollState.value - 200) }; true }
-                        else -> false
-                    }
-                } else false
-            }
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-
-        // Device ID section
-        InfoSection(title = "Device ID", icon = Icons.Default.Fingerprint) {
-            InfoRow("ID", currentDeviceId)
-            if (androidIdKnownDefault) {
-                InfoRow("Warning", "ANDROID_ID is a known default - ID may not be unique!", warning = true)
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("Device ID", currentDeviceId))
-                    copied = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(if (copied) "Copied!" else "Copy Device ID")
-            }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text("About", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
         }
+        HorizontalDivider(color = sTheme.divider)
 
-        // Manual sync section
-        InfoSection(title = "Sync", icon = Icons.Default.Sync) {
-            Text(
-                "Sync your profiles and settings from the server. This happens automatically on startup.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { viewModel.syncNow() },
-                enabled = !isSyncing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            InfoSection(title = "Device ID", icon = Icons.Default.Fingerprint) {
+                InfoRow("ID", currentDeviceId)
+                if (androidIdKnownDefault) {
+                    InfoRow("Warning", "ANDROID_ID is a known default - ID may not be unique!", warning = true)
                 }
-                Spacer(Modifier.width(8.dp))
-                Text(if (isSyncing) "Syncing..." else "Sync Now")
+                Spacer(Modifier.height(8.dp))
+                var copyFocused by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("Device ID", currentDeviceId))
+                        copied = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(firstFR)
+                        .onFocusChanged { copyFocused = it.isFocused },
+                    border = BorderStroke(
+                        width = if (copyFocused) 2.dp else 1.dp,
+                        color = if (copyFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (copyFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        contentColor = if (copyFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Icon(
+                        if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (copied) "Copied!" else "Copy Device ID")
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            InfoSection(title = "Sync", icon = Icons.Default.Sync) {
+                Text(
+                    "Sync your profiles and settings from the server. This happens automatically on startup.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                var syncFocused by remember { mutableStateOf(false) }
+                Button(
+                    onClick = { viewModel.syncNow() },
+                    enabled = !isSyncing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { syncFocused = it.isFocused },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (syncFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = if (syncFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isSyncing) "Syncing..." else "Sync Now")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 

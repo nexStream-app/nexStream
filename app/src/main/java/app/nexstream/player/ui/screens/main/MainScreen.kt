@@ -238,7 +238,10 @@ fun MainScreen(
     // (not on startup — startup lands on rail with no panel open)
     var isFirstLoad by remember { mutableStateOf(true) }
     LaunchedEffect(currentRoute) {
-        zone = Zone.RAIL
+        // Settings sub-routes (SettingsAppearance, SettingsPlayer, etc.) are always entered
+        // via onSettingsItemSelected which sets zone=CONTENT — don't reset zone here.
+        val isSettingsSubRoute = currentRoute.isSettings && currentRoute != AppRoute.Settings
+        if (!isSettingsSubRoute) zone = Zone.RAIL
         if (isFirstLoad) {
             // Startup — no panel, just show the rail
             isFirstLoad = false
@@ -251,7 +254,7 @@ fun MainScreen(
             catchUpGridViewRef?.blockFocus()
             sidebarPanelExpanded = true
             sidebarExpandedRoute = if (currentRoute.isSettings) AppRoute.Settings else currentRoute
-            android.util.Log.d("NexStreamFocus", "navigate route=$currentRoute zone=RAIL panel=OPEN")
+            android.util.Log.d("NexStreamFocus", "navigate route=$currentRoute zone=${if (isSettingsSubRoute) "CONTENT(kept)" else "RAIL"} panel=OPEN")
         } else {
             sidebarPanelExpanded = false
             sidebarExpandedRoute = null
@@ -517,11 +520,6 @@ fun MainScreen(
                     selectedSettingsRoute = if (currentRoute.isSettings && currentRoute != AppRoute.Settings) currentRoute else null,
                     onSettingsItemSelected = { route ->
                         currentRoute = route
-                        zone = Zone.CONTENT
-                        scope.launch {
-                            kotlinx.coroutines.delay(100)
-                            try { contentFR.requestFocus() } catch (_: Exception) {}
-                        }
                     },
                     showGuideCategories  = showGuideCategories,
                     showMovieCategories  = showMovieCategories,

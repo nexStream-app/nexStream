@@ -417,10 +417,9 @@ fun CatchUpScreen(
                     )
                 }
 
-                // Scroll to top when date changes
+                // Scroll to top when date changes — do NOT steal focus
                 LaunchedEffect(selectedDateKey) {
                     gridViewRef.value?.scrollToIndex(0)
-                    gridViewRef.value?.requestItemFocus(0)
                 }
 
                 androidx.compose.ui.viewinterop.AndroidView(
@@ -455,7 +454,6 @@ fun CatchUpScreen(
                         view.setItems(posterItems)
                         if (prevSize != posterItems.size) {
                             view.scrollToIndex(0)
-                            view.requestItemFocus(0)
                         }
                     },
                     modifier = Modifier

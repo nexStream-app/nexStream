@@ -141,8 +141,8 @@ object ThemeDefaults {
             progressPlayed   = Color(0xFF3A6ADF),
             progressBuffered = Color(0xFFC8D8FF),
             progressBg       = Color(0xFFE0E8FF),
-            textPrimary      = Color(0xFF0A1A4F),
-            textSecondary    = Color(0xFF3A5A9F),
+            textPrimary      = Color(0xFFFFFFFF),
+            textSecondary    = Color(0xFFE0E8FF),
         ),
         global = NexStreamGlobalColors(
             primary            = Color(0xFF3A6ADF),

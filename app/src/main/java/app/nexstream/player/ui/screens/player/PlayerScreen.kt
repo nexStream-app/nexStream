@@ -64,6 +64,7 @@ import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
 import app.nexstream.player.ui.theme.saveAspectRatio
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -101,6 +102,7 @@ fun PlayerScreen(
 ) {
     val scope   = rememberCoroutineScope()
     val context = LocalContext.current
+    val nsTheme = LocalNexStreamTheme.current
 
     // ── Player prefs ──────────────────────────────────────────────────────────
     val autoFrameRate by context.getAutoFrameRateFlow().collectAsState(initial = true)
@@ -682,10 +684,11 @@ fun PlayerScreen(
     }
 
     // ── Shared button style helpers ───────────────────────────────────────────
+    // Player overlay is always rendered on top of dark video — always use player.textPrimary (white)
     val controlBg    = Color.Black.copy(alpha = 0.50f)
-    val controlText  = MaterialTheme.colorScheme.onSurface   // primary text colour from theme
-    val focusBorder  = MaterialTheme.colorScheme.onSurface
-    val focusBgTint  = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val controlText  = nsTheme.player.textPrimary
+    val focusBorder  = nsTheme.player.textPrimary
+    val focusBgTint  = nsTheme.player.textPrimary.copy(alpha = 0.18f)
 
     // ── Root layout ───────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {

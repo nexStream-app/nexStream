@@ -22,6 +22,7 @@ import app.nexstream.player.ui.screens.appearance.ThemeMode
 import app.nexstream.player.ui.screens.appearance.getThemeModeFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 
 // ─────────────────────────────────────────────────────────────
 // ViewModel
@@ -52,13 +53,14 @@ class ThemeViewModel @Inject constructor(
 @Composable
 fun NexStreamThemeProvider(
     themeViewModel: ThemeViewModel,
+    initialThemeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit,
 ) {
     val themes    by themeViewModel.themes.collectAsState()
     // Use applicationContext so we always read from the same DataStore instance
     // as AppearanceScreen, regardless of which Activity context is current.
     val context   = LocalContext.current.applicationContext
-    val themeMode by context.getThemeModeFlow().collectAsState(initial = ThemeMode.SYSTEM)
+    val themeMode by context.getThemeModeFlow().collectAsState(initial = initialThemeMode)
     val systemDark = isSystemInDarkTheme()
 
     val isDark = when (themeMode) {

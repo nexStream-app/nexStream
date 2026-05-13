@@ -75,7 +75,7 @@ fun DownloadsScreen(
                 Button(onClick = {
                     NexStreamDownloadManager.deleteDownload(context, item.downloadId, item.filePath)
                     deleteTarget = null
-                }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+                }) {
                     Text("Delete")
                 }
             },
@@ -212,8 +212,8 @@ private fun FocusableOutlineButton(
     isDestructive: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    val focusTint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val tint = MaterialTheme.colorScheme.onSurface
+    val focusTint = MaterialTheme.colorScheme.primary
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier
@@ -252,9 +252,9 @@ private fun DownloadCard(
 
     val statusColor = when (item.status) {
         DownloadStatus.RUNNING   -> MaterialTheme.colorScheme.primary
-        DownloadStatus.COMPLETED -> Color(0xFF4CAF50)
+        DownloadStatus.COMPLETED -> MaterialTheme.colorScheme.tertiary
         DownloadStatus.FAILED    -> MaterialTheme.colorScheme.error
-        DownloadStatus.PAUSED    -> MaterialTheme.colorScheme.tertiary
+        DownloadStatus.PAUSED    -> MaterialTheme.colorScheme.onSurfaceVariant
         DownloadStatus.PENDING   -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -366,27 +366,22 @@ private fun CardActionButton(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val primary = MaterialTheme.colorScheme.primary
-    val error   = MaterialTheme.colorScheme.error
-
+    val primary   = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
     val bgColor = when {
         isPrimary && isFocused    -> primary
         isPrimary                 -> primary.copy(alpha = 0.85f)
-        isDestructive && isFocused -> error
-        isDestructive             -> androidx.compose.ui.graphics.Color.Transparent
         isFocused                 -> MaterialTheme.colorScheme.surfaceVariant
         else                      -> androidx.compose.ui.graphics.Color.Transparent
     }
     val contentColor = when {
-        isPrimary                  -> MaterialTheme.colorScheme.onPrimary
-        isDestructive && isFocused -> MaterialTheme.colorScheme.onError
-        isDestructive              -> error
-        else                       -> MaterialTheme.colorScheme.onSurface
+        isPrimary   -> MaterialTheme.colorScheme.onPrimary
+        isFocused   -> onSurface
+        else        -> onSurface.copy(alpha = 0.7f)
     }
     val borderColor = when {
-        isPrimary    -> androidx.compose.ui.graphics.Color.Transparent
-        isDestructive -> error.copy(alpha = if (isFocused) 1f else 0.6f)
-        else          -> MaterialTheme.colorScheme.outline.copy(alpha = if (isFocused) 1f else 0.5f)
+        isPrimary -> androidx.compose.ui.graphics.Color.Transparent
+        else      -> MaterialTheme.colorScheme.outline.copy(alpha = if (isFocused) 1f else 0.5f)
     }
 
     Box(
