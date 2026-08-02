@@ -1,7 +1,7 @@
 package app.nexstream.player.data.remote
 
 import app.nexstream.player.data.local.entity.ChannelEntity
-import java.util.UUID
+import java.security.MessageDigest
 
 object M3UParser {
 
@@ -26,7 +26,9 @@ object M3UParser {
                 val streamUrl = lines.getOrNull(i)?.trim() ?: ""
 
                 if (streamUrl.isNotEmpty() && !streamUrl.startsWith("#")) {
-                    val channelId = attributes["tvg-id"] ?: UUID.randomUUID().toString()
+                    // Use tvg-id when available; otherwise hash the URL for a stable ID
+                    // across re-imports (avoids watchlist pruning for channels without tvg-id).
+                    val channelId = attributes["tvg-id"] ?: urlHash(streamUrl)
 
                     channels.add(
                         ChannelEntity(
@@ -36,7 +38,8 @@ object M3UParser {
                             logoUrl = attributes["tvg-logo"],
                             groupTitle = attributes["group-title"],
                             epgChannelId = attributes["tvg-id"],
-                            playlistId = playlistId
+                            playlistId = playlistId,
+                            sortIndex = channels.size
                         )
                     )
                 }
@@ -53,4 +56,8 @@ object M3UParser {
         return attributeRegex.findAll(attrString)
             .associate { it.groupValues[1] to it.groupValues[2] }
     }
+
+    private fun urlHash(url: String): String =
+        MessageDigest.getInstance("MD5").digest(url.toByteArray())
+            .take(8).joinToString("") { "%02x".format(it) }
 }

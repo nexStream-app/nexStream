@@ -1,8 +1,5 @@
 package app.nexstream.player.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.screens.main.hasCategoryPanel
@@ -11,8 +8,11 @@ import app.nexstream.player.ui.screens.main.rootSection
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,32 +24,26 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LogoMode
+import app.nexstream.player.ui.theme.getRailHiddenFlow
+import app.nexstream.player.ui.theme.getRailOrderFlow
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 
-
-private val FULL_SIDEBAR_WIDTH = 200.dp
-private val RAIL_WIDTH         = 64.dp
-private val PANEL_WIDTH        = 180.dp
-
-
-// Reduced from 140ms — snappier panel open/close
-private const val ANIM_PANEL_MS  = 140
 
 @Composable
 fun Sidebar(
@@ -98,6 +92,7 @@ fun Sidebar(
     isLoadingEPG: Boolean = false,
     isLoadingVOD: Boolean = false,
     isLoadingSeries: Boolean = false,
+    isLoadingCatchUp: Boolean = false,
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: (route: AppRoute) -> Unit = {},
     selectedRecentType: String? = null,
@@ -106,31 +101,54 @@ fun Sidebar(
     onSearchTypeSelected: (String?) -> Unit = {},
     selectedMyListType: String? = null,
     onMyListTypeSelected: (String?) -> Unit = {},
+    selectedRemindersType: String? = null,
+    onRemindersTypeSelected: (String?) -> Unit = {},
     selectedDownloadsType: String? = null,
     onDownloadsTypeSelected: (String?) -> Unit = {},
+    picksCategories: List<String> = emptyList(),
+    selectedPicksCategory: String? = null,
+    onPicksCategorySelected: (String?) -> Unit = {},
+    sportsCategories: List<String> = emptyList(),
+    selectedSportsCategory: String? = null,
+    onSportsCategorySelected: (String?) -> Unit = {},
+    onRecentClearAll: () -> Unit = {},
+    onMyListClearAll: () -> Unit = {},
     xtreamUsername: String? = null,
     xtreamExpiry: String? = null,
     isLicensed: Boolean = true,
-    trialDaysLeft: Int = 0
+    trialDaysLeft: Int = 0,
+    vodRestricted: Boolean = false,
+    hasJellyfinPlaylist: Boolean = false,
+    musicCategories: List<String> = emptyList(),
+    selectedMusicCategory: String? = null,
+    onMusicCategorySelected: (String?) -> Unit = {},
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
     val gTheme  = nsTheme.global
-    val sidebarScope = rememberCoroutineScope()
 
-    val categories = remember(expandedRoute, guideCategories, movieCategories, seriesCategories) {
+    val categories = remember(expandedRoute, guideCategories, movieCategories, seriesCategories, picksCategories, sportsCategories, musicCategories, hasJellyfinPlaylist) {
         when (expandedRoute) {
+            AppRoute.Home      -> sportsCategories
             AppRoute.Guide     -> guideCategories
             AppRoute.Movies    -> movieCategories
             AppRoute.Series    -> seriesCategories
             AppRoute.Recent    -> listOf("Live TV", "Movies", "Episodes")
-            AppRoute.Search    -> listOf("Live TV", "Movies", "Series")
-            AppRoute.MyList    -> listOf("Live TV", "Movies", "Series")
+            AppRoute.Search    -> listOf("Live TV", "Movies", "Series", "People")
+            AppRoute.MyList    -> buildList {
+                add("Live TV"); add("Movies"); add("Series")
+                if (hasJellyfinPlaylist) add("Music")
+                add("Reminders"); add("Recordings"); add("Downloads")
+            }
+            AppRoute.Reminders -> emptyList()
             AppRoute.Downloads -> listOf("Active", "Completed", "Failed")
+            AppRoute.Picks     -> picksCategories
+            AppRoute.Music     -> musicCategories
             else               -> emptyList()
         }
     }
     val selectedCategory = when (expandedRoute) {
+        AppRoute.Home      -> selectedSportsCategory
         AppRoute.Guide     -> selectedGuideCategory
         AppRoute.Movies    -> selectedMovieCategory
         AppRoute.Series    -> selectedSeriesCategory
@@ -138,10 +156,14 @@ fun Sidebar(
         AppRoute.Recent    -> selectedRecentType
         AppRoute.Search    -> selectedSearchType
         AppRoute.MyList    -> selectedMyListType
+        AppRoute.Reminders -> selectedRemindersType
         AppRoute.Downloads -> selectedDownloadsType
+        AppRoute.Picks     -> selectedPicksCategory
+        AppRoute.Music     -> selectedMusicCategory
         else               -> null
     }
     val onCategorySelected: (String?) -> Unit = when (expandedRoute) {
+        AppRoute.Home      -> onSportsCategorySelected
         AppRoute.Guide     -> onGuideCategorySelected
         AppRoute.Movies    -> onMovieCategorySelected
         AppRoute.Series    -> onSeriesCategorySelected
@@ -149,24 +171,16 @@ fun Sidebar(
         AppRoute.Recent    -> onRecentTypeSelected
         AppRoute.Search    -> onSearchTypeSelected
         AppRoute.MyList    -> onMyListTypeSelected
+        AppRoute.Reminders -> onRemindersTypeSelected
         AppRoute.Downloads -> onDownloadsTypeSelected
+        AppRoute.Picks     -> onPicksCategorySelected
+        AppRoute.Music     -> onMusicCategorySelected
         else               -> ({})
     }
 
-    // Single Animatable drives all panel transitions: 0f=closed, 1f=open
-    // Runs on render thread via graphicsLayer — zero recomposition during animation
-    val panelProgress = remember { Animatable(if (panelExpanded) 1f else 0f) }
-    LaunchedEffect(panelExpanded) {
-        panelProgress.animateTo(
-            targetValue   = if (panelExpanded) 1f else 0f,
-            animationSpec = tween(durationMillis = ANIM_PANEL_MS, easing = FastOutSlowInEasing)
-        )
-    }
-
-    val density = LocalDensity.current
-    val panelWidthPx = with(density) { PANEL_WIDTH.roundToPx() }
-    val railWidthPx = with(density) { RAIL_WIDTH.roundToPx() }
-    val fullWidthPx = with(density) { FULL_SIDEBAR_WIDTH.roundToPx() }
+    val fontScale = LocalNexStreamTheme.current.typography.scale.coerceIn(0.85f, 1.3f)
+    val railDp  = (180f * fontScale).dp
+    val panelDp = (180f * fontScale).dp
 
 
     Row(
@@ -174,72 +188,69 @@ fun Sidebar(
             .fillMaxHeight()
             .background(sTheme.background)
     ) {
-        // ── Rail ────────────────────────────────────────────────────────────
-        MainMenu(
-            modifier           = Modifier
-                .width(168.dp)
-                .fillMaxHeight()
-                .focusRequester(railFR)
-                .onFocusChanged { onRailFocusChanged(it.hasFocus) },
-            currentRoute       = currentRoute,
-            expandedRoute      = expandedRoute,
-            panelExpanded      = panelExpanded,
-            isLoadingEPG       = isLoadingEPG,
-            isLoadingVOD       = isLoadingVOD,
-            isLoadingSeries    = isLoadingSeries,
-            isSidebarFocused   = true,
-            sidebarRefocusTick = sidebarRefocusTick,
-            showLabels         = true,
-            panelProgress      = panelProgress.value,
-            onNavigate         = { route ->
-                if (route.hasCategoryPanel) {
-                    onPanelExpandedChange(true, route)
-                    onNavigate(route)
-                } else {
-                    onPanelExpandedChange(false, null)
-                    onNavigate(route)
-                }
-            },
-            onEnterPanel     = onEnterPanel,
-            onEnterContent   = onEnterContent,
-            onExitPanelToRail = onExitPanelToRail,
-            onDpadRight = {
-                if (panelExpanded) {
-                    // Panel is open — move focus into it
-                    onEnterPanel()
-                } else {
-                    onEnterContent()
-                }
-            },
-            onReopenPanel = { route ->
-                onPanelExpandedChange(true, route)
-                // Focus moves to panel when user explicitly reopens it via rail right-key
-                onEnterPanel()
-            },
-            activeProfileName  = activeProfileName,
-            activeProfileEmoji = activeProfileEmoji,
-            onProfileClick     = onProfileClick,
-            xtreamUsername   = xtreamUsername,
-            xtreamExpiry     = xtreamExpiry,
-            isLicensed       = isLicensed,
-            trialDaysLeft    = trialDaysLeft
-        )
-
-        // ── Panel ───────────────────────────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .width(with(density) { (PANEL_WIDTH.toPx() * panelProgress.value).toDp() })
-                .fillMaxHeight()
-                .clipToBounds()
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(PANEL_WIDTH)
+        // ── Rail — hidden when panel is open ────────────────────────────
+        if (!panelExpanded) {
+            MainMenu(
+                modifier           = Modifier
+                    .width(railDp)
                     .fillMaxHeight()
-                    .graphicsLayer {
-                        translationX = -panelWidthPx * (1f - panelProgress.value)
+                    .focusRequester(railFR)
+                    .onFocusChanged { onRailFocusChanged(it.hasFocus) },
+                currentRoute       = currentRoute,
+                expandedRoute      = expandedRoute,
+                panelExpanded      = panelExpanded,
+                isLoadingEPG       = isLoadingEPG,
+                isLoadingVOD       = isLoadingVOD,
+                isLoadingSeries    = isLoadingSeries,
+                isSidebarFocused   = true,
+                sidebarRefocusTick = sidebarRefocusTick,
+                showLabels         = true,
+                onNavigate         = { route ->
+                    val effectiveRoute = if (route == AppRoute.Settings) AppRoute.SettingsPlaylists else route
+                    if (effectiveRoute.hasCategoryPanel) {
+                        onPanelExpandedChange(true, effectiveRoute)
+                        onNavigate(effectiveRoute)
+                    } else {
+                        onPanelExpandedChange(false, null)
+                        onNavigate(effectiveRoute)
                     }
+                },
+                onEnterPanel      = onEnterPanel,
+                onEnterContent    = onEnterContent,
+                onExitPanelToRail = onExitPanelToRail,
+                onDpadRight = {
+                    if (panelExpanded) {
+                        onEnterPanel()
+                    } else {
+                        onEnterContent()
+                    }
+                },
+                onReopenPanel = { route ->
+                    onPanelExpandedChange(true, route)
+                    onEnterPanel()
+                },
+                activeProfileName  = activeProfileName,
+                activeProfileEmoji = activeProfileEmoji,
+                onProfileClick     = onProfileClick,
+                xtreamUsername     = xtreamUsername,
+                xtreamExpiry       = xtreamExpiry,
+                isLicensed         = isLicensed,
+                trialDaysLeft      = trialDaysLeft,
+                vodRestricted      = vodRestricted,
+                hasJellyfinPlaylist = hasJellyfinPlaylist,
+            )
+        }
+
+        // ── Panel — hidden when rail is visible ──────────────────────────
+        if (panelExpanded) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val isAndroidTV = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
+            Column(
+                modifier = Modifier
+                    .width(panelDp)
+                    .fillMaxHeight()
             ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     expandedRoute?.isSettings == true -> SettingsPanel(
                         selectedRoute         = selectedSettingsRoute,
@@ -249,7 +260,9 @@ fun Sidebar(
                         focusTick             = panelFocusTick,
                         onRequestContentFocus = { onEnterContent() },
                         onRequestRailFocus    = { onExitPanelToRail() },
-                        modifier              = Modifier.width(PANEL_WIDTH)
+                        isAndroidTV           = isAndroidTV,
+                        onBackPressed         = onExitPanelToRail,
+                        modifier              = Modifier.width(panelDp)
                     )
                     expandedRoute == AppRoute.CatchUp -> CatchUpDatePanel(
                         availableDates        = catchUpAvailableDates,
@@ -263,7 +276,11 @@ fun Sidebar(
                         focusTick             = panelFocusTick,
                         onRequestContentFocus = { onEnterContent() },
                         onRequestRailFocus    = { onExitPanelToRail() },
-                        modifier              = Modifier.width(PANEL_WIDTH)
+                        isLoading             = isLoadingCatchUp,
+                        onSearchRequest       = onSearchRequest,
+                        isAndroidTV           = isAndroidTV,
+                        onBackPressed         = onExitPanelToRail,
+                        modifier              = Modifier.width(panelDp)
                     )
                     else -> CategoryPanel(
                         categories            = categories,
@@ -276,12 +293,37 @@ fun Sidebar(
                         onRequestRailFocus    = { onExitPanelToRail() },
                         onSearchRequest       = onSearchRequest,
                         onFavouritesSelected  = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
-                        showSearch            = expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series,
-                        showFavourites        = expandedRoute == AppRoute.Guide || expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series,
-                        modifier              = Modifier.width(PANEL_WIDTH)
+                        showSearch            = false,
+                        showFavourites        = expandedRoute == AppRoute.Guide || expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series || expandedRoute == AppRoute.Music,
+                        supportsKeyboardSearch = expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series
+                            || expandedRoute == AppRoute.Recent || expandedRoute == AppRoute.MyList,
+                        showClearAll          = expandedRoute == AppRoute.Recent || expandedRoute == AppRoute.MyList,
+                        onClearAll            = {
+                            when (expandedRoute) {
+                                AppRoute.Recent -> onRecentClearAll()
+                                AppRoute.MyList -> onMyListClearAll()
+                                else            -> {}
+                            }
+                        },
+                        header                = when (expandedRoute) {
+                            AppRoute.Home      -> "Sports Today"
+                            AppRoute.Guide     -> "Guide"
+                            AppRoute.Movies    -> "Movies"
+                            AppRoute.Series    -> "Series"
+                            AppRoute.Recent    -> "Recent"
+                            AppRoute.Search    -> "Search"
+                            AppRoute.MyList    -> "My List"
+                            AppRoute.Downloads -> "Downloads"
+                            AppRoute.Picks     -> "Picks"
+                            else               -> "Categories"
+                        },
+                        isAndroidTV           = isAndroidTV,
+                        onBackPressed         = onExitPanelToRail,
+                        modifier              = Modifier.width(panelDp)
                     )
                 }
-            }
+                } // end Box weight(1f)
+            } // end Column
         }
     }
 }
@@ -299,9 +341,7 @@ private fun MainMenu(
     isLoadingSeries: Boolean,
     isSidebarFocused: Boolean,
     sidebarRefocusTick: Int = 0,
-    panelFocusTick: Int = 0,      // increment to focus selected category item
     showLabels: Boolean,
-    panelProgress: Float = 0f,
     onNavigate: (AppRoute) -> Unit,
     onEnterPanel: () -> Unit = {},
     onEnterContent: () -> Unit = {},
@@ -314,20 +354,25 @@ private fun MainMenu(
     xtreamUsername: String?,
     xtreamExpiry: String?,
     isLicensed: Boolean,
-    trialDaysLeft: Int
+    trialDaysLeft: Int,
+    vodRestricted: Boolean = false,
+    hasJellyfinPlaylist: Boolean = false,
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
     val gTheme  = nsTheme.global
-    val recentFocus   = remember { FocusRequester() }
-    val guideFocus    = remember { FocusRequester() }
-    val moviesFocus   = remember { FocusRequester() }
-    val seriesFocus   = remember { FocusRequester() }
-    val catchupFocus  = remember { FocusRequester() }
-    val searchFocus   = remember { FocusRequester() }
-    val mylistFocus   = remember { FocusRequester() }
-    val downloadsFocus  = remember { FocusRequester() }
-    val settingsFocus   = remember { FocusRequester() }
+    val homeFocus        = remember { FocusRequester() }
+    val recentFocus      = remember { FocusRequester() }
+    val guideFocus       = remember { FocusRequester() }
+    val moviesFocus      = remember { FocusRequester() }
+    val seriesFocus      = remember { FocusRequester() }
+    val catchupFocus     = remember { FocusRequester() }
+    val picksFocus       = remember { FocusRequester() }
+    val musicFocus       = remember { FocusRequester() }
+    val searchFocus      = remember { FocusRequester() }
+    val mylistFocus      = remember { FocusRequester() }
+    val downloadsFocus   = remember { FocusRequester() }
+    val settingsFocus    = remember { FocusRequester() }
     val profileInfoFocus = remember { FocusRequester() }
 
     val menuScope = rememberCoroutineScope()
@@ -335,11 +380,14 @@ private fun MainMenu(
     fun focusForRoute(route: AppRoute) {
         try {
             when (route.rootSection()) {
+                AppRoute.Home        -> homeFocus.requestFocus()
                 AppRoute.Recent      -> recentFocus.requestFocus()
                 AppRoute.Guide       -> guideFocus.requestFocus()
                 AppRoute.Movies      -> moviesFocus.requestFocus()
                 AppRoute.Series      -> seriesFocus.requestFocus()
                 AppRoute.CatchUp     -> catchupFocus.requestFocus()
+                AppRoute.Picks       -> picksFocus.requestFocus()
+                AppRoute.Music       -> musicFocus.requestFocus()
                 AppRoute.Search      -> searchFocus.requestFocus()
                 AppRoute.MyList      -> mylistFocus.requestFocus()
                 AppRoute.Downloads   -> downloadsFocus.requestFocus()
@@ -354,6 +402,7 @@ private fun MainMenu(
     var isFirstComposition by remember { mutableStateOf(true) }
     LaunchedEffect(currentRoute) {
         if (isFirstComposition) { isFirstComposition = false; return@LaunchedEffect }
+        if (panelExpanded) return@LaunchedEffect
         kotlinx.coroutines.delay(80)
         if (isSidebarFocused) focusForRoute(currentRoute)
     }
@@ -369,18 +418,49 @@ private fun MainMenu(
         val onReopenPanel: (() -> Unit)? = null,
     )
 
-    val menuItems = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries) {
-        listOf(
-            MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,     recentFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }),
-            MenuEntry(Icons.Default.CalendarToday, "Guide",     AppRoute.Guide,      guideFocus,     isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },      hasSubPanel = true),
-            MenuEntry(Icons.Default.Movie,         "Movies",    AppRoute.Movies,     moviesFocus,    isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },     hasSubPanel = true),
-            MenuEntry(Icons.Default.VideoLibrary,  "Series",    AppRoute.Series,     seriesFocus,    isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },     hasSubPanel = true),
-            MenuEntry(Icons.Default.Replay,        "Catch Up",  AppRoute.CatchUp,    catchupFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }),
-            MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,     searchFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }),
-            MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,     mylistFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }),
-            MenuEntry(Icons.Default.Download,      "Downloads", AppRoute.Downloads,  downloadsFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Downloads) }),
-            MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings,   settingsFocus),
-        )
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val storedOrder  by context.getRailOrderFlow().collectAsState(initial = null)
+    val storedHidden by context.getRailHiddenFlow().collectAsState(initial = null)
+    val hiddenRoutes = remember(storedHidden) {
+        storedHidden?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    }
+
+    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist) {
+        buildMap {
+            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  "Sports Today", AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) }))
+            put("Recent",   MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
+            put("Guide",    MenuEntry(Icons.Default.CalendarToday, "Guide",     AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
+            put("Movies",   MenuEntry(Icons.Default.Movie,         "Movies",    AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true))
+            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  "Series",    AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true))
+            put("CatchUp",  MenuEntry(Icons.Default.Replay,        "Catch Up",  AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
+            put("Picks",    MenuEntry(Icons.Default.Stars,         "Picks",     AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) }))
+            if (hasJellyfinPlaylist) {
+                put("Music", MenuEntry(Icons.Default.MusicNote,    "Music",     AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
+            }
+            put("Search",   MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
+            put("MyList",   MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
+            put("Settings", MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings, settingsFocus))
+        }
+    }
+
+    val menuItems = remember(storedOrder, storedHidden, allMenuEntries, vodRestricted) {
+        val restrictedKeys = if (vodRestricted) setOf("Movies", "Series", "CatchUp") else emptySet()
+        // Guide and Settings can never be hidden; apply user visibility prefs to others
+        val alwaysVisible = setOf("Guide", "Settings")
+        val entries = allMenuEntries.filterKeys { key ->
+            key !in restrictedKeys && (key in alwaysVisible || key !in hiddenRoutes)
+        }
+        val order = storedOrder
+        if (order.isNullOrBlank()) {
+            entries.values.toList()
+        } else {
+            val names = order.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val ordered = names.mapNotNull { entries[it] }
+            val missing = entries.values.filter { entry ->
+                names.none { n -> entries[n] == entry }
+            }
+            ordered + missing
+        }
     }
 
     // Explicit tick-based redirect — fires only when MainScreen increments it
@@ -392,9 +472,12 @@ private fun MainMenu(
         }
     }
 
+    val firstRailFR = menuItems.first().focusRequester
+    val lastRailFR  = menuItems.last().focusRequester
+
     Column(
         modifier = modifier
-            .background(sTheme.background),
+            .background(sTheme.railBackground),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val textScale = nsTheme.typography.scale.coerceIn(0.85f, 1.5f)
@@ -403,14 +486,35 @@ private fun MainMenu(
             modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart
         ) {
-            Text(
-                text  = nsTheme.identity.appName,
-                style = MaterialTheme.typography.headlineSmall,
-                color = gTheme.primary,
-                maxLines = 1,
-                softWrap = false
-            )
+            if (nsTheme.identity.logoMode == LogoMode.IMAGE && nsTheme.identity.logoUrl != null) {
+                AsyncImage(
+                    model             = nsTheme.identity.logoUrl,
+                    contentDescription = nsTheme.identity.appName,
+                    contentScale      = ContentScale.Fit,
+                    modifier          = Modifier.fillMaxHeight().padding(vertical = 8.dp)
+                )
+            } else {
+                Text(
+                    text  = nsTheme.identity.appName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = gTheme.primary,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
+
+        HorizontalDivider(color = sTheme.divider)
+
+        ProfileInfo(
+            showLabels         = showLabels,
+            activeProfileName  = activeProfileName,
+            activeProfileEmoji = activeProfileEmoji,
+            onProfileClick     = onProfileClick,
+            focusRequester     = profileInfoFocus,
+            upFR               = lastRailFR,
+            downFR             = firstRailFR,
+        )
 
         HorizontalDivider(color = sTheme.divider)
 
@@ -422,16 +526,12 @@ private fun MainMenu(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Wrap-around: top ↔ bottom
-            val firstRailFR = menuItems.first().focusRequester
-            val lastRailFR  = menuItems.last().focusRequester
+            // Wrap-around: top ↔ bottom via profileInfoFocus
             menuItems.forEachIndexed { idx, entry ->
                 val isFirst = idx == 0
                 val isLast  = idx == menuItems.lastIndex
-                val prevFR  = if (isFirst) lastRailFR  else menuItems[idx - 1].focusRequester
-                val nextFR  = if (isLast)  firstRailFR else menuItems[idx + 1].focusRequester
-                // Right focus: panel open → panel; panel closed → content (via onDpadRight)
-                // We keep onDpadRight for right because it needs to handle the open/close logic
+                val prevFR  = if (isFirst) profileInfoFocus else menuItems[idx - 1].focusRequester
+                val nextFR  = if (isLast)  profileInfoFocus else menuItems[idx + 1].focusRequester
                 MenuItem(
                     icon           = entry.icon,
                     label          = entry.label,
@@ -452,16 +552,6 @@ private fun MainMenu(
                 )
             }
         }
-
-        ProfileInfo(
-            showLabels         = showLabels,
-            activeProfileName  = activeProfileName,
-            activeProfileEmoji = activeProfileEmoji,
-            onProfileClick     = onProfileClick,
-            focusRequester     = profileInfoFocus,
-            upFR               = settingsFocus,
-            downFR             = recentFocus,
-        )
     }
 }
 
@@ -508,7 +598,7 @@ private fun MenuItem(
     val isDimmed = isCurrentRoute && panelExpanded && expandedRoute != route
 
     val bgColor = when {
-        isBright && isFocused -> sTheme.railItemActiveBg  // selected + focused: slightly brighter border shows distinction
+        isBright && isFocused -> sTheme.railItemFocusedBg  // hover bg takes priority so cursor location is clear
         isBright  -> sTheme.railItemActiveBg
         isFocused -> sTheme.railItemFocusedBg
         else      -> androidx.compose.ui.graphics.Color.Transparent
@@ -593,21 +683,20 @@ private fun MenuItem(
             Text(
                 text       = label,
                 style      = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isBright) androidx.compose.ui.text.font.FontWeight.SemiBold
-                else androidx.compose.ui.text.font.FontWeight.Normal,
+                fontWeight = when {
+                    isBright -> when (nsTheme.typography.weight) {
+                        "bold", "semibold" -> androidx.compose.ui.text.font.FontWeight.Bold
+                        else               -> androidx.compose.ui.text.font.FontWeight.SemiBold
+                    }
+                    nsTheme.typography.weight == "bold" || nsTheme.typography.weight == "semibold" ->
+                        androidx.compose.ui.text.font.FontWeight.SemiBold
+                    else -> androidx.compose.ui.text.font.FontWeight.Normal
+                },
                 color      = textColor,
                 maxLines   = 1,
                 overflow   = TextOverflow.Ellipsis,
                 modifier   = Modifier.weight(1f)
             )
-            if (hasSubPanel) {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = iconTint.copy(alpha = if (isBright || isFocused) 1f else 0.5f),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
         }
     } else {
         Box(
@@ -640,13 +729,19 @@ private fun CategoryPanel(
     onCategorySelected: (String?) -> Unit,
     panelFR: FocusRequester,
     onPanelFocusChanged: (Boolean) -> Unit = {},
-    focusTick: Int = 0,  // increment to focus the selected item
+    focusTick: Int = 0,
     onRequestContentFocus: () -> Unit = {},
     onRequestRailFocus: () -> Unit = {},
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: () -> Unit = {},
     showSearch: Boolean = true,
     showFavourites: Boolean = true,
+    showClearAll: Boolean = false,
+    onClearAll: () -> Unit = {},
+    header: String = "Categories",
+    isAndroidTV: Boolean = false,
+    onBackPressed: () -> Unit = {},
+    supportsKeyboardSearch: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val nsTheme = LocalNexStreamTheme.current
@@ -654,32 +749,38 @@ private fun CategoryPanel(
     val textScale = nsTheme.typography.scale.coerceIn(0.85f, 1.5f)
     val headerHeight = (56 * textScale).dp
 
-    val panelScope   = rememberCoroutineScope()
-
-    // FocusRequesters — fixed items + map for categories (all always composed now)
-    val allFR           = remember { FocusRequester() }
-    val searchFR        = remember { FocusRequester() }
-    val favouritesFR    = remember { FocusRequester() }
+    val allFR         = remember { FocusRequester() }
+    val searchFR      = remember { FocusRequester() }
+    val favouritesFR  = remember { FocusRequester() }
     val categoryFocusMap = remember { androidx.compose.runtime.mutableStateMapOf<String, FocusRequester>() }
 
-    // isFocused on the panel container is NEVER true (Compose routes directly to
-    // first child). Drive redirect from focusTick instead of onFocusChanged.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    // Stable index constants so focusTick can scroll to the target before requesting focus
+    val favouritesIndex = if (showSearch) 1 else 0
+    val allIndex        = (if (showSearch) 1 else 0) + (if (showFavourites) 1 else 0)
+    val fixedCount      = allIndex + 1
+
     LaunchedEffect(focusTick) {
         if (focusTick == 0) return@LaunchedEffect
+        val targetIndex = when (selectedCategory) {
+            "__search__"     -> 0
+            "__favourites__" -> favouritesIndex
+            null             -> allIndex
+            else             -> {
+                val catIdx = categories.indexOf(selectedCategory)
+                if (catIdx >= 0) fixedCount + catIdx else allIndex
+            }
+        }
+        listState.scrollToItem(targetIndex.coerceAtLeast(0))
+        kotlinx.coroutines.delay(80)
         val target = when (selectedCategory) {
             "__search__"     -> searchFR
             "__favourites__" -> favouritesFR
             null             -> allFR
             else             -> categoryFocusMap[selectedCategory] ?: allFR
         }
-        val targetName = when (target) {
-            searchFR     -> "searchFR"
-            favouritesFR -> "favouritesFR"
-            allFR        -> "allFR"
-            else         -> "categoryFR[$selectedCategory]"
-        }
-        android.util.Log.d("NexStreamPanel", "focusTick=$focusTick → $targetName (selectedCategory=$selectedCategory)")
-        try { target.requestFocus(); android.util.Log.d("NexStreamPanel", "requestFocus succeeded on $targetName") }
+        try { target.requestFocus(); onPanelFocusChanged(true) }
         catch (e: Exception) { android.util.Log.e("NexStreamPanel", "requestFocus FAILED: ${e.message}") }
     }
 
@@ -688,87 +789,176 @@ private fun CategoryPanel(
             .fillMaxHeight()
             .background(sTheme.panelBackground)
             .focusRequester(panelFR)
-            .onFocusChanged { fs ->
-                android.util.Log.d("NexStreamPanel", "panelContainer onFocusChanged: isFocused=${fs.isFocused} hasFocus=${fs.hasFocus}")
-                onPanelFocusChanged(fs.hasFocus)
-            }
+            .onFocusChanged { fs -> onPanelFocusChanged(fs.hasFocus) }
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(headerHeight),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text     = "Categories",
-                style    = MaterialTheme.typography.bodyMedium,
-                color    = sTheme.categoryText,
-                modifier = Modifier.padding(horizontal = 10.dp)
-            )
+        if (!isAndroidTV) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight)
+                    .clickable { onBackPressed() }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back",
+                    tint = sTheme.categoryText, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(text = header, style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = sTheme.categoryText)
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text       = header,
+                    style      = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color      = sTheme.categoryText,
+                    modifier   = Modifier.padding(horizontal = 10.dp)
+                )
+            }
         }
 
         HorizontalDivider(color = sTheme.divider)
 
-        // ── Single flat scrollable Column — all panel items in one list ────────
-        // Build the complete item list inline so every FR is created in composition
-        // order and index arithmetic is always accurate
-        data class PanelEntry(
-            val label: String,
-            val categoryKey: String?,   // null = All, "__search__", "__favourites__", or category name
-            val fr: FocusRequester,
-            val isDividerAbove: Boolean = false,
-            val onClick: () -> Unit
-        )
-
-        // Create FRs for dynamic categories inline so they are always composed
-        val catFRs = categories.map { remember(it) { FocusRequester() } }
-        catFRs.forEachIndexed { i, fr -> SideEffect { categoryFocusMap[categories[i]] = fr } }
-
-        val entries = buildList {
-            if (showSearch) add(PanelEntry("Search", "__search__", searchFR) { onSearchRequest() })
-            if (showFavourites) add(PanelEntry("Favourites", "__favourites__", favouritesFR) { onFavouritesSelected() })
-            add(PanelEntry("All", null, allFR, isDividerAbove = showSearch || showFavourites) { onCategorySelected(null) })
-            categories.forEachIndexed { i, cat ->
-                add(PanelEntry(cat, cat, catFRs[i]) { onCategorySelected(cat) })
-            }
-        }
-        android.util.Log.d("NexStreamPanel", "entries built: ${entries.size} items — ${entries.map { it.label }}")
-        android.util.Log.d("NexStreamPanel", "  allFR hashCode=${allFR.hashCode()} favouritesFR=${favouritesFR.hashCode()} searchFR=${searchFR.hashCode()}")
-        android.util.Log.d("NexStreamPanel", "  catFRs=${catFRs.map { it.hashCode() }}")
-
-        val scrollState = androidx.compose.foundation.rememberScrollState(0)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(vertical = 4.dp)
+        androidx.compose.foundation.lazy.LazyColumn(
+            state    = listState,
+            modifier = Modifier.weight(1f).padding(vertical = 4.dp)
         ) {
-            entries.forEachIndexed { index, entry ->
-                val prevFR = if (index > 0) entries[index - 1].fr else null
-                val nextFR = if (index < entries.lastIndex) entries[index + 1].fr else null
-
-                if (entry.isDividerAbove) {
-                    HorizontalDivider(
-                        color = sTheme.divider,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            if (showSearch) {
+                item(key = "__search__") {
+                    PanelItem(
+                        text                  = "Search",
+                        isSelected            = selectedCategory == "__search__",
+                        focusRequester        = searchFR,
+                        onRequestContentFocus = onRequestContentFocus,
+                        onRequestRailFocus    = onRequestRailFocus,
+                        onFocused             = { onPanelFocusChanged(true) },
+                        onClick               = { onSearchRequest() }
                     )
                 }
+            }
+            if (showFavourites) {
+                item(key = "__favourites__") {
+                    PanelItem(
+                        text                  = "Favourites",
+                        isSelected            = selectedCategory == "__favourites__",
+                        focusRequester        = favouritesFR,
+                        onRequestContentFocus = onRequestContentFocus,
+                        onRequestRailFocus    = onRequestRailFocus,
+                        onFocused             = { onPanelFocusChanged(true) },
+                        onClick               = { onFavouritesSelected() }
+                    )
+                }
+            }
+            item(key = "__all__") {
                 PanelItem(
-                    text           = entry.label,
-                    isSelected     = selectedCategory == entry.categoryKey,
-                    focusRequester = entry.fr,
-                    prevFR         = prevFR,
-                    nextFR         = nextFR,
+                    text                  = "All",
+                    isSelected            = selectedCategory == null,
+                    focusRequester        = allFR,
                     onRequestContentFocus = onRequestContentFocus,
                     onRequestRailFocus    = onRequestRailFocus,
-                    onClick   = {
-                        android.util.Log.d("NexStreamPanel", "PanelItem clicked: '${entry.label}' (key=${entry.categoryKey})")
-                        entry.onClick()
+                    onFocused             = { onPanelFocusChanged(true) },
+                    onDoubleClick         = if (supportsKeyboardSearch) { { onSearchRequest() } } else { {} },
+                    onClick               = { onCategorySelected(null) }
+                )
+            }
+            items(categories, key = { it }) { cat ->
+                val fr = remember { FocusRequester() }
+                SideEffect { categoryFocusMap[cat] = fr }
+                PanelItem(
+                    text                  = cat,
+                    isSelected            = selectedCategory == cat,
+                    focusRequester        = fr,
+                    onRequestContentFocus = onRequestContentFocus,
+                    onRequestRailFocus    = onRequestRailFocus,
+                    onFocused             = { onPanelFocusChanged(true) },
+                    onDoubleClick         = if (supportsKeyboardSearch) { { onSearchRequest() } } else { {} },
+                    onClick               = { onCategorySelected(cat) }
+                )
+            }
+        }
+        if (showClearAll) {
+            HorizontalDivider(
+                color = sTheme.divider,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+            val clearAllFR = remember { FocusRequester() }
+            var clearAllFocused by remember { mutableStateOf(false) }
+            val clearScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (clearAllFocused) 1.04f else 1.0f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                    stiffness    = androidx.compose.animation.core.Spring.StiffnessHigh
+                ),
+                label = "clearScale"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { scaleX = clearScale; scaleY = clearScale }
+                    .defaultMinSize(minHeight = 40.dp)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (clearAllFocused) MaterialTheme.colorScheme.errorContainer
+                        else androidx.compose.ui.graphics.Color.Transparent
+                    )
+                    .focusRequester(clearAllFR)
+                    .onFocusChanged { clearAllFocused = it.isFocused; if (it.isFocused) onPanelFocusChanged(true) }
+                    .onKeyEvent { ev ->
+                        if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (ev.key) {
+                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { onClearAll(); true }
+                            Key.DirectionLeft  -> { onRequestRailFocus(); true }
+                            Key.DirectionRight -> { onRequestContentFocus(); true }
+                            else -> false
+                        }
                     }
+                    .focusable()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteSweep,
+                        contentDescription = null,
+                        tint = if (clearAllFocused) MaterialTheme.colorScheme.onErrorContainer
+                               else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text  = "Clear All",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (clearAllFocused) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+        if (supportsKeyboardSearch) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text  = "Double-click to search",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = sTheme.categoryText.copy(alpha = 0.35f),
+                    maxLines = 1
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PanelItem(
     text: String,
@@ -777,13 +967,19 @@ private fun PanelItem(
     onRequestContentFocus: () -> Unit,
     onRequestRailFocus: () -> Unit,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onDoubleClick: () -> Unit = {},
+    onFocused: () -> Unit = {},
     prevFR: FocusRequester? = null,
     nextFR: FocusRequester? = null,
-    maxLines: Int = 2
+    maxLines: Int = 2,
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
     var isFocused by remember { mutableStateOf(false) }
+    var longPressConsumed by remember { mutableStateOf(false) }
+    var lastClickTime by remember { mutableStateOf(0L) }
     val itemScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isFocused) 1.04f else 1.0f,
         animationSpec = androidx.compose.animation.core.spring(
@@ -795,17 +991,24 @@ private fun PanelItem(
     val interaction = remember { MutableInteractionSource() }
 
     val bgColor = when {
+        isFocused  -> sTheme.categoryFocusedBg   // hover always wins so cursor location is clear
         isSelected -> sTheme.categorySelectedBg
-        isFocused  -> sTheme.categoryFocusedBg
         else       -> androidx.compose.ui.graphics.Color.Transparent
     }
     val textColor = when {
-        isSelected -> sTheme.categoryTextSelected
         isFocused  -> sTheme.categoryTextFocused
+        isSelected -> sTheme.categoryTextSelected
         else       -> sTheme.categoryText
     }
-    val textWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold
-    else androidx.compose.ui.text.font.FontWeight.Normal
+    val w = nsTheme.typography.weight
+    val textWeight = when {
+        isSelected -> when (w) {
+            "bold", "semibold" -> androidx.compose.ui.text.font.FontWeight.Bold
+            else               -> androidx.compose.ui.text.font.FontWeight.SemiBold
+        }
+        w == "bold" || w == "semibold" -> androidx.compose.ui.text.font.FontWeight.SemiBold
+        else -> androidx.compose.ui.text.font.FontWeight.Normal
+    }
 
     Box(
         modifier = Modifier
@@ -822,35 +1025,70 @@ private fun PanelItem(
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
-                // Declare explicit focus graph — no onKeyEvent needed for traversal
                 if (prevFR != null) up   = prevFR
                 if (nextFR != null) down = nextFR
             }
-            .onFocusChanged { state -> isFocused = state.isFocused }
-            .onKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown) when (e.key) {
-                    Key.DirectionRight -> { onRequestContentFocus(); true }
-                    Key.DirectionLeft  -> { onRequestRailFocus(); true }
-                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { onClick(); true }
-                    else -> false
-                } else false
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (state.isFocused) onFocused()
             }
-            .clickable(
+            .onPreviewKeyEvent { e ->
+                when (e.key) {
+                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> when {
+                        e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> {
+                            val now = System.currentTimeMillis()
+                            if (now - lastClickTime in 1L..400L) {
+                                onDoubleClick()
+                                lastClickTime = 0L
+                            } else {
+                                onClick()
+                                lastClickTime = now
+                            }
+                            true
+                        }
+                        e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount > 0 && !longPressConsumed -> {
+                            longPressConsumed = true; onLongClick(); true
+                        }
+                        e.type == KeyEventType.KeyUp && longPressConsumed -> {
+                            longPressConsumed = false; true
+                        }
+                        else -> false
+                    }
+                    Key.DirectionRight ->
+                        if (e.type == KeyEventType.KeyDown) { onRequestContentFocus(); true } else false
+                    Key.DirectionLeft  ->
+                        if (e.type == KeyEventType.KeyDown) { onRequestRailFocus(); true } else false
+                    else -> false
+                }
+            }
+            .combinedClickable(
                 interactionSource = interaction,
                 indication        = null,
-                onClick           = onClick
+                onClick           = onClick,
+                onLongClick       = onLongClick
             ),
         contentAlignment = Alignment.CenterStart
     ) {
-        Text(
-            text       = text,
-            style      = MaterialTheme.typography.bodyMedium,
-            color      = textColor,
-            fontWeight = textWeight,
-            maxLines   = maxLines,
-            overflow   = TextOverflow.Ellipsis,
-            modifier   = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text       = text,
+                style      = MaterialTheme.typography.bodyMedium,
+                color      = textColor,
+                fontWeight = textWeight,
+                maxLines   = maxLines,
+                overflow   = TextOverflow.Ellipsis,
+                modifier   = Modifier.weight(1f)
+            )
+            if (trailingContent != null) {
+                Spacer(Modifier.width(6.dp))
+                trailingContent()
+            }
+        }
     }
 }
 
@@ -880,8 +1118,6 @@ private fun ProfileInfo(
         ),
         label = "itemScale"
     )
-
-    HorizontalDivider(color = sTheme.divider)
 
     if (showLabels) {
         Row(
@@ -970,6 +1206,8 @@ private fun SettingsPanel(
     focusTick: Int,
     onRequestContentFocus: () -> Unit,
     onRequestRailFocus: () -> Unit,
+    isAndroidTV: Boolean = false,
+    onBackPressed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val nsTheme = LocalNexStreamTheme.current
@@ -980,29 +1218,33 @@ private fun SettingsPanel(
     data class SettingsEntry(val label: String, val route: AppRoute, val fr: FocusRequester)
 
     val playlistsFR   = remember { FocusRequester() }
+    val sportsFR      = remember { FocusRequester() }
     val appearanceFR  = remember { FocusRequester() }
     val playerFR      = remember { FocusRequester() }
     val licenceFR     = remember { FocusRequester() }
     val accountFR     = remember { FocusRequester() }
     val profilesFR    = remember { FocusRequester() }
+    val navigationFR  = remember { FocusRequester() }
     val aboutFR       = remember { FocusRequester() }
 
     val entries = remember {
         listOf(
-            SettingsEntry("Playlists",   AppRoute.SettingsPlaylists,  playlistsFR),
-            SettingsEntry("Appearance",  AppRoute.SettingsAppearance, appearanceFR),
-            SettingsEntry("Player",      AppRoute.SettingsPlayer,     playerFR),
-            SettingsEntry("Licence",     AppRoute.SettingsLicence,    licenceFR),
-            SettingsEntry("Account",     AppRoute.SettingsAccount,    accountFR),
-            SettingsEntry("Profiles",    AppRoute.SettingsProfiles,   profilesFR),
-            SettingsEntry("About",       AppRoute.SettingsAbout,      aboutFR),
+            SettingsEntry("Playlists",    AppRoute.SettingsPlaylists,  playlistsFR),
+            SettingsEntry("Sports Guide", AppRoute.SettingsSports,     sportsFR),
+            SettingsEntry("Appearance",   AppRoute.SettingsAppearance, appearanceFR),
+            SettingsEntry("Player",       AppRoute.SettingsPlayer,     playerFR),
+            SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR),
+            SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR),
+            SettingsEntry("Profiles",     AppRoute.SettingsProfiles,   profilesFR),
+            SettingsEntry("Navigation",   AppRoute.SettingsNavigation, navigationFR),
+            SettingsEntry("About",        AppRoute.SettingsAbout,      aboutFR),
         )
     }
 
     LaunchedEffect(focusTick) {
         if (focusTick == 0) return@LaunchedEffect
         val target = entries.firstOrNull { it.route == selectedRoute }?.fr ?: entries.first().fr
-        try { target.requestFocus() } catch (_: Exception) {}
+        try { target.requestFocus(); onPanelFocusChanged(true) } catch (_: Exception) {}
     }
 
     val scrollState = androidx.compose.foundation.rememberScrollState(0)
@@ -1014,16 +1256,35 @@ private fun SettingsPanel(
             .focusRequester(panelFR)
             .onFocusChanged { fs -> onPanelFocusChanged(fs.hasFocus) }
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(headerHeight),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text     = "Settings",
-                style    = MaterialTheme.typography.bodyMedium,
-                color    = sTheme.categoryText,
-                modifier = Modifier.padding(horizontal = 10.dp)
-            )
+        if (!isAndroidTV) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight)
+                    .clickable { onBackPressed() }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back",
+                    tint = sTheme.categoryText, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(text = "Settings", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = sTheme.categoryText)
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text       = "Settings",
+                    style      = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color      = sTheme.categoryText,
+                    modifier   = Modifier.padding(horizontal = 10.dp)
+                )
+            }
         }
 
         HorizontalDivider(color = sTheme.divider)
@@ -1045,6 +1306,7 @@ private fun SettingsPanel(
                     nextFR                = nextFR,
                     onRequestContentFocus = onRequestContentFocus,
                     onRequestRailFocus    = onRequestRailFocus,
+                    onFocused             = { onPanelFocusChanged(true) },
                     onClick               = { onItemSelected(entry.route) }
                 )
             }
@@ -1069,6 +1331,10 @@ private fun CatchUpDatePanel(
     focusTick:            Int,
     onRequestContentFocus: () -> Unit,
     onRequestRailFocus:    () -> Unit,
+    isLoading:            Boolean = false,
+    onSearchRequest:      () -> Unit = {},
+    isAndroidTV:          Boolean = false,
+    onBackPressed:        () -> Unit = {},
     modifier:             Modifier = Modifier
 ) {
     val nsTheme     = LocalNexStreamTheme.current
@@ -1091,6 +1357,7 @@ private fun CatchUpDatePanel(
                 val idx = availableDates.indexOfFirst { it.toString() == selectedDateKey }
                 dateFRs.getOrNull(idx)?.requestFocus() ?: allFR.requestFocus()
             }
+            onPanelFocusChanged(true)
         } catch (_: Exception) {}
     }
 
@@ -1114,25 +1381,43 @@ private fun CatchUpDatePanel(
             .then(Modifier.focusRequester(panelFR))
             .onFocusChanged { fs: androidx.compose.ui.focus.FocusState -> onPanelFocusChanged(fs.hasFocus) }
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(headerHeight), contentAlignment = Alignment.CenterStart) {
-            Text("Dates", style = MaterialTheme.typography.bodyMedium, color = sTheme.categoryText,
-                modifier = Modifier.padding(horizontal = 10.dp))
+        if (!isAndroidTV) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight)
+                    .clickable { onBackPressed() }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back",
+                    tint = sTheme.categoryText, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(text = "Catch Up", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = sTheme.categoryText)
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxWidth().height(headerHeight), contentAlignment = Alignment.CenterStart) {
+                Text("Catch Up",
+                    style      = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color      = sTheme.categoryText,
+                    modifier   = Modifier.padding(horizontal = 10.dp))
+            }
         }
         HorizontalDivider(color = sTheme.divider)
 
 
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(vertical = 4.dp)
+            modifier = Modifier.weight(1f).verticalScroll(scrollState).padding(vertical = 4.dp)
         ) {
             allEntries.forEachIndexed { index, (label, fr) ->
                 val categoryKey = entryKeys[index]
                 val isSelected  = selectedDateKey == categoryKey
-                // Wrap around: last item's next = first item; first item's prev = last item
                 val prevFR = if (index > 0) allEntries[index - 1].second else allEntries.last().second
                 val nextFR = if (index < allEntries.lastIndex) allEntries[index + 1].second else allEntries.first().second
 
-                if (index == 1) HorizontalDivider(color = sTheme.divider,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
 
                 PanelItem(
                     text           = label,
@@ -1142,9 +1427,25 @@ private fun CatchUpDatePanel(
                     nextFR         = nextFR,
                     onRequestContentFocus = onRequestContentFocus,
                     onRequestRailFocus    = onRequestRailFocus,
-                    onClick = { onDateSelected(categoryKey) }
+                    onFocused     = { onPanelFocusChanged(true) },
+                    onDoubleClick = { onSearchRequest() },
+                    onClick       = { onDateSelected(categoryKey) },
+                    trailingContent = if (isLoading && categoryKey == null) {
+                        { CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp) }
+                    } else null
                 )
             }
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text  = "Double-click to search",
+                style = MaterialTheme.typography.labelSmall,
+                color = sTheme.categoryText.copy(alpha = 0.35f),
+                maxLines = 1
+            )
         }
     }
 }

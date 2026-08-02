@@ -1,16 +1,24 @@
 package app.nexstream.player.data.sync
 
+import android.content.Context
 import android.util.Log
 import app.nexstream.player.data.local.dao.WatchlistDao
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
+import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.remote.AddChannelRequest
 import app.nexstream.player.data.remote.AddSeriesRequest
 import app.nexstream.player.data.remote.AddVodRequest
 import app.nexstream.player.data.remote.DeleteRequest
 import app.nexstream.player.data.remote.WatchlistApiService
 import app.nexstream.player.license.LicencePreferences
+import app.nexstream.player.ui.theme.getCloudSyncEnabledFlow
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,37 +27,122 @@ import javax.inject.Singleton
 class WatchlistSyncManager @Inject constructor(
     private val api: WatchlistApiService,
     private val dao: WatchlistDao,
-    private val licencePreferences: LicencePreferences
+    private val licencePreferences: LicencePreferences,
+    private val profileManager: ProfileManager,
+    @ApplicationContext private val context: Context,
 ) {
     private val tag = "WatchlistSync"
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Fire-and-forget push variants — survive ViewModel teardown because they run on
+    // the singleton's own scope rather than the calling ViewModel's viewModelScope.
+    fun enqueuePushAdd(item: WatchlistEntity) { syncScope.launch { pushAdd(item) } }
+    fun enqueuePushRemove(id: String, type: WatchlistType, profileId: String) {
+        syncScope.launch { pushRemove(id, type, profileId) }
+    }
 
     private fun authHeader(): String? {
-        val key = licencePreferences.getLicenceKey() ?: return null
+        val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey() ?: return null
         return "Bearer $key"
     }
 
-    suspend fun syncFromServer(profileId: String) = withContext(Dispatchers.IO) {
-        val auth = authHeader() ?: return@withContext
+    private fun keySource(): String = when {
+        licencePreferences.getLicenceKey() != null -> "LICENCE"
+        licencePreferences.getTrialSyncKey() != null -> "TRIAL"
+        else -> "NONE"
+    }
+
+    private fun maskedKey(): String {
+        val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey() ?: return "<null>"
+        return if (key.length > 8) "${key.take(4)}…${key.takeLast(4)}" else "***"
+    }
+
+    private fun deviceId(): String = licencePreferences.getOrCreateStableDeviceId()
+
+    private fun logContext(profileId: String? = null) {
+        val cloudEnabled = runCatching {
+            kotlinx.coroutines.runBlocking { context.getCloudSyncEnabledFlow().first() }
+        }.getOrDefault(false)
+        Log.i(tag, "=== SYNC CONTEXT ===")
+        Log.i(tag, "  device      : ${deviceId()}")
+        Log.i(tag, "  keySource   : ${keySource()}")
+        Log.i(tag, "  key(masked) : ${maskedKey()}")
+        if (profileId != null) Log.i(tag, "  profileId   : $profileId")
+        Log.i(tag, "  cloudSync   : $cloudEnabled")
+    }
+
+    // Push all local watchlist items to the server. Called on startup to ensure
+    // the server is up-to-date with whatever is stored locally on this device.
+    suspend fun pushAllToServer() = withContext(Dispatchers.IO) {
+        Log.i(tag, "pushAllToServer: starting")
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) { Log.w(tag, "pushAllToServer: cloud sync DISABLED — skipping"); return@withContext }
+        val auth = authHeader()
+        if (auth == null) { Log.e(tag, "pushAllToServer: authHeader null (keySource=${keySource()}) — skipping"); return@withContext }
+        Log.i(tag, "pushAllToServer: device=${deviceId()}, key=${maskedKey()}, source=${keySource()}")
         try {
-            listOf("channels", "vod", "series").forEach { type ->
-                val response = api.getList(auth, type, profileId) // ADD profileId
-                if (response.isSuccessful) {
-                    val items = response.body()?.items ?: return@forEach
-                    items.forEach { item ->
-                        val entity = mapServerItemToEntity(item, type, profileId) ?: return@forEach
-                        dao.addToWatchlist(entity)
-                    }
-                }
+            val items = dao.getAllItemsSuspend()
+            Log.i(tag, "pushAllToServer: ${items.size} local items to push")
+            items.groupBy { it.type }.forEach { (type, group) ->
+                Log.i(tag, "  → $type: ${group.size} items (profileIds: ${group.map { it.profileId }.distinct()})")
             }
+            items.forEach { item -> pushAdd(item) }
+            Log.i(tag, "pushAllToServer: done")
         } catch (e: Exception) {
-            Log.e(tag, "Sync from server failed", e)
+            Log.e(tag, "pushAllToServer: EXCEPTION ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 
-    suspend fun pushAdd(item: WatchlistEntity) = withContext(Dispatchers.IO) {
-        val auth = authHeader() ?: return@withContext
+    suspend fun syncFromServer(profileId: String) = withContext(Dispatchers.IO) {
+        Log.i(tag, "syncFromServer: starting for profileId=$profileId")
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) { Log.w(tag, "syncFromServer: cloud sync DISABLED — skipping"); return@withContext }
+        val auth = authHeader()
+        if (auth == null) { Log.e(tag, "syncFromServer: authHeader null (keySource=${keySource()}) — skipping"); return@withContext }
+        Log.i(tag, "syncFromServer: device=${deviceId()}, key=${maskedKey()}, source=${keySource()}, profile=$profileId")
         try {
-            when (item.type) {
+            listOf("channels", "vod", "series").forEach { type ->
+                Log.d(tag, "syncFromServer: GETting $type …")
+                val response = api.getList(auth, type, profileId)
+                Log.i(tag, "syncFromServer: $type → HTTP ${response.code()}")
+                if (response.isSuccessful) {
+                    val items = response.body()?.items ?: run {
+                        Log.w(tag, "syncFromServer: $type body null or empty items list"); return@forEach
+                    }
+                    Log.i(tag, "syncFromServer: $type → ${items.size} items from server")
+                    var saved = 0; var skipped = 0
+                    items.forEach { item ->
+                        val itemProfileId = resolveProfileId(item["profile_id"], profileId)
+                        val entity = mapServerItemToEntity(item, type, itemProfileId)
+                        if (entity != null) {
+                            dao.addToWatchlist(entity)
+                            saved++
+                        } else {
+                            Log.w(tag, "syncFromServer: $type — mapServerItemToEntity returned null for item=$item")
+                            skipped++
+                        }
+                    }
+                    Log.i(tag, "syncFromServer: $type → saved=$saved, skipped=$skipped")
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: "<no body>"
+                    Log.e(tag, "syncFromServer: $type FAILED ${response.code()} — $errorBody")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "syncFromServer: EXCEPTION ${e.javaClass.simpleName}: ${e.message}", e)
+        }
+        Log.i(tag, "syncFromServer: complete")
+    }
+
+    suspend fun pushAdd(item: WatchlistEntity) = withContext(Dispatchers.IO) {
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) return@withContext
+        val auth = authHeader() ?: run {
+            Log.e(tag, "pushAdd: authHeader null — cannot push ${item.type} ${item.id}")
+            return@withContext
+        }
+        try {
+            val response = when (item.type) {
                 WatchlistType.CHANNEL -> api.addChannel(
                     auth = auth,
                     type = "channels",
@@ -59,7 +152,7 @@ class WatchlistSyncManager @Inject constructor(
                         stream_url   = item.streamUrl ?: "",
                         logo_url     = item.posterUrl,
                         category     = null,
-                        profile_id   = item.profileId  // ADD THIS
+                        profile_id   = item.profileId
                     )
                 )
                 WatchlistType.MOVIE -> api.addVod(
@@ -71,7 +164,7 @@ class WatchlistSyncManager @Inject constructor(
                         stream_url = item.streamUrl ?: "",
                         poster_url = item.posterUrl,
                         category   = null,
-                        profile_id = item.profileId  // ADD THIS
+                        profile_id = item.profileId
                     )
                 )
                 WatchlistType.SERIES -> api.addSeries(
@@ -82,34 +175,55 @@ class WatchlistSyncManager @Inject constructor(
                         title      = item.name,
                         poster_url = item.posterUrl,
                         category   = null,
-                        profile_id = item.profileId  // ADD THIS
+                        profile_id = item.profileId
                     )
                 )
+                WatchlistType.MUSIC -> return@withContext
+            }
+            if (!response.isSuccessful) {
+                val errorBody = response.errorBody()?.string() ?: "<no body>"
+                Log.e(tag, "pushAdd: ${item.type} ${item.id} → HTTP ${response.code()} FAILED — $errorBody")
             }
         } catch (e: Exception) {
-            Log.e(tag, "Push add failed for ${item.id}", e)
+            Log.e(tag, "pushAdd: EXCEPTION pushing ${item.type} ${item.id}: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 
     suspend fun pushRemove(id: String, type: WatchlistType, profileId: String) = withContext(Dispatchers.IO) {
-        val auth = authHeader() ?: return@withContext
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) return@withContext
+        val auth = authHeader() ?: run {
+            Log.e(tag, "pushRemove: authHeader null — cannot remove $type $id")
+            return@withContext
+        }
         val apiType = when (type) {
             WatchlistType.CHANNEL -> "channels"
             WatchlistType.MOVIE   -> "vod"
             WatchlistType.SERIES  -> "series"
+            WatchlistType.MUSIC   -> return@withContext
         }
+        Log.d(tag, "pushRemove: $type id=$id profile=$profileId")
         try {
-            api.removeItem(
-                auth    = auth,
-                type    = apiType,
-                body    = DeleteRequest(
-                    item_id    = id,
-                    profile_id = profileId  // ADD THIS
-                )
+            val response = api.removeItem(
+                auth = auth,
+                type = apiType,
+                body = DeleteRequest(item_id = id, profile_id = profileId)
             )
+            if (response.isSuccessful) {
+                Log.d(tag, "pushRemove: $type $id → HTTP ${response.code()} OK")
+            } else {
+                val errorBody = response.errorBody()?.string() ?: "<no body>"
+                Log.e(tag, "pushRemove: $type $id → HTTP ${response.code()} FAILED — $errorBody")
+            }
         } catch (e: Exception) {
-            Log.e(tag, "Push remove failed for $id", e)
+            Log.e(tag, "pushRemove: EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
         }
+    }
+
+    private fun resolveProfileId(serverProfileId: String?, fallbackProfileId: String): String {
+        if (serverProfileId.isNullOrBlank() || serverProfileId == "default") return fallbackProfileId
+        val knownIds = profileManager.profiles.value.map { it.id }.toSet()
+        return if (serverProfileId in knownIds) serverProfileId else fallbackProfileId
     }
 
     private fun mapServerItemToEntity(

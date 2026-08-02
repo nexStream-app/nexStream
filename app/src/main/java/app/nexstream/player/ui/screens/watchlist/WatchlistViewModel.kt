@@ -55,6 +55,7 @@ class WatchlistViewModel @Inject constructor(
                 .first()
                 .let { profile ->
                     syncManager.syncFromServer(profile.id)
+                    repository.pruneStaleAndBlockedWatchlistItems()
                 }
         }
     }
@@ -70,19 +71,31 @@ class WatchlistViewModel @Inject constructor(
             val itemWithProfile = item.copy(profileId = activeProfileId)
             android.util.Log.d("WATCHLIST", "saving with profileId = ${itemWithProfile.profileId}")
             repository.addToWatchlist(itemWithProfile)
-            syncManager.pushAdd(itemWithProfile)
+            syncManager.enqueuePushAdd(itemWithProfile)
         }
     }
 
     fun removeFromWatchlist(id: String, type: WatchlistType) {
         viewModelScope.launch {
             repository.removeFromWatchlist(id, activeProfileId)
-            syncManager.pushRemove(id, type, activeProfileId)  // ADD activeProfileId
+            syncManager.enqueuePushRemove(id, type, activeProfileId)
         }
     }
 
     fun toggleWatchlist(item: WatchlistEntity, currentlyInList: Boolean) {
         if (currentlyInList) removeFromWatchlist(item.id, item.type)
         else addToWatchlist(item)
+    }
+
+    fun clearAllForType(selectedType: String?) {
+        viewModelScope.launch {
+            when (selectedType) {
+                "Live TV" -> repository.clearWatchlistByType(WatchlistType.CHANNEL)
+                "Movies"  -> repository.clearWatchlistByType(WatchlistType.MOVIE)
+                "Series"  -> repository.clearWatchlistByType(WatchlistType.SERIES)
+                "Music"   -> repository.clearWatchlistByType(WatchlistType.MUSIC)
+                else      -> repository.clearWatchlistAll()
+            }
+        }
     }
 }
