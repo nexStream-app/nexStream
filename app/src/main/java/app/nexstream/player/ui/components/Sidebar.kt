@@ -122,6 +122,7 @@ fun Sidebar(
     musicCategories: List<String> = emptyList(),
     selectedMusicCategory: String? = null,
     onMusicCategorySelected: (String?) -> Unit = {},
+    showSyncSettings: Boolean = true,
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
@@ -262,6 +263,7 @@ fun Sidebar(
                         onRequestRailFocus    = { onExitPanelToRail() },
                         isAndroidTV           = isAndroidTV,
                         onBackPressed         = onExitPanelToRail,
+                        showSyncSettings      = showSyncSettings,
                         modifier              = Modifier.width(panelDp)
                     )
                     expandedRoute == AppRoute.CatchUp -> CatchUpDatePanel(
@@ -1209,6 +1211,7 @@ private fun SettingsPanel(
     onRequestRailFocus: () -> Unit,
     isAndroidTV: Boolean = false,
     onBackPressed: () -> Unit = {},
+    showSyncSettings: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val nsTheme = LocalNexStreamTheme.current
@@ -1222,24 +1225,26 @@ private fun SettingsPanel(
     val sportsFR      = remember { FocusRequester() }
     val appearanceFR  = remember { FocusRequester() }
     val playerFR      = remember { FocusRequester() }
+    val syncFR        = remember { FocusRequester() }
     val licenceFR     = remember { FocusRequester() }
     val accountFR     = remember { FocusRequester() }
     val profilesFR    = remember { FocusRequester() }
     val navigationFR  = remember { FocusRequester() }
     val aboutFR       = remember { FocusRequester() }
 
-    val entries = remember {
-        listOf(
-            SettingsEntry("Playlists",    AppRoute.SettingsPlaylists,  playlistsFR),
-            SettingsEntry("Sports Guide", AppRoute.SettingsSports,     sportsFR),
-            SettingsEntry("Appearance",   AppRoute.SettingsAppearance, appearanceFR),
-            SettingsEntry("Player",       AppRoute.SettingsPlayer,     playerFR),
-            SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR),
-            SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR),
-            SettingsEntry("Profiles",     AppRoute.SettingsProfiles,   profilesFR),
-            SettingsEntry("Navigation",   AppRoute.SettingsNavigation, navigationFR),
-            SettingsEntry("About",        AppRoute.SettingsAbout,      aboutFR),
-        )
+    val entries = remember(showSyncSettings) {
+        buildList {
+            add(SettingsEntry("Playlists",    AppRoute.SettingsPlaylists,  playlistsFR))
+            add(SettingsEntry("Sports Guide", AppRoute.SettingsSports,     sportsFR))
+            add(SettingsEntry("Appearance",   AppRoute.SettingsAppearance, appearanceFR))
+            add(SettingsEntry("Player",       AppRoute.SettingsPlayer,     playerFR))
+            if (showSyncSettings) add(SettingsEntry("Sync", AppRoute.SettingsSyncSettings, syncFR))
+            add(SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR))
+            add(SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR))
+            add(SettingsEntry("Profiles",     AppRoute.SettingsProfiles,   profilesFR))
+            add(SettingsEntry("Navigation",   AppRoute.SettingsNavigation, navigationFR))
+            add(SettingsEntry("About",        AppRoute.SettingsAbout,      aboutFR))
+        }
     }
 
     LaunchedEffect(focusTick) {

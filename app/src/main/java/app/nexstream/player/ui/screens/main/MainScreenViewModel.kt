@@ -8,25 +8,37 @@ import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
 import app.nexstream.player.data.sync.ProgressSyncManager
+import app.nexstream.player.license.LicencePreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class PlaylistLoadState(val loaded: Boolean, val playlists: List<PlaylistEntity>)
+
 @HiltViewModel
 class MainScreenViewModel @Inject constructor(
     val repository: PlaylistRepository,
     private val progressSyncManager: ProgressSyncManager,
     private val progressRepository: WatchProgressRepository,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val licencePreferences: LicencePreferences
 ) : ViewModel() {
 
-    val playlists: StateFlow<List<PlaylistEntity>> = repository.getAllPlaylists()
+    val isReseller: Boolean = licencePreferences.isResellerAssigned()
+
+    // Single subscription — loaded + playlists are always from the same emission
+    val playlistLoadState: StateFlow<PlaylistLoadState> = repository.getAllPlaylists()
+        .map { PlaylistLoadState(loaded = true, playlists = it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PlaylistLoadState(false, emptyList()))
+
+    val playlists: StateFlow<List<PlaylistEntity>> = playlistLoadState
+        .map { it.playlists }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val playlistsLoaded: StateFlow<Boolean> = repository.getAllPlaylists()
-        .map { true }
+    val playlistsLoaded: StateFlow<Boolean> = playlistLoadState
+        .map { it.loaded }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -54,6 +66,8 @@ class MainScreenViewModel @Inject constructor(
             progressSyncManager.pullFromServer(profileId)
             progressSyncManager.pushAllToServer(profileId)
         }
+        // Backfill certifications for any movies/series that don't have them yet
+        viewModelScope.launch { runCatching { repository.fetchAllMissingCertifications() } }
     }
 
     private suspend fun migrateExistingProgress(profileId: String) {

@@ -4,19 +4,31 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import app.nexstream.player.data.profile.ProfileManager
+import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.data.sync.WatchlistSyncManager
+import app.nexstream.player.license.LicenceManager
+import app.nexstream.player.license.PlaylistCrypto
+import app.nexstream.player.license.TrialManager
+import app.nexstream.player.ui.theme.ThemeManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class NexStreamFirebaseService : FirebaseMessagingService() {
 
     @Inject lateinit var profileSyncManager: ProfileSyncManager
+    @Inject lateinit var watchlistSyncManager: WatchlistSyncManager
     @Inject lateinit var profileManager: ProfileManager
+    @Inject lateinit var playlistRepository: PlaylistRepository
+    @Inject lateinit var licenceManager: LicenceManager
+    @Inject lateinit var trialManager: TrialManager
+    @Inject lateinit var themeManager: ThemeManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -29,11 +41,63 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
             "profile_sync", "sync" -> {
                 scope.launch {
                     profileSyncManager.syncFromServer()
-                    // syncFromServer() is a suspend fun that completes before returning,
-                    // so refreshAfterSync() runs after DB is written
                     profileManager.refreshAfterSync()
-                    Log.d("FCM", "Profile sync and refresh complete")
+                    // Also refresh watchlist for the active profile
+                    profileManager.activeProfile.value?.id?.let { pid ->
+                        watchlistSyncManager.syncFromServer(pid)
+                    }
+                    Log.d("FCM", "Profile + watchlist sync complete")
                 }
+            }
+            "watchlist_sync" -> {
+                scope.launch {
+                    val pid = profileManager.activeProfile.value?.id ?: return@launch
+                    watchlistSyncManager.syncFromServer(pid)
+                    Log.d("FCM", "Watchlist sync triggered for profile $pid")
+                }
+            }
+            "theme_refresh" -> {
+                scope.launch {
+                    themeManager.refresh()
+                    Log.d("FCM", "Theme refresh triggered")
+                }
+            }
+            "licence_assigned" -> {
+                scope.launch {
+                    val activated = trialManager.checkAndActivateAssignedLicence(licenceManager.getDeviceId())
+                    if (activated) {
+                        licenceManager.notifyActivated()
+                        themeManager.refresh()
+                        // Re-register FCM token now that we have a licence key, so the backend
+                        // links this token to a user_id and future reseller theme pushes reach us.
+                        reRegisterFcmToken()
+                        Log.d("FCM", "licence_assigned: activated and notified")
+                    } else {
+                        Log.d("FCM", "licence_assigned: no licence found for this device")
+                    }
+                }
+            }
+            "playlist_assigned" -> {
+                val d = message.data
+                val playlistType = d["playlist_type"] ?: run {
+                    Log.w("FCM", "playlist_assigned missing playlist_type")
+                    return
+                }
+                Log.d("FCM", "Playlist assigned via FCM: type=$playlistType")
+                val licenceKey   = licenceManager.getStoredLicenceKey()
+                val encPassword  = d["password"] ?: ""
+                val password = if (licenceKey != null && encPassword.isNotEmpty())
+                    PlaylistCrypto.decryptPassword(encPassword, licenceKey)
+                else encPassword
+                playlistRepository.setPendingPlaylistAssignment(
+                    PlaylistRepository.PlaylistAssignedEvent(
+                        type      = playlistType,
+                        username  = d["username"]   ?: "",
+                        serverUrl = d["server_url"] ?: "",
+                        password  = password,
+                        m3uUrl    = d["m3u_url"]    ?: ""
+                    )
+                )
             }
         }
     }
@@ -42,7 +106,21 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
         super.onNewToken(token)
         Log.d("FCM", "New token: $token")
         scope.launch {
-            profileSyncManager.sendFcmToken(token)
+            profileSyncManager.sendFcmToken(token, licenceManager.getDeviceId())
+        }
+    }
+
+    private suspend fun reRegisterFcmToken() {
+        try {
+            val task = com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            val token = kotlinx.coroutines.suspendCancellableCoroutine<String?> { cont ->
+                task.addOnSuccessListener { cont.resume(it, null) }
+                    .addOnFailureListener { cont.resume(null, null) }
+            } ?: return
+            profileSyncManager.sendFcmToken(token, licenceManager.getDeviceId())
+            Log.d("FCM", "FCM token re-registered after licence activation")
+        } catch (e: Exception) {
+            Log.w("FCM", "Failed to re-register FCM token", e)
         }
     }
 }

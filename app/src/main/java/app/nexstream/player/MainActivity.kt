@@ -4,8 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.PictureInPictureParams
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +29,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import app.nexstream.player.data.repository.PlaylistRepository
+import app.nexstream.player.data.sync.ProfileSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.license.AppAccessState
 import app.nexstream.player.license.LicenceManager
@@ -39,32 +43,52 @@ import app.nexstream.player.ui.theme.NexStreamThemeProvider
 import app.nexstream.player.ui.theme.ThemeViewModel
 import app.nexstream.player.worker.EpgRefreshWorker
 import app.nexstream.player.worker.ReminderWorker
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 import app.nexstream.player.data.profile.ProfileManager
+import app.nexstream.player.update.AutoUpdateManager
 import dagger.hilt.android.AndroidEntryPoint
-import app.nexstream.player.ui.screens.appearance.ThemeMode
-import app.nexstream.player.ui.screens.appearance.getThemeModeFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import androidx.compose.material3.Text
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        val isPlayerActive  = mutableStateOf(false)
+        val isInPipMode     = mutableStateOf(false)
+        // Incremented by PiP stop action → PlayerScreen stops playback
+        val stopPipSignal   = kotlinx.coroutines.flow.MutableStateFlow(0)
+        const val ACTION_PIP_STOP = "app.nexstream.player.PIP_STOP"
+    }
+
     @Inject lateinit var repository: PlaylistRepository
     @Inject lateinit var profileManager: ProfileManager
     @Inject lateinit var trialManager: TrialManager
     @Inject lateinit var licenceManager: LicenceManager
     @Inject lateinit var syncManager: WatchlistSyncManager
+    @Inject lateinit var profileSyncManager: ProfileSyncManager
 
     private val themeViewModel: ThemeViewModel by viewModels()
 
     private val reminderOverlayData = mutableStateOf<ReminderOverlayData?>(null)
     private val pendingPlayUrl      = mutableStateOf<String?>(null)
     private val pendingPlayName     = mutableStateOf<String?>(null)
+
+    private val pipStopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_PIP_STOP) return
+            stopPipSignal.value++
+            moveTaskToBack(true)
+        }
+    }
 
     private val reminderReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -98,29 +122,28 @@ class MainActivity : ComponentActivity() {
         val filter = IntentFilter(ReminderWorker.ACTION_SHOW_REMINDER)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(reminderReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(pipStopReceiver, IntentFilter(ACTION_PIP_STOP), Context.RECEIVER_NOT_EXPORTED)
         } else {
             ContextCompat.registerReceiver(this, reminderReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            ContextCompat.registerReceiver(this, pipStopReceiver, IntentFilter(ACTION_PIP_STOP), ContextCompat.RECEIVER_NOT_EXPORTED)
         }
 
         EpgRefreshWorker.schedule(this)
 
+        lifecycleScope.launch {
+            AutoUpdateManager.checkAndPrompt(this@MainActivity)
+        }
+
         lifecycleScope.launch(Dispatchers.IO) {
             val sevenDaysAgo = System.currentTimeMillis() - (8 * 24 * 60 * 60 * 1000L)
             repository.cleanupOldPrograms(sevenDaysAgo)
-            val profileId = profileManager.activeProfile.value?.id ?: "default"
+            val profileId = profileManager.activeProfile.filterNotNull().first().id
             syncManager.syncFromServer(profileId)
-        }
-
-        // Read the saved theme preference synchronously before the first frame so
-        // NexStreamThemeProvider starts with the correct dark/light mode and avoids a
-        // one-frame flash on the profile selection screen (and anywhere else themed colours
-        // appear before DataStore emits asynchronously).
-        val initialThemeMode = runBlocking {
-            try { applicationContext.getThemeModeFlow().first() } catch (_: Exception) { ThemeMode.SYSTEM }
+            syncManager.pushAllToServer()
         }
 
         setContent {
-            NexStreamThemeProvider(themeViewModel = themeViewModel, initialThemeMode = initialThemeMode) {
+            NexStreamThemeProvider(themeViewModel = themeViewModel) {
                 var accessState by remember { mutableStateOf(AppAccessState.LOADING) }
                 val overlayData by reminderOverlayData
 
@@ -134,6 +157,19 @@ class MainActivity : ComponentActivity() {
                         trialManager.checkAccessState(licenceManager.getDeviceId())
                     }
                     accessState = checkDeferred.await()
+                }
+
+                // After licence confirmed, sync profiles + watchlist (key not available on startup)
+                LaunchedEffect(accessState) {
+                    if (accessState == AppAccessState.TRIAL_ACTIVE || accessState == AppAccessState.LICENSED) {
+                        launch(Dispatchers.IO) {
+                            profileSyncManager.syncFromServer()
+                            profileManager.refreshAfterSync()
+                            profileManager.profiles.value.forEach { profile ->
+                                syncManager.syncFromServer(profile.id)
+                            }
+                        }
+                    }
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -165,8 +201,9 @@ class MainActivity : ComponentActivity() {
                             val activeProfile by profileManager.activeProfile.collectAsState()
                             var profileChosen by remember { mutableStateOf(false) }
 
-                            // Show profile selector if 2+ profiles and not yet chosen this session
-                            if (profiles.size >= 2 && !profileChosen) {
+                            // Show profile selector if 2+ profiles, or if sole profile has a PIN
+                            val singleProfileNeedsPin = profiles.size == 1 && profiles[0].pinHash != null
+                            if ((profiles.size >= 2 || singleProfileNeedsPin) && !profileChosen) {
                                 ProfileSelectScreen(
                                     profiles = profiles,
                                     appName  = appName,
@@ -192,6 +229,22 @@ class MainActivity : ComponentActivity() {
                         ReminderOverlay(
                             data      = overlayData!!,
                             onDismiss = { reminderOverlayData.value = null },
+                            onSnooze  = {
+                                val d = reminderOverlayData.value ?: return@ReminderOverlay
+                                reminderOverlayData.value = null
+                                val request = OneTimeWorkRequestBuilder<ReminderWorker>()
+                                    .setInitialDelay(60L, TimeUnit.SECONDS)
+                                    .setInputData(workDataOf(
+                                        ReminderWorker.KEY_REMINDER_ID   to d.reminderId,
+                                        ReminderWorker.KEY_CHANNEL_NAME  to d.channelName,
+                                        ReminderWorker.KEY_PROGRAM_TITLE to d.programTitle,
+                                        ReminderWorker.KEY_STREAM_URL    to d.streamUrl,
+                                        ReminderWorker.KEY_START_TIME    to d.startTime
+                                    ))
+                                    .addTag("reminder_snooze")
+                                    .build()
+                                WorkManager.getInstance(this@MainActivity).enqueue(request)
+                            },
                             onWatchNow = { streamUrl, channelName ->
                                 reminderOverlayData.value = null
                                 pendingPlayUrl.value  = streamUrl
@@ -204,8 +257,55 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        themeViewModel.themeManager.checkForUpdates()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            isInPipMode.value = isInPictureInPictureMode
+        }
+        // Pull watchlist from server on foreground so cross-device adds appear
+        profileManager.activeProfile.value?.id?.let { profileId ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                syncManager.syncFromServer(profileId)
+            }
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isPlayerActive.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val isTV = packageManager.hasSystemFeature("android.software.leanback")
+            if (!isTV) {
+                val stopIntent = android.app.PendingIntent.getBroadcast(
+                    this, 0,
+                    Intent(ACTION_PIP_STOP).setPackage(packageName),
+                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                val stopIcon = android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_pause)
+                val stopAction = android.app.RemoteAction(
+                    stopIcon, "Stop", "Stop playback", stopIntent
+                )
+                val paramsBuilder = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .setActions(listOf(stopAction))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    paramsBuilder.setCloseAction(
+                        android.app.RemoteAction(stopIcon, "Close", "Stop playback and close PiP", stopIntent)
+                    )
+                }
+                enterPictureInPictureMode(paramsBuilder.build())
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipMode.value = isInPictureInPictureMode
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(reminderReceiver)
+        unregisterReceiver(pipStopReceiver)
     }
 }

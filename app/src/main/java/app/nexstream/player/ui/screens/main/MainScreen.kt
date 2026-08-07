@@ -293,7 +293,14 @@ fun MainScreen(
         val idx = catchUpAvailableDates.indexOf(ms)
         if (idx >= 0) catchUpDateLabels.getOrNull(idx) else null
     }
-    val settingsSubCategories: List<String> = remember { listOf("Playlists", "Sports Guide", "Appearance", "Player", "Sync", "Licence", "Account", "Profiles", "Navigation", "About") }
+    val isReseller = viewModel.isReseller
+    val settingsSubCategories: List<String> = remember(isReseller) {
+        buildList {
+            add("Playlists"); add("Sports Guide"); add("Appearance"); add("Player")
+            if (!isReseller) add("Sync")
+            add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("About")
+        }
+    }
     val settingsLabelToRoute: Map<String, AppRoute> = remember { mapOf(
         "Playlists"    to AppRoute.SettingsPlaylists,
         "Sports Guide" to AppRoute.SettingsSports,
@@ -845,6 +852,7 @@ fun MainScreen(
                 vodRestricted         = vodRestricted,
                 activeProfileName     = activeProfile?.name ?: "Default",
                 activeProfileEmoji    = activeProfile?.emoji ?: "👤",
+                showSyncSettings     = !isReseller,
                 selectedSettingsRoute = if (currentRoute.isSettings && currentRoute != AppRoute.Settings) currentRoute else null,
                 watchlistIds          = watchlistIds,
                 pendingEpgChannelName = pendingEpgChannelName,
@@ -1194,6 +1202,7 @@ private fun ClassicMainLayout(
     vodRestricted: Boolean,
     activeProfileName: String,
     activeProfileEmoji: String,
+    showSyncSettings: Boolean,
     selectedSettingsRoute: AppRoute?,
     watchlistIds: Set<String>,
     pendingEpgChannelName: String?,
@@ -1468,6 +1477,7 @@ private fun ClassicMainLayout(
                 onProfileClick     = { setShowProfileSwitch(true) },
                 onSearchRequest    = onSearchRequest,
                 onFavouritesSelected = onFavouritesSelected,
+                showSyncSettings   = showSyncSettings,
             )
         }
 

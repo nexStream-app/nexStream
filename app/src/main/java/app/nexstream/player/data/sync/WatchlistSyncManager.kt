@@ -102,6 +102,18 @@ class WatchlistSyncManager @Inject constructor(
         Log.i(tag, "syncFromServer: device=${deviceId()}, key=${maskedKey()}, source=${keySource()}, profile=$profileId")
         try {
             listOf("channels", "vod", "series").forEach { type ->
+                val watchlistType = when (type) {
+                    "channels" -> WatchlistType.CHANNEL
+                    "vod"      -> WatchlistType.MOVIE
+                    "series"   -> WatchlistType.SERIES
+                    else       -> return@forEach
+                }
+                val idField = when (type) {
+                    "channels" -> "channel_id"
+                    "vod"      -> "vod_id"
+                    "series"   -> "series_id"
+                    else       -> return@forEach
+                }
                 Log.d(tag, "syncFromServer: GETting $type …")
                 val response = api.getList(auth, type, profileId)
                 Log.i(tag, "syncFromServer: $type → HTTP ${response.code()}")
@@ -111,6 +123,8 @@ class WatchlistSyncManager @Inject constructor(
                     }
                     Log.i(tag, "syncFromServer: $type → ${items.size} items from server")
                     var saved = 0; var skipped = 0
+
+                    // Upsert server items
                     items.forEach { item ->
                         val itemProfileId = resolveProfileId(item["profile_id"], profileId)
                         val entity = mapServerItemToEntity(item, type, itemProfileId)
@@ -122,7 +136,16 @@ class WatchlistSyncManager @Inject constructor(
                             skipped++
                         }
                     }
-                    Log.i(tag, "syncFromServer: $type → saved=$saved, skipped=$skipped")
+
+                    // Remove local items not present on server (server is authoritative)
+                    val serverIds = items.mapNotNull { it[idField] }.toSet()
+                    val localItems = dao.getItemsSuspendByProfileAndType(profileId, watchlistType)
+                    var deleted = 0
+                    localItems.filter { it.id !in serverIds }.forEach { stale ->
+                        dao.removeFromWatchlist(stale.id, stale.profileId)
+                        deleted++
+                    }
+                    Log.i(tag, "syncFromServer: $type → saved=$saved, skipped=$skipped, deleted=$deleted")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "<no body>"
                     Log.e(tag, "syncFromServer: $type FAILED ${response.code()} — $errorBody")
