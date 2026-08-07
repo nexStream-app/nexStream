@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,25 +74,6 @@ fun ModernCategoryStrip(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-        if (!isTV && onBack != null) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onBack
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = textPrimary.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
         if (showLeadingLogo) {
             if (nsTheme.identity.logoMode == LogoMode.IMAGE && nsTheme.identity.logoUrl != null) {
                 AsyncImage(
@@ -120,6 +98,28 @@ fun ModernCategoryStrip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment     = Alignment.CenterVertically,
         ) {
+            if (!isTV && onBack != null) {
+                item {
+                    var isFocused by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier
+                            .onFocusChanged { isFocused = it.isFocused }
+                            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onBack)
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(if (isFocused) accent.copy(alpha = 0.25f) else Color.Transparent)
+                            .border(1.dp, if (isFocused) accent else divider.copy(alpha = 0.4f), RoundedCornerShape(50.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text       = "← Back",
+                            fontSize   = (12f * fontScale).sp,
+                            fontWeight = fontWeight,
+                            color      = if (isFocused) accent else textPrimary.copy(alpha = 0.55f),
+                        )
+                    }
+                }
+            }
             itemsIndexed(allItems) { idx, cat ->
                 val label     = cat ?: "All"
                 val isSelected = cat == selected

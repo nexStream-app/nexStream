@@ -1040,6 +1040,7 @@ private fun ModernNavAndStrips(
     onFocusUp: () -> Unit,
     onFocusDown: () -> Unit,
     onBack: (() -> Unit)? = null,
+    onStopPlayer: () -> Unit = {},
 ) {
     val routeHasStrip = when {
         currentRoute == AppRoute.Guide && guideCategories.isNotEmpty() -> true
@@ -1062,6 +1063,7 @@ private fun ModernNavAndStrips(
             activeProfileEmoji = activeProfileEmoji,
             activeProfileName  = activeProfileName,
             onProfileClick     = onProfileClick,
+            onStopPlayer       = onStopPlayer,
         )
     } else {
         when {
@@ -2276,6 +2278,7 @@ private fun ModernMainLayout(
                 onFocusUp          = { setZone(Zone.RAIL); incrSidebarRefocusTick() },
                 onFocusDown        = { setZone(Zone.CONTENT); focusContent() },
                 onBack             = { setZone(Zone.RAIL); incrSidebarRefocusTick() },
+                onStopPlayer       = { if (showPlayer) onPlayerBack(currentRoute) },
             )
         }
         MainContentArea(

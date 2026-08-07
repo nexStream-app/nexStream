@@ -472,8 +472,8 @@ fun ProfileEditScreen(
                 }
             }
 
-            // ── PIN ───────────────────────────────────────────────────────────
-            item {
+            // ── PIN — hidden for restricted profiles (they can't set their own PIN) ──
+            if (!isRestricted) item {
                 Surface(
                     shape    = RoundedCornerShape(12.dp),
                     color    = MaterialTheme.colorScheme.surfaceVariant,

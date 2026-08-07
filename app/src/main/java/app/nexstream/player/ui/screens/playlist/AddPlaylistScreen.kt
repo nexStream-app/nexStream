@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.*
@@ -46,8 +49,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 import java.net.URL
 import javax.inject.Inject
@@ -90,96 +94,133 @@ class AddPlaylistViewModel @Inject constructor(
     private val licenceManager: LicenceManager
 ) : ViewModel() {
 
-    var isLoading    by mutableStateOf(false); private set
-    var errorMessage by mutableStateOf<String?>(null); private set
+    var isLoading      by mutableStateOf(false); private set
+    var errorMessage   by mutableStateOf<String?>(null); private set
+    var importStarted  by mutableStateOf(false); private set
+    var importIsXtream by mutableStateOf(false); private set
+    var importIsJellyfin by mutableStateOf(false); private set
 
-    private val _pollState = MutableStateFlow<MacPollState>(MacPollState.Idle)
+    // Start in Polling state so DeviceBar immediately shows "Listening for playlist..."
+    private val _pollState = MutableStateFlow<MacPollState>(MacPollState.Polling)
     val pollState: StateFlow<MacPollState> = _pollState
 
-    private var pollJob: Job? = null
+    // ── Import progress (forwarded from repository) ───────────────────────
+    val channelImportedCount: StateFlow<Int> = repository.channelImportedCount
+    val isLoadingEPG: StateFlow<Boolean>     = repository.isLoadingEPG
+    val epgProgramCount: StateFlow<Int>      = repository.epgProgramCount
+    val isLoadingVOD: StateFlow<Boolean>     = repository.isLoadingVOD
+    val vodLoadedCount: StateFlow<Int>       = repository.vodLoadedCount
+    val isLoadingSeries: StateFlow<Boolean>  = repository.isLoadingSeries
+    val seriesLoadedCount: StateFlow<Int>    = repository.seriesLoadedCount
+    val isLoadingMusic: StateFlow<Boolean>   = repository.isLoadingMusic
+    val musicLoadedCount: StateFlow<Int>     = repository.musicLoadedCount
+    val isBackgroundSyncComplete: StateFlow<Boolean> = repository.isBackgroundSyncComplete
 
     fun getDeviceId(): String = licenceManager.getDeviceId()
 
-    fun startPolling(deviceId: String, onSuccess: () -> Unit) {
-        pollJob?.cancel()
-        _pollState.update { MacPollState.Polling }
-        pollJob = viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    val json = JSONObject(
-                        URL("https://nexstream.uk/api/playlist.php?device_id=$deviceId").readText()
-                    )
+    init {
+        val deviceId   = licenceManager.getDeviceId()
+        val screenOpenedAt = System.currentTimeMillis()
 
-                    // Check for assigned licence and auto-activate
-                    val licenceObj = json.optJSONObject("licence")
-                    if (licenceObj != null && !licenceManager.isActivated()) {
-                        val licenceKey = licenceObj.optString("key")
-                        if (licenceKey.isNotEmpty()) {
-                            withContext(Dispatchers.Main) {
-                                _pollState.update { MacPollState.LicenceActivating }
-                            }
-                            val result = licenceManager.activate(licenceKey)
-                            withContext(Dispatchers.Main) {
-                                if (result is app.nexstream.player.license.LicenceResult.Success) {
-                                    _pollState.update { MacPollState.LicenceActivated }
-                                }
-                            }
-                        }
+        // Observe FCM-delivered playlist assignments from NexStreamFirebaseService
+        viewModelScope.launch {
+            repository.pendingPlaylistAssignment
+                .filterNotNull()
+                .collect { event ->
+                    if (System.currentTimeMillis() - event.triggeredAt > 10 * 60 * 1000L) {
+                        repository.clearPendingPlaylistAssignment()
+                        return@collect
                     }
+                    repository.clearPendingPlaylistAssignment()
+                    handlePlaylistEvent(event)
+                }
+        }
 
-                    // Check for playlist
-                    if (json.optBoolean("found", false)) {
-                        withContext(Dispatchers.Main) { _pollState.update { MacPollState.Found } }
-                        val result = when (json.optString("type")) {
-                            "xtream" -> repository.addXtreamPlaylist(
-                                username = json.getString("username"),
-                                host     = json.getString("server_url"),
-                                password = json.getString("password")
-                            )
-                            "m3u" -> repository.addM3UPlaylist(
-                                name = "My Playlist",
-                                url  = json.getString("m3u_url")
-                            )
-                            else -> Result.failure(Exception("Unknown type"))
-                        }
-                        result
-                            .onSuccess { withContext(Dispatchers.Main) { onSuccess() } }
-                            .onFailure { e ->
-                                withContext(Dispatchers.Main) {
-                                    _pollState.update { MacPollState.Error(e.message ?: "Import failed") }
-                                }
-                            }
-                        break
-                    }
-                } catch (_: Exception) {}
-                delay(5_000L)
+        // HTTP polling fallback — fires every 4 s in case FCM is unavailable
+        viewModelScope.launch {
+            delay(2000)
+            // Fresh install: no playlists yet — look back at all assignments (since=0)
+            // so a pre-existing assignment (e.g. from a previous install) is picked up.
+            val hasPlaylists = repository.getAllPlaylists().first().isNotEmpty()
+            val firstSince   = if (hasPlaylists) screenOpenedAt else 0L
+            val firstEvent   = repository.pollForPendingPlaylist(deviceId, firstSince)
+            if (firstEvent != null && _pollState.value == MacPollState.Polling) {
+                handlePlaylistEvent(firstEvent); return@launch
+            }
+            delay(2000)
+            while (_pollState.value == MacPollState.Polling) {
+                val event = repository.pollForPendingPlaylist(deviceId, screenOpenedAt)
+                if (event != null && _pollState.value == MacPollState.Polling) {
+                    handlePlaylistEvent(event)
+                    break
+                }
+                delay(4000)
             }
         }
     }
 
-    fun stopPolling() { pollJob?.cancel(); _pollState.update { MacPollState.Idle } }
+    private suspend fun handlePlaylistEvent(event: PlaylistRepository.PlaylistAssignedEvent) {
+        _pollState.update { MacPollState.Found }
+        repository.resetImportState()
+        importIsXtream   = event.type == "xtream"
+        importIsJellyfin = event.type == "jellyfin"
+        importStarted    = true
+        val result = when (event.type) {
+            "xtream" -> repository.addXtreamPlaylist(
+                username = event.username,
+                host     = event.serverUrl,
+                password = event.password
+            )
+            "m3u" -> repository.addM3UPlaylist(
+                name = "My Playlist",
+                url  = event.m3uUrl
+            )
+            "jellyfin" -> repository.addJellyfinPlaylist(
+                host     = event.serverUrl,
+                username = event.username,
+                password = event.password
+            )
+            else -> Result.failure(Exception("Unknown playlist type: ${event.type}"))
+        }
+        result.onFailure { e ->
+            importStarted = false
+            _pollState.update { MacPollState.Error(e.message ?: "Import failed") }
+        }
+    }
 
-    suspend fun hasPlaylists(): Boolean = repository.getAllPlaylists().first().isNotEmpty()
-
-    fun addM3UPlaylist(name: String, url: String, onSuccess: () -> Unit) {
+    fun addM3UPlaylist(name: String, url: String) {
         viewModelScope.launch {
             isLoading = true; errorMessage = null
+            repository.resetImportState()
+            importIsXtream = false; importStarted = true
             repository.addM3UPlaylist(name, url)
-                .onSuccess { isLoading = false; onSuccess() }
-                .onFailure { isLoading = false; errorMessage = it.message ?: "Failed" }
+                .onSuccess { isLoading = false }
+                .onFailure { isLoading = false; importStarted = false; errorMessage = it.message ?: "Failed" }
         }
     }
 
-    fun addXtreamPlaylist(username: String, host: String, password: String, onSuccess: () -> Unit) {
+    fun addXtreamPlaylist(username: String, host: String, password: String) {
         viewModelScope.launch {
             isLoading = true; errorMessage = null
+            repository.resetImportState()
+            importIsXtream = true; importStarted = true
             repository.addXtreamPlaylist(username = username, host = host, password = password)
-                .onSuccess { isLoading = false; onSuccess() }
-                .onFailure { isLoading = false; errorMessage = it.message ?: "Failed" }
+                .onSuccess { isLoading = false }
+                .onFailure { isLoading = false; importStarted = false; errorMessage = it.message ?: "Failed" }
         }
     }
 
-    override fun onCleared() { super.onCleared(); pollJob?.cancel() }
+    fun addJellyfinPlaylist(host: String, username: String, password: String) {
+        viewModelScope.launch {
+            isLoading = true; errorMessage = null
+            repository.resetImportState()
+            importIsJellyfin = true; importStarted = true
+            repository.addJellyfinPlaylist(host = host, username = username, password = password)
+                .onSuccess { isLoading = false }
+                .onFailure { isLoading = false; importStarted = false; errorMessage = it.message ?: "Connection failed" }
+        }
+    }
+
 }
 
 // -- Screen --------------------------------------------------------------------
@@ -188,12 +229,17 @@ class AddPlaylistViewModel @Inject constructor(
 @Composable
 fun AddPlaylistScreen(
     onBack: () -> Unit,
+    isFirstRun: Boolean = false,
     viewModel: AddPlaylistViewModel = hiltViewModel()
 ) {
-    val context   = LocalContext.current
-    val pollState by viewModel.pollState.collectAsState()
-    val isTv      = remember { isTvDevice(context) }
-    val deviceId  = remember { viewModel.getDeviceId() }
+    val context    = LocalContext.current
+    val pollState  by viewModel.pollState.collectAsState()
+    val isTv       = remember { isTvDevice(context) }
+    val deviceId   = remember { viewModel.getDeviceId() }
+    val cancelLabel = if (isFirstRun) "Quit" else "Cancel"
+    val onCancel: () -> Unit = if (isFirstRun) {
+        { (context as? android.app.Activity)?.finish() }
+    } else onBack
 
     var keyboardTarget by remember { mutableStateOf<String?>(null) }
     var keyboardValue  by remember { mutableStateOf("") }
@@ -206,15 +252,16 @@ fun AddPlaylistScreen(
     var password   by remember { mutableStateOf("") }
     var m3uName    by remember { mutableStateOf("") }
     var m3uUrl     by remember { mutableStateOf("") }
+    var jfHost     by remember { mutableStateOf("") }
+    var jfUsername by remember { mutableStateOf("") }
+    var jfPassword by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
 
-    // Auto-start polling on launch
-    LaunchedEffect(deviceId) {
-        if (!viewModel.hasPlaylists()) {
-            viewModel.startPolling(deviceId) { onBack() }
-        }
+    val importStarted = viewModel.importStarted
+    if (importStarted) {
+        PlaylistImportProgressScreen(viewModel = viewModel, onDone = onBack)
+        return
     }
-    DisposableEffect(Unit) { onDispose { viewModel.stopPolling() } }
 
     fun openKeyboard(fieldName: String, current: String) {
         keyboardTarget = fieldName; keyboardValue = current; showKeyboard = true
@@ -222,23 +269,26 @@ fun AddPlaylistScreen(
 
     fun commitKeyboard() {
         when (keyboardTarget) {
-            "host"     -> host     = keyboardValue
-            "username" -> username = keyboardValue
-            "password" -> password = keyboardValue
-            "m3uName"  -> m3uName  = keyboardValue
-            "m3uUrl"   -> m3uUrl   = keyboardValue
+            "host"       -> host       = keyboardValue
+            "username"   -> username   = keyboardValue
+            "password"   -> password   = keyboardValue
+            "m3uName"    -> m3uName    = keyboardValue
+            "m3uUrl"     -> m3uUrl     = keyboardValue
+            "jfHost"     -> jfHost     = keyboardValue
+            "jfUsername" -> jfUsername = keyboardValue
+            "jfPassword" -> jfPassword = keyboardValue
         }
         showKeyboard = false
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
         // -- Device ID / status bar --------------------------------------------
         DeviceBar(deviceId = deviceId, pollState = pollState)
 
         // -- Tabs + forms ------------------------------------------------------
         TabRow(selectedTabIndex = selectedTab) {
-            listOf("Xtream Codes", "M3U URL").forEachIndexed { i, title ->
+            listOf("Xtream Codes", "M3U URL", "Jellyfin").forEachIndexed { i, title ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i },
                     text = { Text(title, fontSize = 13.sp) })
             }
@@ -264,10 +314,10 @@ fun AddPlaylistScreen(
                 FormButtons(
                     isLoading = viewModel.isLoading, errorMessage = viewModel.errorMessage,
                     isValid = host.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
-                    onBack = onBack,
-                    onSubmit = { viewModel.addXtreamPlaylist(username, host, password, onSuccess = onBack) }
+                    onBack = onCancel, cancelLabel = cancelLabel,
+                    onSubmit = { viewModel.addXtreamPlaylist(username, host, password) }
                 )
-            } else {
+            } else if (selectedTab == 1) {
                 InputField(isTv = isTv, label = "Playlist Name", value = m3uName,
                     onValueChange = { m3uName = it },
                     onFocusSelect = { openKeyboard("m3uName", m3uName) })
@@ -278,8 +328,24 @@ fun AddPlaylistScreen(
                 FormButtons(
                     isLoading = viewModel.isLoading, errorMessage = viewModel.errorMessage,
                     isValid = m3uName.isNotBlank() && m3uUrl.isNotBlank(),
-                    onBack = onBack,
-                    onSubmit = { viewModel.addM3UPlaylist(m3uName, m3uUrl, onSuccess = onBack) }
+                    onBack = onCancel, cancelLabel = cancelLabel,
+                    onSubmit = { viewModel.addM3UPlaylist(m3uName, m3uUrl) }
+                )
+            } else {
+                InputField(isTv = isTv, label = "Server URL", value = jfHost,
+                    placeholder = "http://jellyfin.local:8096", onValueChange = { jfHost = it },
+                    onFocusSelect = { openKeyboard("jfHost", jfHost) })
+                InputField(isTv = isTv, label = "Username", value = jfUsername,
+                    onValueChange = { jfUsername = it },
+                    onFocusSelect = { openKeyboard("jfUsername", jfUsername) })
+                InputField(isTv = isTv, label = "Password", value = jfPassword,
+                    onValueChange = { jfPassword = it }, isPassword = true,
+                    onFocusSelect = { openKeyboard("jfPassword", jfPassword) })
+                FormButtons(
+                    isLoading = viewModel.isLoading, errorMessage = viewModel.errorMessage,
+                    isValid = jfHost.isNotBlank() && jfUsername.isNotBlank(),
+                    onBack = onCancel, cancelLabel = cancelLabel,
+                    onSubmit = { viewModel.addJellyfinPlaylist(jfHost, jfUsername, jfPassword) }
                 )
             }
 
@@ -581,7 +647,7 @@ private fun TvField(
 @Composable
 private fun FormButtons(
     isLoading: Boolean, errorMessage: String?, isValid: Boolean,
-    onBack: () -> Unit, onSubmit: () -> Unit
+    onBack: () -> Unit, onSubmit: () -> Unit, cancelLabel: String = "Cancel"
 ) {
     var cancelFocused by remember { mutableStateOf(false) }
     var addFocused    by remember { mutableStateOf(false) }
@@ -600,7 +666,7 @@ private fun FormButtons(
                 containerColor = if (cancelFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                 contentColor   = if (cancelFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
             )
-        ) { Text("Cancel", fontSize = 13.sp) }
+        ) { Text(cancelLabel, fontSize = 13.sp) }
 
         OutlinedButton(onClick = onSubmit, enabled = !isLoading && isValid,
             modifier = Modifier.weight(1f).onFocusChanged { addFocused = it.isFocused },
@@ -615,4 +681,215 @@ private fun FormButtons(
             else Text("Add", fontSize = 13.sp)
         }
     }
+}
+
+// -- Playlist import progress screen ------------------------------------------
+
+@Composable
+private fun PlaylistImportProgressScreen(
+    viewModel: AddPlaylistViewModel,
+    onDone: () -> Unit
+) {
+    val channelCount  by viewModel.channelImportedCount.collectAsState()
+    val isLoadingEPG  by viewModel.isLoadingEPG.collectAsState()
+    val epgCount      by viewModel.epgProgramCount.collectAsState()
+    val isLoadingVOD by viewModel.isLoadingVOD.collectAsState()
+    val vodCount     by viewModel.vodLoadedCount.collectAsState()
+    val isLoadingSeries by viewModel.isLoadingSeries.collectAsState()
+    val seriesCount  by viewModel.seriesLoadedCount.collectAsState()
+    val isLoadingMusic by viewModel.isLoadingMusic.collectAsState()
+    val musicCount   by viewModel.musicLoadedCount.collectAsState()
+    val isDone       by viewModel.isBackgroundSyncComplete.collectAsState()
+    val isXtream     = viewModel.importIsXtream
+    val isJellyfin   = viewModel.importIsJellyfin
+
+    // Auto-close: once import completes, navigate away after a short pause so the
+    // user can see the "Import Complete" confirmation without needing to press Done.
+    LaunchedEffect(isDone) {
+        if (isDone) {
+            kotlinx.coroutines.delay(5000L)
+            onDone()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(32.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (isDone) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(
+                    text = if (isDone) "Import Complete" else "Importing Playlist…",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            // Progress rows
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 20.dp, horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (!isJellyfin) {
+                        ImportProgressRow(
+                            icon = Icons.Default.Tv,
+                            label = "Live Channels",
+                            isLoading = false,
+                            isDone = channelCount > 0,
+                            count = channelCount,
+                            unit = "channels"
+                        )
+                    }
+                    if (isXtream) {
+                        ImportProgressRow(
+                            icon = Icons.Default.DateRange,
+                            label = "EPG Guide",
+                            isLoading = isLoadingEPG,
+                            isDone = !isLoadingEPG && (isLoadingVOD || vodCount > 0 || isLoadingSeries || seriesCount > 0 || isDone),
+                            count = epgCount,
+                            unit = "programmes"
+                        )
+                    }
+                    if (isXtream || isJellyfin) {
+                        ImportProgressRow(
+                            icon = Icons.Default.Movie,
+                            label = "Movies",
+                            isLoading = isLoadingVOD,
+                            isDone = !isLoadingVOD && vodCount > 0,
+                            count = vodCount,
+                            unit = "movies"
+                        )
+                        ImportProgressRow(
+                            icon = Icons.Default.VideoLibrary,
+                            label = "Series",
+                            isLoading = isLoadingSeries,
+                            isDone = !isLoadingSeries && seriesCount > 0,
+                            count = seriesCount,
+                            unit = "series"
+                        )
+                    }
+                    if (isJellyfin) {
+                        ImportProgressRow(
+                            icon = Icons.Default.MusicNote,
+                            label = "Music",
+                            isLoading = isLoadingMusic,
+                            isDone = !isLoadingMusic && musicCount > 0,
+                            count = musicCount,
+                            unit = "tracks"
+                        )
+                    }
+                }
+            }
+
+            // Done button — only appears when all background sync completes
+            AnimatedVisibility(visible = isDone) {
+                var doneFocused by remember { mutableStateOf(false) }
+                val doneFR = remember { FocusRequester() }
+                LaunchedEffect(isDone) {
+                    if (isDone) {
+                        kotlinx.coroutines.delay(100)
+                        try { doneFR.requestFocus() } catch (_: Exception) {}
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDone,
+                    modifier = Modifier
+                        .widthIn(min = 200.dp)
+                        .focusRequester(doneFR)
+                        .onFocusChanged { doneFocused = it.isFocused }
+                        .onKeyEvent { e ->
+                            if (e.type == KeyEventType.KeyDown &&
+                                (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)
+                            ) { onDone(); true } else false
+                        },
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = if (doneFocused) 2.dp else 1.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (doneFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                        contentColor   = if (doneFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Done", fontSize = 15.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportProgressRow(
+    icon: ImageVector,
+    label: String,
+    isLoading: Boolean,
+    isDone: Boolean,
+    count: Int,
+    unit: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(icon, contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface)
+            val subText = when {
+                isDone && count > 0 -> "${formatCount(count)} $unit"
+                isDone              -> "Done"
+                isLoading && count > 0 -> "${formatCount(count)} $unit…"
+                isLoading           -> "Importing…"
+                else                -> "Waiting…"
+            }
+            Text(subText, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        when {
+            isDone   -> Icon(Icons.Default.CheckCircle, contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary)
+            isLoading -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+            else     -> Icon(Icons.Default.HourglassEmpty, contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+        }
+    }
+}
+
+private fun formatCount(n: Int): String = when {
+    n >= 1_000 -> "${n / 1_000},${"%03d".format(n % 1_000)}"
+    else       -> n.toString()
 }

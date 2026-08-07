@@ -1,6 +1,7 @@
 package app.nexstream.player.ui.navigation
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -10,17 +11,20 @@ import androidx.navigation.navArgument
 import app.nexstream.player.ui.screens.loading.LoadingScreen
 import app.nexstream.player.ui.screens.main.MainScreen
 import app.nexstream.player.ui.screens.main.MainScreenViewModel
+import app.nexstream.player.ui.screens.onboarding.OnboardingStyleScreen
 import app.nexstream.player.ui.screens.player.PlayerScreen
 import app.nexstream.player.ui.screens.playlist.AddPlaylistScreen
 import app.nexstream.player.ui.screens.settings.PlayerSettingsScreen
+import app.nexstream.player.ui.theme.getOnboardingDoneFlow
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 sealed class Screen(val route: String) {
-    object Loading    : Screen("loading")
-    object Main       : Screen("main")
+    object Loading     : Screen("loading")
+    object Main        : Screen("main")
     object AddPlaylist : Screen("add_playlist")
+    object Onboarding  : Screen("onboarding")
 }
 
 @Composable
@@ -29,7 +33,9 @@ fun NexStreamNavGraph(
     pendingPlayName:      String? = null,
     onPendingPlayConsumed: () -> Unit = {}
 ) {
-    val navController = rememberNavController()
+    val navController   = rememberNavController()
+    val context         = LocalContext.current.applicationContext
+    val onboardingDone  by context.getOnboardingDoneFlow().collectAsState(initial = null)
 
     NavHost(
         navController = navController,
@@ -62,14 +68,30 @@ fun NexStreamNavGraph(
         }
 
         composable(Screen.AddPlaylist.route) {
+            val isFirstRun = navController.previousBackStackEntry == null
             AddPlaylistScreen(
+                isFirstRun = isFirstRun,
                 onBack = {
                     if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
+                    } else if (onboardingDone != true) {
+                        navController.navigate(Screen.Onboarding.route) {
+                            popUpTo(Screen.AddPlaylist.route) { inclusive = true }
+                        }
                     } else {
                         navController.navigate(Screen.Main.route) {
                             popUpTo(Screen.AddPlaylist.route) { inclusive = true }
                         }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Onboarding.route) {
+            OnboardingStyleScreen(
+                onComplete = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
             )

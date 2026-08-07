@@ -1,5 +1,6 @@
 package app.nexstream.player.ui.screens.player
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.view.ViewGroup
@@ -27,13 +28,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -42,20 +47,25 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import app.nexstream.player.cast.CastDeviceSheet
+import app.nexstream.player.cast.CastManager
+import app.nexstream.player.cast.CastState
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.license.AppAccessState
 import app.nexstream.player.service.NexStreamPlaybackService
 import app.nexstream.player.subtitle.SubtitleLanguage
 import app.nexstream.player.subtitle.SubtitleResult
-import app.nexstream.player.subtitle.SubtitleSheetContent
-import app.nexstream.player.subtitle.SubtitleSheetState
+import app.nexstream.player.subtitle.WhisperSubtitleManager
+import app.nexstream.player.subtitle.WhisperTapProcessor
 import app.nexstream.player.ui.screens.series.SeriesViewModel
 import app.nexstream.player.ui.screens.trial.TrialExpiredScreen
 import app.nexstream.player.ui.theme.AspectRatio
@@ -63,11 +73,24 @@ import app.nexstream.player.ui.theme.AspectRatioType
 import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
+import app.nexstream.player.ui.theme.getWhisperSubtitlesFlow
+import app.nexstream.player.ui.theme.getWhisperTranslateToFlow
+import app.nexstream.player.ui.theme.getWhisperAutostartLiveFlow
+import app.nexstream.player.ui.theme.getAutoLangDetectFlow
+import app.nexstream.player.ui.theme.saveWhisperTranslateTo
 import app.nexstream.player.ui.theme.saveAspectRatio
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -97,22 +120,83 @@ fun PlayerScreen(
     nowPlayingDescription: String? = null,
     catchupDuration: Long = 0L,
     handleBackInternally: Boolean = true,
+    onPreviousChannel: (() -> Unit)? = null,
+    onNextChannel: (() -> Unit)? = null,
+    onOpenMultiScreen: (() -> Unit)? = null,
     profileId: String = "default",
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val scope   = rememberCoroutineScope()
     val context = LocalContext.current
+    val isTv    = remember { context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) }
     val nsTheme = LocalNexStreamTheme.current
 
-    // ── Player prefs ──────────────────────────────────────────────────────────
-    val autoFrameRate by context.getAutoFrameRateFlow().collectAsState(initial = true)
-    val smartBuffer   by context.getSmartBufferFlow().collectAsState(initial = true)
+    // ── PiP lifecycle ─────────────────────────────────────────────────────────
+    val isInPipMode by app.nexstream.player.MainActivity.isInPipMode
+    DisposableEffect(Unit) {
+        app.nexstream.player.MainActivity.isPlayerActive.value = true
+        onDispose { app.nexstream.player.MainActivity.isPlayerActive.value = false }
+    }
+    // Collected here; LaunchedEffect is below stopPlayback declaration
+    val pipStopSignal by app.nexstream.player.MainActivity.stopPipSignal.collectAsState()
 
-    var showMediaSheet      by remember { mutableStateOf(false) }
-    var showControls        by remember { mutableStateOf(true) }
-    var isTrialExpired      by remember { mutableStateOf(false) }
-    var subtitleSheetState  by remember { mutableStateOf<SubtitleSheetState>(SubtitleSheetState.Loading) }
-    var availableSubtitles  by remember { mutableStateOf<List<SubtitleLanguage>>(emptyList()) }
+    // ── Player prefs ──────────────────────────────────────────────────────────
+    val autoFrameRate    by context.getAutoFrameRateFlow().collectAsState(initial = true)
+    val smartBuffer      by context.getSmartBufferFlow().collectAsState(initial = true)
+    val whisperEnabled       by context.getWhisperSubtitlesFlow().collectAsState(initial = false)
+    val whisperTranslateTo   by context.getWhisperTranslateToFlow().collectAsState(initial = false)
+    val whisperAutoStartLive by context.getWhisperAutostartLiveFlow().collectAsState(initial = false)
+    val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
+
+    // ── Whisper AI subtitles ──────────────────────────────────────────────────
+    val whisperManager = viewModel.whisperSubtitleManager
+    val whisperTapProcessor = remember {
+        WhisperTapProcessor { shorts, rate, channels ->
+            whisperManager.processAudio(shorts, rate, channels)
+        }
+    }
+    val whisperText by whisperManager.currentText.collectAsState()
+    var ccActive by remember { mutableStateOf(false) }
+
+    // When feature is turned off in settings, deactivate the session
+    LaunchedEffect(whisperEnabled) {
+        if (!whisperEnabled) ccActive = false
+    }
+    // Auto-start on Live TV if the pref is set; or on VOD/Series whenever AI subtitles are enabled
+    LaunchedEffect(movieId, episodeId, whisperEnabled, whisperAutoStartLive) {
+        when {
+            whisperEnabled && whisperAutoStartLive && movieId == null && episodeId == null -> ccActive = true
+            whisperEnabled && (movieId != null || episodeId != null) -> ccActive = true
+        }
+    }
+    // Drive whisper manager from the session state
+    LaunchedEffect(ccActive) {
+        whisperTapProcessor.setEnabled(ccActive)
+        if (ccActive) {
+            // Ensure translate preference is applied at activation time, not just on pref change.
+            // This prevents a race where initial=false fires first and resets translate mode.
+            whisperManager.setTranslateToEnglish(whisperTranslateTo)
+            whisperManager.activate(movieId == null && episodeId == null)
+        } else {
+            whisperManager.deactivate()
+        }
+    }
+
+    LaunchedEffect(whisperTranslateTo) {
+        whisperManager.setTranslateToEnglish(whisperTranslateTo)
+    }
+
+    // ── ExoPlayer subtitle cues → sidebar ─────────────────────────────────────
+    var subtitleCueLines by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    var showMediaSheet  by remember { mutableStateOf(false) }
+    var showControls    by remember { mutableStateOf(true) }
+    var isTrialExpired  by remember { mutableStateOf(false) }
+    var subtitleAtTop   by remember { mutableStateOf(false) }
+
+    // Audio language detection (live TV only) — resets on channel change
+    var audioLangDetected        by remember(channelUrl) { mutableStateOf<String?>(null) }
+    var audioLangPromptDismissed by remember(channelUrl) { mutableStateOf(false) }
 
     // D-pad: two zones — ICONS row and CONTROLS row (below), then SLIDER
     var dpadZone     by remember { mutableStateOf(DpadZone.CONTROLS) }
@@ -121,6 +205,21 @@ fun PlayerScreen(
 
     val isAndroidTV  = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
     val showAspectRatioButton = !isAndroidTV
+
+    // ── Casting (mobile only) ─────────────────────────────────────────────────
+    val castManager = remember { CastManager(context) }
+    DisposableEffect(Unit) { onDispose { castManager.destroy() } }
+    val castState by castManager.castState.collectAsState()
+    val isCasting by remember { derivedStateOf { castState is CastState.Active } }
+    var showCastSheet       by remember { mutableStateOf(false) }
+    var castIsPlaying       by remember { mutableStateOf(true) }
+    var castPositionMs      by remember { mutableStateOf(0L) }
+    var castEverConnected   by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showCastSheet) {
+        if (showCastSheet) castManager.startDiscovery()
+        else castManager.stopDiscovery()
+    }
 
     val aspectRatioType = when {
         episodeId != null -> AspectRatioType.SERIES
@@ -150,29 +249,15 @@ fun PlayerScreen(
         if (movieId != null && movieId != "catchup") {
             val movieBase = viewModel.getMovieById(movieId)
             if (movieBase != null) {
-                // If plot missing, fetch enriched details from API
                 val movie = if (movieBase.plot.isNullOrBlank()) {
                     val rawId = movieId.removePrefix("${movieBase.playlistId}-")
                     runCatching { viewModel.getMovieDetails(movieBase.playlistId, rawId) }.getOrNull()
                         ?: movieBase
                 } else movieBase
-                // Capture details for overlay
                 moviePlot     = movie.plot
                 movieCast     = movie.cast
                 movieGenre    = movie.genre
                 movieDirector = movie.director
-                val year    = movie.releaseDate?.take(4)
-                val results = viewModel.subtitleManager.searchMovieSubtitles(movie.name, year)
-                availableSubtitles = results
-                subtitleSheetState = if (results.isEmpty()) SubtitleSheetState.Loading else SubtitleSheetState.Languages(results)
-            }
-        } else if (episodeId != null && seriesId != null) {
-            val episode = viewModel.getEpisodeById(episodeId)
-            val series  = viewModel.getSeriesById(seriesId)
-            if (episode != null && series != null) {
-                val results = viewModel.subtitleManager.searchEpisodeSubtitles(series.name, episode.seasonNum, episode.episodeNum)
-                availableSubtitles = results
-                subtitleSheetState = if (results.isEmpty()) SubtitleSheetState.Loading else SubtitleSheetState.Languages(results)
             }
         }
     }
@@ -196,6 +281,23 @@ fun PlayerScreen(
         }
     }
 
+    // Update Whisper prompt whenever content metadata changes.
+    // Live TV/CatchUp use context prompts; movies and episodes use no prompt — passing title/description
+    // as a Whisper prompt causes hallucinations (model outputs the prompt text when audio is quiet).
+    LaunchedEffect(ccActive, movieId, episodeId, nowPlayingTitle, nowPlayingSubtitle, nowPlayingDescription, currentProgramme, currentProgrammeDescription) {
+        if (!ccActive) return@LaunchedEffect
+        val isLiveTV = movieId == null && episodeId == null
+        when {
+            isLiveTV -> whisperManager.setLiveTvContext(currentProgramme, currentProgrammeDescription)
+            episodeId != null || (movieId != null && movieId != "catchup") -> whisperManager.setInitialPrompt(null)
+            else -> whisperManager.setInitialPrompt(buildWhisperPrompt(
+                movieId, episodeId,
+                nowPlayingTitle, nowPlayingSubtitle, nowPlayingDescription,
+                currentProgramme, currentProgrammeDescription,
+            ))
+        }
+    }
+
     DisposableEffect(Unit) {
         val window     = (context as? android.app.Activity)?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
@@ -212,15 +314,28 @@ fun PlayerScreen(
 
     var player by remember { mutableStateOf<Player?>(null) }
     val stopPlayback = {
+        if (isCasting) castManager.disconnect()
         player?.stop()
         if (!isAndroidTV) context.stopService(Intent(context, NexStreamPlaybackService::class.java))
     }
 
     BackHandler(enabled = handleBackInternally) { stopPlayback(); onBack() }
 
+    // Stop playback when PiP stop action fires (X button on API 31+ or Stop button on older)
+    LaunchedEffect(pipStopSignal) {
+        if (pipStopSignal > 0) { stopPlayback(); onBack() }
+    }
+
     // ── Content type flags ────────────────────────────────────────────────────
     val isCatchup = movieId == "catchup" || catchupDuration > 0L
     val isVod     = movieId != null && movieId != "catchup"
+
+    // Restore last-watched position for catchup once the player is ready
+    LaunchedEffect(player, channelUrl, isCatchup) {
+        if (!isCatchup || player == null) return@LaunchedEffect
+        val pos = viewModel.getCatchupResumePosition(channelUrl, profileId)
+        if (pos > 0) player?.seekTo(pos)
+    }
 
     // ── LoadControl builder ───────────────────────────────────────────────────
     fun buildLoadControl(): DefaultLoadControl =
@@ -244,16 +359,82 @@ fun PlayerScreen(
     // ── Android TV: build ExoPlayer directly ──────────────────────────────────
     if (isAndroidTV) {
         DisposableEffect(channelUrl, autoFrameRate, smartBuffer) {
-            android.util.Log.d("NexPlayer", "isAndroidTV=true, building ExoPlayer directly")
-            val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+            val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
+                override fun buildAudioSink(
+                    context: android.content.Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean
+                ): androidx.media3.exoplayer.audio.AudioSink {
+                    // Downmix multichannel PCM to stereo so devices that lack 5.1/7.1
+                    // AudioTrack support (e.g. Nokia Streaming Box) don't crash.
+                    val downMixer = androidx.media3.common.audio.ChannelMixingAudioProcessor().apply {
+                        // ChannelMixingAudioProcessor requires a matrix for EVERY channel count it
+                        // encounters — including stereo. Missing matrices throw UnhandledAudioFormatException.
+                        // Mono passthrough
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            1, 1, floatArrayOf(1.000f)
+                        ))
+                        // Stereo passthrough
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            2, 2, floatArrayOf(1.000f, 0.000f, 0.000f, 1.000f)
+                        ))
+                        // 3ch (L R C) → stereo
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            3, 2, floatArrayOf(1.000f, 0.000f, 0.000f, 1.000f, 0.707f, 0.707f)
+                        ))
+                        // 4ch (L R Ls Rs) → stereo
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            4, 2, floatArrayOf(1.000f, 0.000f, 0.000f, 1.000f, 0.707f, 0.000f, 0.000f, 0.707f)
+                        ))
+                        // 5ch (L R C Ls Rs) → stereo
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            5, 2, floatArrayOf(1.000f, 0.000f, 0.000f, 1.000f, 0.707f, 0.707f, 0.707f, 0.000f, 0.000f, 0.707f)
+                        ))
+                        // 5.1 (FL FR FC LFE BL BR) → stereo using ITU-R BS.775 coefficients
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            6, 2,
+                            floatArrayOf(
+                                1.000f, 0.000f,  // FL  → L, R
+                                0.000f, 1.000f,  // FR  → L, R
+                                0.707f, 0.707f,  // FC  → L, R
+                                0.000f, 0.000f,  // LFE → L, R
+                                0.707f, 0.000f,  // BL  → L, R
+                                0.000f, 0.707f   // BR  → L, R
+                            )
+                        ))
+                        // 7ch (L R C LFE Ls Rs Cs) → stereo
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            7, 2,
+                            floatArrayOf(1.000f, 0.000f, 0.000f, 1.000f, 0.707f, 0.707f, 0.000f, 0.000f, 0.707f, 0.000f, 0.000f, 0.707f, 0.354f, 0.354f)
+                        ))
+                        // 7.1 (FL FR FC LFE BL BR SL SR) → stereo
+                        putChannelMixingMatrix(androidx.media3.common.audio.ChannelMixingMatrix(
+                            8, 2,
+                            floatArrayOf(
+                                1.000f, 0.000f,  // FL  → L, R
+                                0.000f, 1.000f,  // FR  → L, R
+                                0.707f, 0.707f,  // FC  → L, R
+                                0.000f, 0.000f,  // LFE → L, R
+                                0.707f, 0.000f,  // BL  → L, R
+                                0.000f, 0.707f,  // BR  → L, R
+                                0.707f, 0.000f,  // SL  → L, R
+                                0.000f, 0.707f   // SR  → L, R
+                            )
+                        ))
+                    }
+                    return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                        // whisperTapProcessor MUST be first — it taps the raw decoded PCM
+                        // before ChannelMixingAudioProcessor transforms the buffer. If downMixer
+                        // is first, its output ByteBuffer arrives consumed (remaining==0) at
+                        // whisperTapProcessor, producing silent 0-sample chunks.
+                        .setAudioProcessors(arrayOf(whisperTapProcessor, downMixer))
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .build()
+                }
+            }
                 .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
-                .setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-                    if (mimeType == "audio/eac3" || mimeType == "audio/ac3") emptyList()
-                    else androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
-                        mimeType, requiresSecureDecoder, requiresTunnelingDecoder
-                    )
-                }
             val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(
                 object : javax.net.ssl.X509TrustManager {
                     override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
@@ -268,7 +449,8 @@ fun PlayerScreen(
                 .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
                 .hostnameVerifier { _, _ -> true }
                 .build()
-            val dataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustAllOkHttp)
+            val httpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustAllOkHttp)
+            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)
             val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
 
             val exoPlayer = ExoPlayer.Builder(context, renderersFactory)
@@ -290,7 +472,9 @@ fun PlayerScreen(
                     androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                         setParameters(
                             buildUponParameters()
-                                .setTunnelingEnabled(true)
+                                .setPreferredAudioLanguage("en")
+                                .setTunnelingEnabled(false) // tunneling bypasses AudioProcessor chain, breaking Whisper tap
+                                .setMaxAudioChannelCount(2)
                                 .build()
                         )
                     }
@@ -347,10 +531,46 @@ fun PlayerScreen(
                                     }
                                 }
                             }
+                        } else {
+                            // Detect selected audio track language for live TV prompt
+                            val selectedLang = (0 until tracks.groups.size)
+                                .firstNotNullOfOrNull { i ->
+                                    val g = tracks.groups[i]
+                                    if (g.type != C.TRACK_TYPE_AUDIO) return@firstNotNullOfOrNull null
+                                    (0 until g.length).firstOrNull { j -> g.isTrackSelected(j) }
+                                        ?.let { j -> g.getTrackFormat(j).language }
+                                }
+                            val lc = selectedLang?.lowercase()?.take(2)
+                            if (!lc.isNullOrBlank() && lc != "und" && lc != "en") {
+                                audioLangDetected = lc
+                            }
                         }
                     }
                 }
             })
+
+            // Reconnect on audio PTS discontinuity — IPTV streams occasionally reset timestamps
+            // by hours. Media3 handles UnexpectedDiscontinuityException non-fatally (logs only),
+            // so onPlayerError never fires, the video renderer tries to catch up, and the picture
+            // freezes. We intercept via AnalyticsListener and force a clean reconnect.
+            if (!isCatchup && !isVod) {
+                exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+                    override fun onAudioSinkError(
+                        eventTime: AnalyticsListener.EventTime,
+                        audioSinkError: Exception
+                    ) {
+                        if (audioSinkError is androidx.media3.exoplayer.audio.AudioSink.UnexpectedDiscontinuityException) {
+                            android.util.Log.d("nexPlayer", "PTS discontinuity on live stream — reconnecting")
+                            scope.launch {
+                                delay(500L)
+                                exoPlayer.seekToDefaultPosition()
+                                exoPlayer.prepare()
+                                exoPlayer.play()
+                            }
+                        }
+                    }
+                })
+            }
 
             val mediaItem = MediaItem.Builder().setUri(channelUrl)
                 .setMediaMetadata(
@@ -366,6 +586,8 @@ fun PlayerScreen(
             player = exoPlayer
 
             onDispose {
+                whisperTapProcessor.setEnabled(false)
+                whisperManager.deactivate()
                 if (movieId != null && movieId != "catchup") {
                     val pos = exoPlayer.currentPosition; val dur = exoPlayer.duration
                     if (dur > 0 && pos < dur - 120_000) viewModel.savePlaybackPositionSync(movieId, pos, dur, profileId)
@@ -373,6 +595,10 @@ fun PlayerScreen(
                 if (episodeId != null) {
                     val pos = exoPlayer.currentPosition; val dur = exoPlayer.duration
                     if (dur > 0 && pos < dur - 120_000) viewModel.saveEpisodePositionSync(episodeId, pos, dur, seriesId, profileId)
+                }
+                if (isCatchup) {
+                    val pos = exoPlayer.currentPosition; val dur = exoPlayer.duration
+                    if (dur > 0 && pos < dur - 30_000) viewModel.saveCatchupPositionSync(channelUrl, pos, dur, profileId)
                 }
                 exoPlayer.release(); player = null
             }
@@ -399,10 +625,13 @@ fun PlayerScreen(
                 catch (e: Exception) { android.util.Log.e("PlayerScreen", "Controller connection failed", e) }
             }, com.google.common.util.concurrent.MoreExecutors.directExecutor())
             onDispose {
+                whisperTapProcessor.setEnabled(false)
+                whisperManager.deactivate()
                 val ctrl = player
                 if (ctrl != null) {
                     if (movieId != null && movieId != "catchup") { val pos = ctrl.currentPosition; val dur = ctrl.duration; if (dur > 0 && pos < dur - 120_000) viewModel.savePlaybackPositionSync(movieId, pos, dur, profileId) }
                     if (episodeId != null) { val pos = ctrl.currentPosition; val dur = ctrl.duration; if (dur > 0 && pos < dur - 120_000) viewModel.saveEpisodePositionSync(episodeId, pos, dur, seriesId, profileId) }
+                    if (isCatchup) { val pos = ctrl.currentPosition; val dur = ctrl.duration; if (dur > 0 && pos < dur - 30_000) viewModel.saveCatchupPositionSync(channelUrl, pos, dur, profileId) }
                 }
                 MediaController.releaseFuture(controllerFuture); player = null
                 context.stopService(Intent(context, NexStreamPlaybackService::class.java))
@@ -417,21 +646,41 @@ fun PlayerScreen(
     var errorMessage       by remember { mutableStateOf("") }
     var errorFocusedButton by remember { mutableStateOf(ErrorButton.RETRY) }
     var autoRetryCount     by remember { mutableStateOf(0) }
-    val maxAutoRetries = 3
-    var showNextEpisodePrompt by remember { mutableStateOf(false) }
+    val maxAutoRetries = if (isCatchup || isVod) 3 else 8
+    var errorPosition      by remember { mutableStateOf(0L) }
+    var showNextEpisodePrompt    by remember { mutableStateOf(false) }
+    var nextEpisodeDismissed     by remember { mutableStateOf(false) }
     var nextEpisodeAvailable     by remember { mutableStateOf<EpisodeEntity?>(null) }
     var previousEpisodeAvailable by remember { mutableStateOf<EpisodeEntity?>(null) }
-    var shouldAutoPlayNext    by remember { mutableStateOf(false) }
+    var shouldAutoPlayNext       by remember { mutableStateOf(false) }
 
     DisposableEffect(player) {
         val p = player ?: return@DisposableEffect onDispose { }
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
-                if (playbackState == Player.STATE_READY) { hasError = false; autoRetryCount = 0 }
+                if (playbackState == Player.STATE_READY) { hasError = false }
                 if (playbackState == Player.STATE_ENDED) {
-                    if (movieId != null && movieId != "catchup") viewModel.clearPlaybackPosition(movieId, profileId)
-                    if (episodeId != null) { viewModel.clearEpisodePosition(episodeId, profileId); if (nextEpisodeAvailable != null) shouldAutoPlayNext = true }
+                    if (movieId != null && movieId != "catchup") {
+                        viewModel.clearPlaybackPosition(movieId, profileId)
+                        scope.launch { delay(800L); onBack() }
+                    }
+                    if (episodeId != null) {
+                        viewModel.clearEpisodePosition(episodeId, profileId)
+                        if (nextEpisodeAvailable != null) shouldAutoPlayNext = true
+                        else scope.launch { delay(800L); onBack() }
+                    }
+                    if (isCatchup) viewModel.clearCatchupPosition(channelUrl, profileId)
+                    // IPTV server closed the connection — reconnect automatically
+                    if (!isCatchup && !isVod) {
+                        android.util.Log.d("nexPlayer", "Live stream ended (server EOF) — reconnecting in 2s")
+                        scope.launch {
+                            delay(2_000L)
+                            p.seekToDefaultPosition()
+                            p.prepare()
+                            p.play()
+                        }
+                    }
                 }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -448,20 +697,45 @@ fun PlayerScreen(
 
                 if (autoRetryCount < maxAutoRetries) {
                     autoRetryCount++
+                    val savedPos = if (isCatchup || isVod) p.currentPosition.takeIf { it > 0L } else null
                     android.util.Log.d("PlayerScreen", "Auto-retry $autoRetryCount/$maxAutoRetries after error: ${error.message}")
                     scope.launch {
-                        kotlinx.coroutines.delay(1500L * autoRetryCount)
-                        p.prepare(); p.play()
+                        val delay = if (autoRetryCount <= 3) 1500L * autoRetryCount else 10_000L
+                        kotlinx.coroutines.delay(delay)
+                        if (!isCatchup && !isVod) p.seekToDefaultPosition()
+                        p.prepare()
+                        if (savedPos != null) p.seekTo(savedPos)
+                        p.play()
                     }
                 } else {
+                    if (isCatchup || isVod) errorPosition = p.currentPosition.takeIf { it > 0L } ?: 0L
                     hasError = true; errorFocusedButton = ErrorButton.RETRY
                     errorMessage = error.message ?: "Playback error occurred"
                 }
             }
-            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing; if (playing) autoRetryCount = 0 }
+            @androidx.annotation.OptIn(UnstableApi::class)
+            override fun onCues(cueGroup: CueGroup) {
+                subtitleCueLines = cueGroup.cues.mapNotNull { it.text?.toString() }.filter { it.isNotBlank() }
+            }
         }
         p.addListener(listener)
         onDispose { p.removeListener(listener) }
+    }
+
+    // Buffering watchdog: reconnect if stuck — 30s for live TV, 60s for VOD/catchup
+    LaunchedEffect(isBuffering) {
+        if (!isBuffering || hasError) return@LaunchedEffect
+        val timeout = if (isCatchup || isVod) 60_000L else 30_000L
+        kotlinx.coroutines.delay(timeout)
+        android.util.Log.d("nexPlayer", "Buffering watchdog: reconnecting after ${timeout / 1000}s stall (live=${!isCatchup && !isVod})")
+        player?.let { p ->
+            val savedPos = if (isCatchup || isVod) p.currentPosition.takeIf { it > 0L } else null
+            if (!isCatchup && !isVod) p.seekToDefaultPosition()
+            p.prepare()
+            if (savedPos != null) p.seekTo(savedPos)
+            p.play()
+        }
     }
 
     // ── Series / next episode ─────────────────────────────────────────────────
@@ -497,6 +771,7 @@ fun PlayerScreen(
             }
         }
     }
+    LaunchedEffect(episodeId) { nextEpisodeDismissed = false; showNextEpisodePrompt = false }
     LaunchedEffect(shouldAutoPlayNext) {
         if (shouldAutoPlayNext && nextEpisodeAvailable != null) { shouldAutoPlayNext = false; showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) }
     }
@@ -509,7 +784,7 @@ fun PlayerScreen(
             while (true) {
                 kotlinx.coroutines.delay(5000)
                 val dur = player?.duration ?: 0L; val pos = player?.currentPosition ?: 0L
-                if (dur > 0 && (dur - pos) <= 120_000 && !showNextEpisodePrompt && nextEpisodeAvailable != null) showNextEpisodePrompt = true
+                if (dur > 0 && (dur - pos) <= 30_000 && !showNextEpisodePrompt && !nextEpisodeDismissed && nextEpisodeAvailable != null) showNextEpisodePrompt = true
             }
         }
     }
@@ -519,43 +794,81 @@ fun PlayerScreen(
         if (state == AppAccessState.TRIAL_EXPIRED) { player?.pause(); isTrialExpired = true }
     }
 
+    // ── Cast connect/disconnect side-effects ──────────────────────────────────
+    LaunchedEffect(isCasting) {
+        if (isCasting) {
+            castEverConnected = true
+            castPositionMs = player?.currentPosition ?: 0L
+            castIsPlaying = true
+            player?.pause()
+        } else if (castEverConnected) {
+            player?.play()
+        }
+    }
+    // Poll Chromecast position when casting
+    LaunchedEffect(isCasting) {
+        if (!isCasting) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            val remote = castManager.getApproximatePositionMs()
+            if (remote > 0L) castPositionMs = remote
+            else if (castIsPlaying) castPositionMs += 1000L
+        }
+    }
+
+    // Effective playing state: uses cast state when casting, local player state otherwise
+    val effectiveIsPlaying by remember { derivedStateOf { if (isCasting) castIsPlaying else isPlaying } }
+
     // ── D-pad & controls state ────────────────────────────────────────────────
     LaunchedEffect(showControls) {
-        if (showControls) { dpadZone = DpadZone.CONTROLS; centreIndex = 1 } // default focus: play button
+        if (showControls) { dpadZone = DpadZone.CONTROLS }
     }
-    LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying) { kotlinx.coroutines.delay(5000); showControls = false }
+    LaunchedEffect(showControls, effectiveIsPlaying) {
+        if (showControls && effectiveIsPlaying) { kotlinx.coroutines.delay(5000); showControls = false }
     }
 
     val hasScrubbing = (movieId != null) || episodeId != null
     val hasNext by remember { derivedStateOf { episodeId != null && nextEpisodeAvailable != null } }
     val hasPrev by remember { derivedStateOf { episodeId != null && previousEpisodeAvailable != null } }
+    val isLiveTV = movieId == null && episodeId == null
+    val hasChannelPrev = isLiveTV && onPreviousChannel != null
+    val hasChannelNext = isLiveTV && onNextChannel != null
 
-    // Centre control button list (rewind, play, forward, next)
+    // Centre control button list (back, rewind, play, forward, next, …)
     val centreButtons by remember { derivedStateOf {
         buildList {
-            if (hasPrev) add("prev")
+            add("back")
+            if (hasChannelPrev) add("ch_prev")
+            if (episodeId != null) add("prev")
             if (hasScrubbing) add("rewind")
             add("playpause")
             if (hasScrubbing) add("forward")
-            if (hasNext) add("next")
-            // Subtitles always last in controls row for VOD/series
-            val isLiveTVBtns = movieId == null && episodeId == null
-            val isCatchUpBtns = movieId == "catchup"
-            if (!isLiveTVBtns && !isCatchUpBtns) add("subtitles")
+            if (episodeId != null) add("next")
+            if (hasChannelNext) add("ch_next")
+            // CC toggle when AI subtitles enabled (all content types); VOD also gets subtitles sheet button
+            if ((isLiveTV || movieId == "catchup") && whisperEnabled) add("cc")
+            if (!(isLiveTV || movieId == "catchup")) {
+                add("subtitles")
+                if (whisperEnabled) add("cc")
+            }
+            // Subtitle position toggle — visible whenever subtitles are showing
+            if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_pos")
         }
     }}
-    LaunchedEffect(centreButtons) { centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0)) }
+    LaunchedEffect(showControls, centreButtons) {
+        if (showControls) {
+            centreIndex = centreButtons.indexOf("playpause").coerceAtLeast(0)
+        } else {
+            centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0))
+        }
+    }
 
-    // Icon row: back is always 0; subtitles is 1 if not live; aspect is last if phone
-    val iconButtons by remember(showAspectRatioButton, movieId, episodeId) {
+    // Icon row: aspect ratio, cast (phone-only)
+    val iconButtons by remember(showAspectRatioButton, isAndroidTV) {
         derivedStateOf {
             buildList {
-                add("back")
-                val isLiveTV  = movieId == null && episodeId == null
-                val isCatchUp = movieId == "catchup"
-                if (!isLiveTV && !isCatchUp) add("subtitles")
                 if (showAspectRatioButton) add("aspect")
+                if (!isAndroidTV) add("cast")
             }
         }
     }
@@ -581,8 +894,8 @@ fun PlayerScreen(
     activateFocusedButtonRef.value = {
         when (currentDpadZone) {
             DpadZone.ICONS -> when (currentIconButtons.getOrNull(currentIconIndex)) {
-                "back"      -> { stopPlayback(); onBack() }
                 "subtitles" -> showMediaSheet = true
+                "cast"      -> showCastSheet = true
                 "aspect"    -> {
                     val newResizeMode = when (currentResizeMode) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -601,12 +914,29 @@ fun PlayerScreen(
                 else -> Unit
             }
             DpadZone.CONTROLS -> when (currentCentreButtons.getOrNull(currentCentreIndex)) {
+                "back"      -> { stopPlayback(); onBack() }
+                "ch_prev"   -> { onPreviousChannel?.invoke() }
                 "prev"      -> { previousEpisodeAvailable?.let { onPlayNextEpisode?.invoke(it) } }
-                "rewind"    -> player?.seekBack()
-                "playpause" -> if (player?.isPlaying == true) player?.pause() else player?.play()
-                "forward"   -> player?.seekForward()
+                "rewind"    -> if (isCasting) {
+                    val np = (castPositionMs - 60_000L).coerceAtLeast(0L)
+                    castPositionMs = np; castManager.seekTo(np)
+                } else player?.seekBack()
+                "playpause" -> if (isCasting) {
+                    if (castIsPlaying) { castManager.pause(); castIsPlaying = false }
+                    else { castManager.play(); castIsPlaying = true }
+                } else {
+                    if (player?.isPlaying == true) player?.pause() else player?.play()
+                }
+                "forward"   -> if (isCasting) {
+                    val dur = player?.duration ?: Long.MAX_VALUE
+                    val np = (castPositionMs + 60_000L).coerceAtMost(dur)
+                    castPositionMs = np; castManager.seekTo(np)
+                } else player?.seekForward()
                 "next"      -> { showNextEpisodePrompt = false; currentNextEpisode?.let { onPlayNextEpisode?.invoke(it) } }
+                "ch_next"   -> { onNextChannel?.invoke() }
                 "subtitles" -> showMediaSheet = true
+                "cc"        -> ccActive = !ccActive
+                "sub_pos"   -> subtitleAtTop = !subtitleAtTop
                 else        -> Unit
             }
             DpadZone.SLIDER -> { /* seek already applied on L/R */ }
@@ -624,7 +954,7 @@ fun PlayerScreen(
                     android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> {
                         when (errorFocusedButton) {
                             ErrorButton.GO_BACK -> { stopPlayback(); onBack() }
-                            ErrorButton.RETRY   -> { hasError = false; autoRetryCount = 0; player?.prepare(); player?.play() }
+                            ErrorButton.RETRY   -> { val pos = errorPosition; hasError = false; autoRetryCount = 0; if (!isCatchup && !isVod) player?.seekToDefaultPosition(); player?.prepare(); if ((isCatchup || isVod) && pos > 0L) player?.seekTo(pos); player?.play() }
                         }; true
                     }
                     android.view.KeyEvent.KEYCODE_BACK -> { if (handleBackInternally) { stopPlayback(); onBack() }; true }
@@ -646,9 +976,16 @@ fun PlayerScreen(
                     { activateFocusedButtonRef.value(); true }
 
                     android.view.KeyEvent.KEYCODE_DPAD_UP -> when (currentDpadZone) {
-                        DpadZone.CONTROLS -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.ICONS; true }
-                        DpadZone.SLIDER   -> { dpadZone = DpadZone.ICONS; true }
-                        DpadZone.ICONS    -> true // already at top
+                        DpadZone.CONTROLS -> {
+                            if (hasScrubbing) dpadZone = DpadZone.SLIDER
+                            else if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
+                            true
+                        }
+                        DpadZone.SLIDER -> {
+                            if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
+                            true
+                        }
+                        DpadZone.ICONS -> true // already at top
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_DOWN -> when (currentDpadZone) {
                         DpadZone.ICONS    -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.CONTROLS; true }
@@ -661,7 +998,10 @@ fun PlayerScreen(
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
                             sliderPosition = (sliderPosition - 0.01f).coerceAtLeast(0f)
-                            player?.seekTo((sliderPosition * duration).toLong()); true
+                            val seekPos = (sliderPosition * duration).toLong()
+                            if (isCasting) { castPositionMs = seekPos; castManager.seekTo(seekPos) }
+                            else player?.seekTo(seekPos)
+                            true
                         }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> when (currentDpadZone) {
@@ -670,13 +1010,16 @@ fun PlayerScreen(
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
                             sliderPosition = (sliderPosition + 0.01f).coerceAtMost(1f)
-                            player?.seekTo((sliderPosition * duration).toLong()); true
+                            val seekPos = (sliderPosition * duration).toLong()
+                            if (isCasting) { castPositionMs = seekPos; castManager.seekTo(seekPos) }
+                            else player?.seekTo(seekPos)
+                            true
                         }
                     }
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
                     { if (player?.isPlaying == true) player?.pause() else player?.play(); true }
                     android.view.KeyEvent.KEYCODE_BACK ->
-                    { if (handleBackInternally) { stopPlayback(); onBack() }; true }
+                    { showControls = false; true }
                     else -> false
                 }
             }
@@ -684,11 +1027,12 @@ fun PlayerScreen(
     }
 
     // ── Shared button style helpers ───────────────────────────────────────────
-    // Player overlay is always rendered on top of dark video — always use player.textPrimary (white)
-    val controlBg    = Color.Black.copy(alpha = 0.50f)
-    val controlText  = nsTheme.player.textPrimary
-    val focusBorder  = nsTheme.player.textPrimary
-    val focusBgTint  = nsTheme.player.textPrimary.copy(alpha = 0.18f)
+    val controlText  = if (nsTheme.isDark) nsTheme.player.textPrimary else Color(0xFF1A1A1A)
+    val controlBg    = if (nsTheme.isDark) Color.Black.copy(alpha = 0.50f) else Color.White.copy(alpha = 0.60f)
+    val focusBorder  = controlText
+    val focusBgTint  = controlText.copy(alpha = 0.18f)
+    val panelBgStart = if (nsTheme.isDark) Color.Black.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.30f)
+    val panelBgEnd   = if (nsTheme.isDark) Color.Black.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f)
 
     // ── Root layout ───────────────────────────────────────────────────────────
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -697,24 +1041,64 @@ fun PlayerScreen(
 
         val fp = forwardingPlayer
         if (fp != null) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        this.player = fp; useController = false
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                        isFocusable = true; isFocusableInTouchMode = true; requestFocus()
-                        this.resizeMode = resizeMode
-                        layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                        setOnKeyListener { _, keyCode, event -> keyHandlerRef.value(keyCode, event) }
+            if (isCasting) {
+                // ── Cast active: show poster/title overlay ────────────────────
+                val castDevice = (castState as? CastState.Active)?.device
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black)
+                        .clickable { showControls = !showControls },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Cast,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(56.dp)
+                        )
+                        if (castDevice != null) {
+                            Text(
+                                text = "Casting to ${castDevice.name}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                        }
+                        if (nowPlayingTitle != null) {
+                            Text(
+                                text = nowPlayingTitle,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = 0.65f),
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                },
-                update = { pv -> pv.resizeMode = resizeMode },
-                modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
-            )
+                }
+            } else {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            this.player = fp; useController = false
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                            isFocusable = true; isFocusableInTouchMode = true; requestFocus()
+                            this.resizeMode = resizeMode
+                            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                            setOnKeyListener { _, keyCode, event -> keyHandlerRef.value(keyCode, event) }
+                            subtitleView?.visibility = android.view.View.GONE
+                        }
+                    },
+                    update = { pv -> pv.resizeMode = resizeMode },
+                    modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
+                )
+            }
 
-            // ── Controls overlay ──────────────────────────────────────────────
+            // ── Controls overlay (hidden in PiP mode) ─────────────────────────
             AnimatedVisibility(
-                visible = showControls || !isPlaying,
+                visible = !isInPipMode && (showControls || !effectiveIsPlaying),
                 enter   = fadeIn(animationSpec = tween(300)),
                 exit    = fadeOut(animationSpec = tween(300)),
                 modifier = Modifier.fillMaxSize()
@@ -724,19 +1108,36 @@ fun PlayerScreen(
                     // Subtle full-screen dark scrim (lighter than before — controls carry their own bg)
                     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
 
+                    // ── Close button (PIP mode only on mobile/tablet) ─────────
+                    if (!isTv && isInPipMode) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .clickable {
+                                    stopPlayback()
+                                    onBack()
+                                }
+                                .size(44.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
                     // ── Bottom control panel ──────────────────────────────────
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    // Gradient starts transparent, ends solid black 50%
-                                    // Height is generous to cover title + controls comfortably
-                                    colors = listOf(Color.Black.copy(alpha = 0.30f), Color.Black.copy(alpha = 0.95f)),
-                                    startY = 0f
-                                )
-                            )
+                            .background(Brush.verticalGradient(colors = listOf(panelBgStart, panelBgEnd), startY = 0f))
                             .padding(horizontal = 20.dp)
                             .padding(bottom = 20.dp, top = 60.dp),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -853,38 +1254,14 @@ fun PlayerScreen(
                             }
                         }
 
+                        // ── ICONS ROW: aspect ratio + cast (phone-only, hidden on TV) ────
+                        if (iconButtons.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
-
-                        // ── ICONS ROW: back │ ... │ subtitles │ aspect ─────────
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Back button (left side)
-                            val backFocused = showControls && currentDpadZone == DpadZone.ICONS &&
-                                    currentIconButtons.getOrNull(currentIconIndex) == "back"
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(controlBg)
-                                    .then(
-                                        if (backFocused)
-                                            Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                        else Modifier
-                                    )
-                            ) {
-                                IconButton(onClick = { stopPlayback(); onBack() }) {
-                                    Icon(
-                                        Icons.Default.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = controlText,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-                            }
-
-                            // Right-side icons (aspect ratio only — subtitles moved to controls row)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (showAspectRatioButton) {
                                     val aspectFocused = showControls && currentDpadZone == DpadZone.ICONS &&
@@ -927,17 +1304,51 @@ fun PlayerScreen(
                                         }
                                     }
                                 }
+
+                                // Cast button (mobile only)
+                                if (!isAndroidTV) {
+                                    val castFocused = showControls && currentDpadZone == DpadZone.ICONS &&
+                                            currentIconButtons.getOrNull(currentIconIndex) == "cast"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isCasting) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                else controlBg
+                                            )
+                                            .then(
+                                                if (castFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(onClick = { showCastSheet = true }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Cast,
+                                                contentDescription = "Cast",
+                                                tint = if (isCasting) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
                             }
                         }
+                        } // end if (iconButtons.isNotEmpty())
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // ── SLIDER + timestamps ──────────────────────────────
-                        if (movieId != null || episodeId != null || catchupDuration > 0L) {
-                            LaunchedEffect(isPlaying, isDragging) {
+                        val isLocalFile = channelUrl.startsWith("/") || channelUrl.startsWith("file://")
+                        if (movieId != null || episodeId != null || catchupDuration > 0L || isLocalFile) {
+                            LaunchedEffect(effectiveIsPlaying, isDragging, isCasting) {
                                 while (!isDragging) {
                                     val duration = player?.duration ?: 0L
-                                    if (duration > 0) sliderPosition = (player?.currentPosition ?: 0L).toFloat() / duration.toFloat()
+                                    if (duration > 0) {
+                                        val pos = if (isCasting) castPositionMs else player?.currentPosition ?: 0L
+                                        sliderPosition = pos.toFloat() / duration.toFloat()
+                                    }
                                     kotlinx.coroutines.delay(500)
                                 }
                             }
@@ -948,7 +1359,9 @@ fun PlayerScreen(
                                     onValueChange       = { isDragging = true; sliderPosition = it },
                                     onValueChangeFinished = {
                                         isDragging = false
-                                        player?.seekTo(((sliderPosition * (player?.duration ?: 0L)).toLong()))
+                                        val seekPos = (sliderPosition * (player?.duration ?: 0L)).toLong()
+                                        if (isCasting) { castPositionMs = seekPos; castManager.seekTo(seekPos) }
+                                        else player?.seekTo(seekPos)
                                     },
                                     colors = SliderDefaults.colors(
                                         thumbColor         = if (sliderFocused) MaterialTheme.colorScheme.primary else controlText.copy(alpha = 0.8f),
@@ -963,7 +1376,7 @@ fun PlayerScreen(
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    text  = formatDuration(player?.currentPosition ?: 0L),
+                                    text  = formatDuration(if (isCasting) castPositionMs else player?.currentPosition ?: 0L),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = controlText.copy(alpha = 0.7f)
                                 )
@@ -976,7 +1389,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        // ── CONTROLS ROW: rewind │ play/pause │ forward │ next │ subtitles ─
+                        // ── CONTROLS ROW: back │ rewind │ play/pause │ forward │ next │ subtitles ─
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
@@ -986,6 +1399,59 @@ fun PlayerScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Back button (always first)
+                                val backCtrlFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                        currentCentreButtons.getOrNull(currentCentreIndex) == "back"
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(controlBg)
+                                        .then(
+                                            if (backCtrlFocused)
+                                                Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                            else Modifier
+                                        )
+                                ) {
+                                    IconButton(
+                                        onClick  = { stopPlayback(); onBack() },
+                                        modifier = Modifier.size(52.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = controlText,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
+
+                                if (hasChannelPrev) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_prev"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(controlBg)
+                                            .then(
+                                                if (focused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { onPreviousChannel?.invoke() },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.KeyboardArrowUp,
+                                                contentDescription = "Previous Channel",
+                                                tint = controlText,
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
                                 if (hasScrubbing) {
                                     val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "rewind"
@@ -1027,12 +1493,19 @@ fun PlayerScreen(
                                         )
                                 ) {
                                     IconButton(
-                                        onClick  = { if (player?.isPlaying == true) player?.pause() else player?.play() },
+                                        onClick  = {
+                                            if (isCasting) {
+                                                if (castIsPlaying) { castManager.pause(); castIsPlaying = false }
+                                                else { castManager.play(); castIsPlaying = true }
+                                            } else {
+                                                if (player?.isPlaying == true) player?.pause() else player?.play()
+                                            }
+                                        },
                                         modifier = Modifier.size(64.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (isPlaying) "Pause" else "Play",
+                                            imageVector = if (effectiveIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
                                             tint = controlText,
                                             modifier = Modifier.size(40.dp)
                                         )
@@ -1066,7 +1539,7 @@ fun PlayerScreen(
                                     }
                                 }
 
-                                if (hasPrev) {
+                                if (episodeId != null) {
                                     val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "prev"
                                     Box(
@@ -1081,18 +1554,19 @@ fun PlayerScreen(
                                     ) {
                                         IconButton(
                                             onClick  = { previousEpisodeAvailable?.let { onPlayNextEpisode?.invoke(it) } },
+                                            enabled  = hasPrev,
                                             modifier = Modifier.size(52.dp)
                                         ) {
                                             Icon(
                                                 Icons.Default.SkipPrevious,
                                                 contentDescription = "Previous Episode",
-                                                tint = controlText,
+                                                tint = if (hasPrev) controlText else controlText.copy(alpha = 0.35f),
                                                 modifier = Modifier.size(32.dp)
                                             )
                                         }
                                     }
                                 }
-                                if (hasNext) {
+                                if (episodeId != null) {
                                     val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "next"
                                     Box(
@@ -1106,22 +1580,21 @@ fun PlayerScreen(
                                             )
                                     ) {
                                         IconButton(
-                                            onClick  = { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) },
+                                            onClick  = { if (hasNext) { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) } },
+                                            enabled  = hasNext,
                                             modifier = Modifier.size(52.dp)
                                         ) {
                                             Icon(
                                                 Icons.Default.SkipNext,
                                                 contentDescription = "Next Episode",
-                                                tint = controlText,
+                                                tint = if (hasNext) controlText else controlText.copy(alpha = 0.35f),
                                                 modifier = Modifier.size(32.dp)
                                             )
                                         }
                                     }
                                 }
-                                // Subtitles button — inline with controls
-                                val isLiveTV2  = movieId == null && episodeId == null
-                                val isCatchUp2 = movieId == "catchup"
-                                if (!isLiveTV2 && !isCatchUp2) {
+                                // Subtitles button — VOD only (live TV uses CC button below)
+                                if (!isLiveTV && movieId != "catchup") {
                                     val subFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "subtitles"
                                     Box(
@@ -1144,6 +1617,89 @@ fun PlayerScreen(
                                         }
                                     }
                                 }
+                                if (hasChannelNext) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_next"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(controlBg)
+                                            .then(
+                                                if (focused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { onNextChannel?.invoke() },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.KeyboardArrowDown,
+                                                contentDescription = "Next Channel",
+                                                tint = controlText,
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+
+                                // CC button — all content types when AI subtitles enabled in settings
+                                if (whisperEnabled) {
+                                    val ccFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "cc"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (ccActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                            .then(
+                                                if (ccFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { ccActive = !ccActive },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ClosedCaption,
+                                                contentDescription = "Toggle AI Captions",
+                                                tint = if (ccActive) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Subtitle position toggle — visible when any subtitles are showing
+                                if (ccActive || subtitleCueLines.isNotEmpty()) {
+                                    val subPosFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sub_pos"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(controlBg)
+                                            .then(
+                                                if (subPosFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { subtitleAtTop = !subtitleAtTop },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (subtitleAtTop) Icons.Default.VerticalAlignBottom else Icons.Default.VerticalAlignTop,
+                                                contentDescription = if (subtitleAtTop) "Move subtitles to bottom" else "Move subtitles to top",
+                                                tint = controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     } // end Column (bottom panel)
@@ -1151,24 +1707,83 @@ fun PlayerScreen(
             } // end AnimatedVisibility
         } // end if fp != null
 
+        // ── Subtitle sidebar ──────────────────────────────────────────────────
+        val subtitleDisplayLines = if (subtitleCueLines.isNotEmpty()) subtitleCueLines
+            else if (ccActive && whisperText.isNotBlank()) listOf(whisperText)
+            else emptyList()
+        SubtitleSideBar(
+            lines     = subtitleDisplayLines,
+            isWhisper = subtitleCueLines.isEmpty() && ccActive,
+            modifier  = if (subtitleAtTop)
+                Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
+            else
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
+        )
+
+        // ── Non-English audio prompt ──────────────────────────────────────────
+        val audioLangName = remember(audioLangDetected) {
+            audioLangDetected?.let { Locale(it).getDisplayLanguage(Locale.ENGLISH).ifBlank { it.uppercase() } } ?: ""
+        }
+        if (autoLangDetect && !isCatchup && movieId == null && episodeId == null &&
+                audioLangDetected != null && !audioLangPromptDismissed && !ccActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 32.dp, start = 24.dp, end = 24.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "This programme appears to be in $audioLangName",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { ccActive = true; audioLangPromptDismissed = true }) {
+                            Text("Add Subtitles")
+                        }
+                        OutlinedButton(onClick = { audioLangPromptDismissed = true }) {
+                            Text("No Thanks")
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Cast device sheet ─────────────────────────────────────────────────
+        if (showCastSheet) {
+            CastDeviceSheet(
+                castManager      = castManager,
+                currentUrl       = channelUrl,
+                title            = nowPlayingTitle,
+                currentPositionMs = if (isCasting) castPositionMs else player?.currentPosition ?: 0L,
+                onDismiss        = { showCastSheet = false }
+            )
+        }
+
         // ── Media sheet ───────────────────────────────────────────────────────
         val currentPlayer = player
         if (showMediaSheet && currentPlayer != null) {
-            val sheetState         = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             val isMovieOrEpisode   = (movieId != null && movieId != "catchup") || episodeId != null
             MediaSheet(
-                player              = currentPlayer,
-                isMovieOrEpisode    = isMovieOrEpisode,
-                movieId             = movieId,
-                episodeId           = episodeId,
-                seriesId            = seriesId,
-                channelUrl          = channelUrl,
-                subtitleSheetState  = subtitleSheetState,
-                onSubtitleStateChange = { subtitleSheetState = it },
-                sheetState          = sheetState,
-                viewModel           = viewModel,
-                scope               = scope,
-                onDismiss           = { showMediaSheet = false }
+                player           = currentPlayer,
+                isMovieOrEpisode = isMovieOrEpisode,
+                movieId          = movieId,
+                episodeId        = episodeId,
+                seriesId         = seriesId,
+                channelUrl       = channelUrl,
+                viewModel        = viewModel,
+                scope            = scope,
+                whisperEnabled   = whisperEnabled,
+                whisperManager   = whisperManager,
+                onDismiss        = { showMediaSheet = false }
             )
         }
 
@@ -1197,9 +1812,9 @@ fun PlayerScreen(
                             else
                                 OutlinedButton(onClick = { stopPlayback(); onBack() }) { Text("Go Back") }
                             if (errorFocusedButton == ErrorButton.RETRY)
-                                Button(onClick = { hasError = false; autoRetryCount = 0; player?.prepare(); player?.play() }) { Text("Retry") }
+                                Button(onClick = { val pos = errorPosition; hasError = false; autoRetryCount = 0; if (!isCatchup && !isVod) player?.seekToDefaultPosition(); player?.prepare(); if ((isCatchup || isVod) && pos > 0L) player?.seekTo(pos); player?.play() }) { Text("Retry") }
                             else
-                                OutlinedButton(onClick = { hasError = false; autoRetryCount = 0; player?.prepare(); player?.play() }) { Text("Retry") }
+                                OutlinedButton(onClick = { val pos = errorPosition; hasError = false; autoRetryCount = 0; if (!isCatchup && !isVod) player?.seekToDefaultPosition(); player?.prepare(); if ((isCatchup || isVod) && pos > 0L) player?.seekTo(pos); player?.play() }) { Text("Retry") }
                         }
                         Text("← → to switch   OK to confirm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                     }
@@ -1209,33 +1824,12 @@ fun PlayerScreen(
 
         // ── Next episode prompt ───────────────────────────────────────────────
         if (showNextEpisodePrompt && nextEpisodeAvailable != null) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 200.dp, start = 16.dp, end = 16.dp)
-                    .fillMaxWidth(),
-                shape     = RoundedCornerShape(12.dp),
-                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
-                elevation = CardDefaults.cardElevation(8.dp)
-            ) {
-                Row(
-                    modifier              = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Up Next", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text       = "S${nextEpisodeAvailable!!.seasonNum}E${nextEpisodeAvailable!!.episodeNum} · ${nextEpisodeAvailable!!.name}",
-                            style      = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            maxLines   = 1
-                        )
-                    }
-                    Button(onClick = { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) }) { Text("Play Now") }
-                    TextButton(onClick = { showNextEpisodePrompt = false }) { Text("Dismiss") }
-                }
-            }
+            UpNextOverlay(
+                episode    = nextEpisodeAvailable!!,
+                seriesName = nowPlayingTitle,
+                onPlayNow  = { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) },
+                onDismiss  = { showNextEpisodePrompt = false; nextEpisodeDismissed = true }
+            )
         }
 
         // ── Trial expired ─────────────────────────────────────────────────────
@@ -1244,49 +1838,375 @@ fun PlayerScreen(
     } // end root Box
 }
 
+// ── SubtitleSideBar ───────────────────────────────────────────────────────────
+
+@Composable
+private fun SubtitleSideBar(
+    lines: List<String>,
+    isWhisper: Boolean,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible  = lines.isNotEmpty(),
+        enter    = fadeIn(tween(300)),
+        exit     = fadeOut(tween(300)),
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 40.dp)
+        ) {
+            lines.forEach { line ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.70f))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text       = line,
+                        color      = Color.White,
+                        fontSize   = 22.sp,
+                        fontStyle  = if (isWhisper) FontStyle.Italic else FontStyle.Normal,
+                        textAlign  = TextAlign.Center,
+                        lineHeight = 28.sp,
+                    )
+                }
+            }
+            if (isWhisper && lines.isNotEmpty()) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(Modifier.size(5.dp).background(Color.Red, CircleShape))
+                    Text("AI", color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
+                }
+            }
+        }
+    }
+}
+
+// ── UpNextOverlay ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun UpNextOverlay(
+    episode: EpisodeEntity,
+    seriesName: String?,
+    onPlayNow: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val autoPlaySeconds = 15
+    var secondsLeft by remember { mutableStateOf(autoPlaySeconds) }
+    val playFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            kotlinx.coroutines.delay(1000L)
+            secondsLeft--
+        }
+        onPlayNow()
+    }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100L)
+        try { playFocus.requestFocus() } catch (_: Exception) {}
+    }
+
+    val progress = secondsLeft.toFloat() / autoPlaySeconds.toFloat()
+    val episodeLabel = "S${episode.seasonNum}E${episode.episodeNum} · ${episode.name}"
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f)),
+        contentAlignment = Alignment.BottomEnd
+    ) {
+        Card(
+            modifier  = Modifier.padding(32.dp).width(420.dp),
+            shape     = RoundedCornerShape(16.dp),
+            colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header badge
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text     = "UP NEXT",
+                        style    = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color    = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                // Episode info
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text       = episodeLabel,
+                        style      = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color      = MaterialTheme.colorScheme.onSurface,
+                        maxLines   = 2,
+                        overflow   = TextOverflow.Ellipsis
+                    )
+                    if (!seriesName.isNullOrEmpty()) {
+                        Text(
+                            text  = seriesName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Countdown bar
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LinearProgressIndicator(
+                        progress    = { progress },
+                        modifier    = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color       = MaterialTheme.colorScheme.primary,
+                        trackColor  = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Text(
+                        text  = "Auto-playing in ${secondsLeft}s",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick  = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape    = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Dismiss", fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick  = onPlayNow,
+                        modifier = Modifier.weight(1f).focusRequester(playFocus),
+                        shape    = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Play Now", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── TrackItem ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun WhisperModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                when {
+                    selected  -> accent.copy(alpha = 0.30f)
+                    isFocused -> Color.White.copy(alpha = 0.15f)
+                    else      -> Color.White.copy(alpha = 0.07f)
+                }
+            )
+            .border(
+                width = if (selected || isFocused) 1.5.dp else 1.dp,
+                color = when {
+                    selected  -> accent
+                    isFocused -> Color.White.copy(alpha = 0.6f)
+                    else      -> Color.White.copy(alpha = 0.20f)
+                },
+                shape = RoundedCornerShape(20.dp)
+            )
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown &&
+                    (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)
+                ) { onClick(); true } else false
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) accent else Color.White.copy(alpha = if (isFocused) 1f else 0.75f)
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackItem(track: Track, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        color    = if (track.isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+        onClick      = onClick,
+        modifier     = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown &&
+                    (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)
+                ) { onClick(); true } else false
+            }
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) accent else Color.Transparent,
+                shape = RoundedCornerShape(4.dp)
+            ),
+        color        = when {
+            isFocused        -> accent.copy(alpha = 0.45f)
+            track.isSelected -> accent.copy(alpha = 0.25f)
+            else             -> Color.Transparent
+        },
+        contentColor = Color.White
     ) {
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(16.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = track.label,
                     style      = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (track.isSelected) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = if (track.isSelected || isFocused) FontWeight.Bold else FontWeight.Normal,
+                    color      = if (track.isSelected || isFocused) accent else Color.White
                 )
                 if (track.language != track.label && track.language != "Off") {
-                    Text(text = track.language, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text  = track.language,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.55f)
+                    )
                 }
             }
-            if (track.isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+            if (track.isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = accent)
+            else if (isFocused) Icon(Icons.Default.ChevronRight, contentDescription = null, tint = accent)
+        }
+    }
+}
+
+// ── OnlineSearchState ─────────────────────────────────────────────────────────
+
+private sealed interface OnlineSearchState {
+    object Idle        : OnlineSearchState
+    object Loading     : OnlineSearchState
+    object Downloading : OnlineSearchState
+    object NoResults   : OnlineSearchState
+    data class Results(val results: List<SubtitleLanguage>) : OnlineSearchState
+    data class Error(val message: String) : OnlineSearchState
+}
+
+// ── SubtitleResultRow ─────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubtitleResultRow(subtitle: SubtitleLanguage, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    var isFocused by remember { mutableStateOf(false) }
+    Surface(
+        onClick      = onClick,
+        modifier     = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused }
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) accent else Color.Transparent,
+                shape = RoundedCornerShape(4.dp)
+            ),
+        color        = if (isFocused) accent.copy(alpha = 0.45f) else Color.Transparent,
+        contentColor = Color.White
+    ) {
+        Row(
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = "${subtitle.code.uppercase()} — ${subtitle.name}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White
+                )
+                if (!subtitle.releaseName.isNullOrBlank()) {
+                    Text(
+                        text     = subtitle.releaseName!!,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = Color.White.copy(alpha = 0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Icon(Icons.Default.Download, contentDescription = null, tint = accent)
         }
     }
 }
 
 // ── MediaSheet ────────────────────────────────────────────────────────────────
 
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
+@OptIn(UnstableApi::class)
 @Composable
 private fun MediaSheet(
     player: Player, isMovieOrEpisode: Boolean, movieId: String?, episodeId: String?, seriesId: String?,
-    channelUrl: String, subtitleSheetState: SubtitleSheetState, onSubtitleStateChange: (SubtitleSheetState) -> Unit,
-    sheetState: SheetState, viewModel: PlayerViewModel, scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit
+    channelUrl: String, viewModel: PlayerViewModel,
+    scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit,
+    whisperEnabled: Boolean = false, whisperManager: WhisperSubtitleManager? = null
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        var selectedTab by remember { mutableStateOf(0) }
-        val tracks                  = player.currentTracks
+    val panelFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(100)
+        try { panelFocus.requestFocus() } catch (_: Exception) {}
+    }
+    var searchState by remember { mutableStateOf<OnlineSearchState>(OnlineSearchState.Idle) }
+    var searchJob   by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Re-request panel focus when search state changes — prevents D-pad focus trap on TV
+    LaunchedEffect(searchState) {
+        if (searchState !is OnlineSearchState.Idle) {
+            delay(100)
+            try { panelFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true)
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(onClick = onDismiss)
+            )
+        val scrollState = rememberScrollState()
+        Surface(
+            modifier     = Modifier
+                .fillMaxHeight()
+                .width(360.dp),
+            color        = Color(0x80141414),
+            contentColor = Color.White
+        ) {
+        val tracks                   = player.currentTracks
         val trackSelectionParameters = player.trackSelectionParameters
+        val textDisabled             = trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
 
         val audioTracks = remember(tracks) {
             buildList {
@@ -1294,7 +2214,7 @@ private fun MediaSheet(
                     val group = tracks.groups[i]
                     if (group.type == C.TRACK_TYPE_AUDIO) for (j in 0 until group.length) {
                         val format = group.getTrackFormat(j)
-                        add(Track(TrackType.AUDIO, i, j, format.language ?: "Unknown", format.label ?: format.language ?: "Audio Track ${j + 1}", group.isTrackSelected(j)))
+                        add(Track(TrackType.AUDIO, i, j, format.language ?: "Unknown", format.label ?: format.language ?: "Audio ${j + 1}", group.isTrackSelected(j)))
                     }
                 }
             }
@@ -1311,126 +2231,266 @@ private fun MediaSheet(
             }
         }
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text("Audio & Subtitles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Audio (${audioTracks.size})") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Embedded (${subtitleTracks.size})") })
-                if (isMovieOrEpisode) Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Download") })
+        val availableLanguages = remember { listOf("en" to "English", "fr" to "French", "de" to "German", "es" to "Spanish", "it" to "Italian", "ar" to "Arabic", "nl" to "Dutch", "pt" to "Portuguese", "pl" to "Polish", "sv" to "Swedish") }
+        val savedLanguage     by viewModel.subtitlePreferences.preferredLanguage.collectAsState(initial = "en")
+        var selectedLanguage  by remember(savedLanguage) { mutableStateOf(savedLanguage) }
+        var searchExpanded    by remember { mutableStateOf(false) }
+        var contentOriginalLanguage by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(movieId, episodeId, seriesId) {
+            contentOriginalLanguage = when {
+                movieId != null && movieId != "catchup" -> viewModel.getMovieById(movieId)?.originalLanguage
+                episodeId != null -> seriesId?.let { viewModel.getSeriesById(it)?.originalLanguage }
+                else -> null
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            when (selectedTab) {
-                0 -> {
-                    if (audioTracks.isEmpty())
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("No audio tracks available", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    else Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        audioTracks.forEach { track ->
-                            TrackItem(track = track, onClick = {
-                                val builder = trackSelectionParameters.buildUpon()
-                                builder.setOverrideForType(TrackSelectionOverride(tracks.groups[track.groupIndex].mediaTrackGroup, track.trackIndex))
-                                player.trackSelectionParameters = builder.build(); onDismiss()
-                            })
-                        }
-                    }
-                }
-                1 -> {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        TrackItem(
-                            track   = Track(TrackType.SUBTITLE, -1, -1, "Off", "Off", subtitleTracks.none { it.isSelected }),
-                            onClick = {
-                                val builder = trackSelectionParameters.buildUpon()
-                                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                                player.trackSelectionParameters = builder.build(); onDismiss()
-                            }
-                        )
-                        if (subtitleTracks.isEmpty())
-                            Text("No embedded subtitles available", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
-                        else subtitleTracks.forEach { track ->
-                            TrackItem(track = track, onClick = {
-                                val builder = trackSelectionParameters.buildUpon()
-                                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                builder.setOverrideForType(TrackSelectionOverride(tracks.groups[track.groupIndex].mediaTrackGroup, track.trackIndex))
-                                player.trackSelectionParameters = builder.build(); onDismiss()
-                            })
-                        }
-                    }
-                }
-                2 -> {
-                    val availableLanguages = remember { listOf("en" to "English", "fr" to "French", "de" to "German", "es" to "Spanish", "it" to "Italian", "ar" to "Arabic", "nl" to "Dutch", "pt" to "Portuguese", "pl" to "Polish", "sv" to "Swedish") }
-                    val savedLanguages     by viewModel.subtitlePreferences.preferredLanguages.collectAsState(initial = setOf("en"))
-                    var selectedLanguages  by remember(savedLanguages) { mutableStateOf(savedLanguages) }
-                    var searchState        by remember { mutableStateOf<SubtitleSheetState>(SubtitleSheetState.Loading) }
-                    var lastSearchedLanguages by remember { mutableStateOf<Set<String>?>(null) }
+        }
 
-                    LaunchedEffect(selectedLanguages) {
-                        if (selectedLanguages != lastSearchedLanguages) {
-                            lastSearchedLanguages = selectedLanguages; searchState = SubtitleSheetState.Loading
-                            scope.launch { viewModel.subtitlePreferences.savePreferredLanguages(selectedLanguages) }
-                            try {
-                                val langString = selectedLanguages.joinToString(",")
-                                val results: List<SubtitleLanguage> = kotlinx.coroutines.withTimeout(15_000L) {
-                                    when {
-                                        movieId != null   -> { val movie = viewModel.getMovieById(movieId); viewModel.subtitleManager.searchMovieSubtitles(movie?.name ?: "", movie?.releaseDate?.take(4), langString) }
-                                        episodeId != null -> { val episode = viewModel.getEpisodeById(episodeId); val series = seriesId?.let { viewModel.getSeriesById(it) }; if (episode != null && series != null) viewModel.subtitleManager.searchEpisodeSubtitles(series.name, episode.seasonNum, episode.episodeNum, langString) else emptyList() }
-                                        else              -> emptyList()
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)) {
+            Box(modifier = Modifier.size(1.dp).focusRequester(panelFocus).focusable())
+            Text(
+                text       = "Audio & Subtitles",
+                style      = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier   = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            // ── AUDIO ──────────────────────────────────────────────────────────
+            Text(
+                text     = "AUDIO",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            if (audioTracks.isEmpty()) {
+                Text(
+                    text     = "No audio tracks available",
+                    style    = MaterialTheme.typography.bodyMedium,
+                    color    = Color.White.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                audioTracks.forEach { track ->
+                    TrackItem(track = track, onClick = {
+                        player.trackSelectionParameters = trackSelectionParameters.buildUpon()
+                            .setOverrideForType(TrackSelectionOverride(tracks.groups[track.groupIndex].mediaTrackGroup, track.trackIndex))
+                            .build()
+                        onDismiss()
+                    })
+                }
+            }
+
+            // ── SUBTITLES ─────────────────────────────────────────────────────
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                text     = "SUBTITLES",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            TrackItem(
+                track   = Track(TrackType.SUBTITLE, -1, -1, "Off", "Off", textDisabled || subtitleTracks.none { it.isSelected }),
+                onClick = {
+                    player.trackSelectionParameters = trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    onDismiss()
+                }
+            )
+            subtitleTracks.forEach { track ->
+                TrackItem(track = track, onClick = {
+                    player.trackSelectionParameters = trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .setOverrideForType(TrackSelectionOverride(tracks.groups[track.groupIndex].mediaTrackGroup, track.trackIndex))
+                        .build()
+                    onDismiss()
+                })
+            }
+
+            // ── SEARCH ONLINE (VOD / series only) ────────────────────────────
+            if (isMovieOrEpisode) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            searchExpanded = !searchExpanded
+                            if (!searchExpanded) searchState = OnlineSearchState.Idle
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text("Search online subtitles", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Icon(
+                        imageVector        = if (searchExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+                if (searchExpanded) {
+                    Text(
+                        text     = "Language",
+                        style    = MaterialTheme.typography.labelSmall,
+                        color    = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    Row(
+                        modifier              = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        availableLanguages.forEach { (code, name) ->
+                            FilterChip(
+                                selected = code == selectedLanguage,
+                                onClick  = { selectedLanguage = code },
+                                label    = { Text(name) }
+                            )
+                        }
+                    }
+                    Button(
+                        onClick  = {
+                            if (searchState is OnlineSearchState.Loading) {
+                                // Cancel in-flight search
+                                searchJob?.cancel(); searchJob = null
+                                searchState = OnlineSearchState.Idle
+                                return@Button
+                            }
+                            searchJob = scope.launch {
+                                viewModel.subtitlePreferences.savePreferredLanguage(selectedLanguage)
+                                searchState = OnlineSearchState.Loading
+                                try {
+                                    val results: List<SubtitleLanguage> = kotlinx.coroutines.withTimeout(15_000L) {
+                                        when {
+                                            movieId != null   -> {
+                                                val movie = viewModel.getMovieById(movieId)
+                                                viewModel.subtitleManager.searchMovieSubtitles(movie?.name ?: "", movie?.releaseDate?.take(4), selectedLanguage)
+                                            }
+                                            episodeId != null -> {
+                                                val episode = viewModel.getEpisodeById(episodeId)
+                                                val series  = seriesId?.let { viewModel.getSeriesById(it) }
+                                                if (episode != null && series != null)
+                                                    viewModel.subtitleManager.searchEpisodeSubtitles(series.name, episode.seasonNum, episode.episodeNum, selectedLanguage)
+                                                else emptyList()
+                                            }
+                                            else -> emptyList()
+                                        }
+                                    }
+                                    searchState = if (results.isEmpty()) OnlineSearchState.NoResults else OnlineSearchState.Results(results)
+                                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                                    searchState = OnlineSearchState.Error("Search timed out")
+                                } catch (e: Exception) {
+                                    if (e !is kotlinx.coroutines.CancellationException) {
+                                        searchState = OnlineSearchState.Error(e.message ?: "Search failed")
                                     }
                                 }
-                                searchState = if (results.isEmpty()) SubtitleSheetState.Error("No subtitles found") else SubtitleSheetState.Languages(results)
-                            } catch (e: kotlinx.coroutines.TimeoutCancellationException) { searchState = SubtitleSheetState.Error("Search timed out") }
-                            catch (e: Exception) { searchState = SubtitleSheetState.Error(e.message ?: "Search failed") }
-                        }
-                    }
-
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Languages", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            availableLanguages.forEach { (code, name) ->
-                                FilterChip(
-                                    selected = code in selectedLanguages,
-                                    onClick  = {
-                                        selectedLanguages = if (code in selectedLanguages) {
-                                            if (selectedLanguages.size > 1) selectedLanguages.minus(code) else selectedLanguages
-                                        } else {
-                                            if (selectedLanguages.size < 6) selectedLanguages.plus(code) else selectedLanguages
-                                        }
-                                    },
-                                    label = { Text(name) }
-                                )
                             }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                        enabled  = searchState !is OnlineSearchState.Downloading
+                    ) { Text(if (searchState is OnlineSearchState.Loading) "Cancel" else "Search") }
+
+                    when (val state = searchState) {
+                        is OnlineSearchState.Idle       -> {}
+                        is OnlineSearchState.Loading    -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        is OnlineSearchState.Downloading -> Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Downloading…")
                         }
-                        HorizontalDivider()
-                        SubtitleSheetContent(
-                            subtitleState      = searchState,
-                            onLanguageSelected = { language ->
-                                searchState = SubtitleSheetState.Downloading
+                        is OnlineSearchState.NoResults  -> Text("No subtitles found", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.55f), modifier = Modifier.padding(16.dp))
+                        is OnlineSearchState.Error      -> Text(state.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+                        is OnlineSearchState.Results    -> state.results.forEach { sub ->
+                            SubtitleResultRow(subtitle = sub, onClick = {
+                                searchState = OnlineSearchState.Downloading
                                 scope.launch {
                                     val cacheKey = movieId ?: episodeId ?: "unknown"
-                                    val result   = viewModel.subtitleManager.downloadSubtitle(language, cacheKey)
-                                    when (result) {
+                                    when (val result = viewModel.subtitleManager.downloadSubtitle(sub, cacheKey)) {
                                         is SubtitleResult.Success -> {
                                             val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(result.file))
                                                 .setMimeType(androidx.media3.common.MimeTypes.APPLICATION_SUBRIP)
-                                                .setLanguage(language.code)
+                                                .setLanguage(sub.code)
                                                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                                                 .build()
                                             val currentPosition = player.currentPosition
                                             val newMediaItem    = MediaItem.Builder().setUri(channelUrl).setSubtitleConfigurations(listOf(subtitleConfig)).build()
-                                            player.setMediaItem(newMediaItem); player.prepare(); player.seekTo(currentPosition); player.play(); onDismiss()
+                                            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+                                            player.setMediaItem(newMediaItem, currentPosition)
+                                            player.prepare()
+                                            player.play()
+                                            onDismiss()
                                         }
-                                        is SubtitleResult.Error -> searchState = SubtitleSheetState.Error(result.message)
+                                        is SubtitleResult.Error -> searchState = OnlineSearchState.Error(result.message)
                                     }
                                 }
-                            }
-                        )
+                            })
+                        }
                     }
                 }
             }
+
+            // ── AI SUBTITLES (WHISPER) ─────────────────────────────────────────
+            if (whisperEnabled && whisperManager != null) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    text     = "AI SUBTITLES",
+                    style    = MaterialTheme.typography.labelSmall,
+                    color    = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+
+                val whisperIsLoadingSheet by whisperManager.isLoading.collectAsState()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    if (whisperIsLoadingSheet) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Text("Transcribing…", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.70f))
+                    } else {
+                        Text("Server-based · live and on-demand", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.55f))
+                    }
+                }
+
+                val translateCtx = LocalContext.current
+                val translateToEn by whisperManager.translateToEnglish.collectAsState()
+                Text(
+                    text     = "MODE",
+                    style    = MaterialTheme.typography.labelSmall,
+                    color    = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    WhisperModeChip(
+                        label    = "Transcribe",
+                        selected = !translateToEn,
+                        onClick  = {
+                            whisperManager.setTranslateToEnglish(false)
+                            scope.launch { translateCtx.saveWhisperTranslateTo(false) }
+                        }
+                    )
+                    WhisperModeChip(
+                        label    = "Translate → EN",
+                        selected = translateToEn,
+                        onClick  = {
+                            whisperManager.setTranslateToEnglish(true)
+                            scope.launch { translateCtx.saveWhisperTranslateTo(true) }
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
-    }
+        } // end Surface
+        } // end Row
+    } // end Dialog
 }
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1445,3 +2505,39 @@ private fun formatDuration(ms: Long): String {
 
 private data class Track(val type: TrackType, val groupIndex: Int, val trackIndex: Int, val language: String, val label: String, val isSelected: Boolean)
 private enum class TrackType { AUDIO, SUBTITLE }
+
+private fun buildWhisperPrompt(
+    movieId: String?,
+    episodeId: String?,
+    nowPlayingTitle: String?,
+    nowPlayingSubtitle: String?,
+    nowPlayingDescription: String?,
+    epgProgramme: String?,
+    epgDescription: String?,
+): String {
+    val raw = when {
+        episodeId != null -> {
+            val title = nowPlayingSubtitle ?: nowPlayingTitle ?: ""
+            val desc  = nowPlayingDescription ?: ""
+            "TV episode. $title. $desc"
+        }
+        movieId != null && movieId != "catchup" -> {
+            val title    = nowPlayingTitle ?: ""
+            val overview = nowPlayingDescription ?: ""
+            "Movie. $title. $overview"
+        }
+        movieId == "catchup" -> {
+            val title = nowPlayingTitle ?: ""
+            val desc  = nowPlayingDescription ?: ""
+            if (title.isBlank()) "Live TV broadcast. Clear English speech."
+            else "Live TV broadcast. Clear English speech. Programme: $title. $desc"
+        }
+        else -> {
+            val programme = epgProgramme ?: ""
+            val desc      = epgDescription ?: ""
+            if (programme.isBlank()) "Video content. Clear English speech."
+            else "Live TV broadcast. Clear English speech. Programme: $programme. $desc"
+        }
+    }
+    return raw.trim().take(896)
+}
