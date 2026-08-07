@@ -2,15 +2,12 @@ package app.nexstream.player.ui.screens.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -27,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.data.local.entity.ProfileEntity
 
 @Composable
@@ -36,18 +32,14 @@ fun ProfileSwitchDialog(
     activeProfileId: String?,
     onProfileSelected: (ProfileEntity) -> Unit,
     onDismiss: () -> Unit,
-    onManageProfiles: () -> Unit
 ) {
     var showPinDialog by remember { mutableStateOf(false) }
     var pendingProfile by remember { mutableStateOf<ProfileEntity?>(null) }
     var pinError by remember { mutableStateOf(false) }
 
-    var focusedIndex by remember { mutableStateOf(
-        profiles.indexOfFirst { it.id == activeProfileId }.coerceAtLeast(0)
-    ) }
-
+    val focusedIndex = profiles.indexOfFirst { it.id == activeProfileId }.coerceAtLeast(0)
     val focusRequesters = remember(profiles) { profiles.map { FocusRequester() } }
-    val dialogFocus = remember { FocusRequester() }
+    val closeFR = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100)
@@ -74,6 +66,7 @@ fun ProfileSwitchDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header
+                var closeFocused by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -85,66 +78,59 @@ fun ProfileSwitchDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-
-                // Profile avatars row
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(profiles.size) { index ->
-                        val profile = profiles[index]
-                        val isActive = profile.id == activeProfileId
-                        ProfileAvatar(
-                            profile = profile,
-                            isSelected = isActive,
-                            focusRequester = focusRequesters.getOrNull(index),
-                            onClick = {
-                                if (profile.pinHash != null && profile.id != activeProfileId) {
-                                    pendingProfile = profile
-                                    showPinDialog = true
-                                    pinError = false
-                                } else {
-                                    onProfileSelected(profile)
-                                }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .focusRequester(closeFR)
+                            .onFocusChanged { closeFocused = it.isFocused }
+                            .onKeyEvent { e ->
+                                if (e.type == KeyEventType.KeyDown && (
+                                    e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter
+                                )) { onDismiss(); true } else false
                             }
+                            .focusable()
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(
+                                if (closeFocused) MaterialTheme.colorScheme.primaryContainer
+                                else Color.Transparent
+                            )
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = if (closeFocused) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                HorizontalDivider()
-
-                // Manage profiles button
-                val manageFocus = remember { FocusRequester() }
-                var manageFocused by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(manageFocus)
-                        .focusable()
-                        .onFocusChanged { manageFocused = it.isFocused }
-                        .onKeyEvent { e ->
-                            if (e.type == KeyEventType.KeyDown && (
-                                        e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter
-                                        )) { onManageProfiles(); true } else false
-                        },
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    if (manageFocused)
-                        Button(onClick = onManageProfiles, shape = RoundedCornerShape(8.dp)) {
-                            Text("Manage Profiles")
+                // Profile avatars — centered horizontally
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                    ) {
+                        items(profiles.size) { index ->
+                            val profile = profiles[index]
+                            val isActive = profile.id == activeProfileId
+                            ProfileAvatar(
+                                profile = profile,
+                                isSelected = isActive,
+                                focusRequester = focusRequesters.getOrNull(index),
+                                onClick = {
+                                    if (profile.pinHash != null && profile.id != activeProfileId) {
+                                        pendingProfile = profile
+                                        showPinDialog = true
+                                        pinError = false
+                                    } else {
+                                        onProfileSelected(profile)
+                                    }
+                                }
+                            )
                         }
-                    else
-                        OutlinedButton(onClick = onManageProfiles, shape = RoundedCornerShape(8.dp)) {
-                            Text("Manage Profiles")
-                        }
+                    }
                 }
             }
         }

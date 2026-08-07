@@ -484,7 +484,8 @@ private fun MainMenu(
         val headerHeight = (56 * textScale).dp
         Box(
             modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 16.dp),
-            contentAlignment = Alignment.CenterStart
+            contentAlignment = if (nsTheme.identity.logoMode == LogoMode.IMAGE && nsTheme.identity.logoUrl != null)
+                Alignment.Center else Alignment.CenterStart
         ) {
             if (nsTheme.identity.logoMode == LogoMode.IMAGE && nsTheme.identity.logoUrl != null) {
                 AsyncImage(
@@ -1014,8 +1015,8 @@ private fun PanelItem(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = itemScale; scaleY = itemScale }
-            .defaultMinSize(minHeight = 40.dp)
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
             .then(
