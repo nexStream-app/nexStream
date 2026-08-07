@@ -159,14 +159,18 @@ class MainActivity : ComponentActivity() {
                     accessState = checkDeferred.await()
                 }
 
-                // After licence confirmed, sync profiles + watchlist (key not available on startup)
+                // After licence confirmed, sync profiles + watchlist (key not available on startup).
+                // Delayed 10s to avoid piling I/O on top of playlist load and progress migration.
                 LaunchedEffect(accessState) {
                     if (accessState == AppAccessState.TRIAL_ACTIVE || accessState == AppAccessState.LICENSED) {
                         launch(Dispatchers.IO) {
+                            kotlinx.coroutines.delay(10_000)
                             profileSyncManager.syncFromServer()
                             profileManager.refreshAfterSync()
+                            kotlinx.coroutines.delay(5_000)
                             profileManager.profiles.value.forEach { profile ->
                                 syncManager.syncFromServer(profile.id)
+                                kotlinx.coroutines.delay(2_000)
                             }
                         }
                     }
@@ -200,10 +204,13 @@ class MainActivity : ComponentActivity() {
                             val profiles     by profileManager.profiles.collectAsState()
                             val activeProfile by profileManager.activeProfile.collectAsState()
                             var profileChosen by remember { mutableStateOf(false) }
+                            val playlists    by repository.getAllPlaylists().collectAsState(initial = emptyList())
+                            val hasPlaylists  = playlists.isNotEmpty()
 
-                            // Show profile selector if 2+ profiles, or if sole profile has a PIN
+                            // Show profile selector only after playlists are set up, to avoid
+                            // intercepting first-run flow where profiles synced before playlist added
                             val singleProfileNeedsPin = profiles.size == 1 && profiles[0].pinHash != null
-                            if ((profiles.size >= 2 || singleProfileNeedsPin) && !profileChosen) {
+                            if (hasPlaylists && (profiles.size >= 2 || singleProfileNeedsPin) && !profileChosen) {
                                 ProfileSelectScreen(
                                     profiles = profiles,
                                     appName  = appName,

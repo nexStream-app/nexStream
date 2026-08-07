@@ -11,6 +11,7 @@ import app.nexstream.player.data.sync.ProgressSyncManager
 import app.nexstream.player.license.LicencePreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -66,8 +67,8 @@ class MainScreenViewModel @Inject constructor(
             progressSyncManager.pullFromServer(profileId)
             progressSyncManager.pushAllToServer(profileId)
         }
-        // Backfill certifications for any movies/series that don't have them yet
-        viewModelScope.launch { runCatching { repository.fetchAllMissingCertifications() } }
+        // Backfill certifications — delayed 2 min so startup I/O settles first on slow devices
+        viewModelScope.launch { delay(120_000); runCatching { repository.fetchAllMissingCertifications() } }
     }
 
     private suspend fun migrateExistingProgress(profileId: String) {
