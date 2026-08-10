@@ -2013,6 +2013,7 @@ private fun MainContentArea(
                 onPickSelected          = onPickSelected,
                 watchlistIds            = watchlistIds,
                 onToggleWatchlist       = onTogglePicksWatchlist,
+                onPlayerLaunch          = onPlayerLaunch,
                 viewModel               = picksViewModel
             )
             AppRoute.Home -> ModernHomeScreen(
