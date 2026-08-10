@@ -1,21 +1,27 @@
 package app.nexstream.player.ui.screens.series
 
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.StatFs
-import androidx.compose.animation.AnimatedContent
+import android.view.View
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,31 +35,57 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.SeriesEntity
+import app.nexstream.player.subtitle.WhisperSubtitleManager
+import app.nexstream.player.ui.theme.LocalNsAccent
+import app.nexstream.player.ui.theme.LocalNsBackground
+import app.nexstream.player.ui.theme.saveWhisperSubtitles
+import app.nexstream.player.ui.theme.saveWhisperTranslateTo
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val GRID_COLS = 4
+// Whisper only: transcribe (output in detected language) or translate (always English)
+private val VOICE_SUBTITLE_MODES = listOf<Pair<Boolean?, String>>(
+    null  to "None",
+    false to "Transcribe",
+    true  to "→ English"
+)
+
+private fun extractYoutubeId(url: String): String? {
+    val patterns = listOf(
+        Regex("youtu\\.be/([A-Za-z0-9_-]{11})"),
+        Regex("youtube\\.com/watch\\?.*v=([A-Za-z0-9_-]{11})"),
+        Regex("youtube\\.com/embed/([A-Za-z0-9_-]{11})"),
+        Regex("youtube\\.com/v/([A-Za-z0-9_-]{11})"),
+    )
+    return patterns.firstNotNullOfOrNull { it.find(url)?.groupValues?.get(1) }
+}
+
 private const val LOW_SPACE_BUFFER_EP = 250L * 1024 * 1024
 
-// ── Storage utilities (mirrors MovieDetailsDialog) ────────────────────────────
 private fun getAvailableStorageBytesEp(): Long {
     val stat = StatFs(Environment.getExternalStorageDirectory().path)
     return stat.availableBlocksLong * stat.blockSizeLong
@@ -96,12 +128,11 @@ private fun formatBytesEp(bytes: Long): String {
     }
 }
 
-// ── Overlay states for the info bar ──────────────────────────────────────────
 private sealed class InfoBarState {
-    object Idle : InfoBarState()                          // show episode title/plot
-    object ResumeChoice : InfoBarState()                  // Resume | Start Over | Download
-    object PlayChoice : InfoBarState()                    // Play | Download
-    object CheckingSize : InfoBarState()                  // "Checking size…"
+    object Idle : InfoBarState()
+    object ResumeChoice : InfoBarState()
+    object PlayChoice : InfoBarState()
+    object CheckingSize : InfoBarState()
     data class StorageInfo(
         val episodeSize: Long,
         val available: Long,
@@ -116,15 +147,27 @@ fun SeriesDetailsDialog(
     series: SeriesEntity,
     episodes: List<EpisodeEntity>,
     seasons: List<Int>,
-    episodeProgressMap: Map<String, Long> = emptyMap(),  // episodeId → positionMs per profile
+    episodeProgressMap: Map<String, Long> = emptyMap(),
     isLoading: Boolean,
     isBookmarked: Boolean = false,
     initialFocusEpisodeId: String? = null,
+    maxAgeRating: String? = null,
+    allowNr: Boolean = true,
     onDismiss: () -> Unit,
     onToggleWatchlist: () -> Unit = {},
     onDownloadEpisode: ((streamUrl: String, title: String) -> Unit)? = null,
+    onFetchCertification: (suspend () -> String?)? = null,
+    onFetchOriginalLanguage: (suspend () -> String?)? = null,
+    whisperManager: WhisperSubtitleManager? = null,
+    onRatingOverride: ((String) -> Unit)? = null,
+    playlistName: String? = null,
+    onFetchTrailerUrl: (suspend () -> String?)? = null,
+    onGoToSeries: (() -> Unit)? = null,
     onPlayEpisode: (streamUrl: String, episodeId: String, startPosition: Long, seriesId: String, seriesName: String, seasonNum: Int, episodeNum: Int, episodeName: String) -> Unit
 ) {
+    val accent     = LocalNsAccent.current
+    val background = LocalNsBackground.current
+
     var selectedSeason by remember(seasons) { mutableStateOf(seasons.firstOrNull() ?: 1) }
     var seasonDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -132,7 +175,6 @@ fun SeriesDetailsDialog(
         episodes.filter { it.seasonNum == selectedSeason }.sortedBy { it.episodeNum }
     }
 
-    // Default: last played > first unwatched > first
     val defaultIndex = remember(episodesForSeason, initialFocusEpisodeId, episodeProgressMap) {
         if (initialFocusEpisodeId != null) {
             val idx = episodesForSeason.indexOfFirst { it.id == initialFocusEpisodeId }
@@ -142,49 +184,105 @@ fun SeriesDetailsDialog(
         if (first >= 0) first else 0
     }
 
-    val configuration = LocalConfiguration.current
-    val screenHeight  = configuration.screenHeightDp.dp
-    val headerHeight  = (screenHeight * 0.25f).coerceAtMost(190.dp)
-    val posterHeight  = (headerHeight * 0.80f).coerceAtMost(95.dp)
-    val posterWidth   = (posterHeight * 0.67f).coerceAtMost(65.dp)
-
-    // Bar buttons: 0=Close  1=MyList  [2=Season — rightmost, default]
     val hasMultiSeason  = seasons.size > 1
-    val barButtonCount  = if (hasMultiSeason) 3 else 2
     val seasonsLoaded   = seasons.isNotEmpty()
-    // selectedButton is set by LaunchedEffect(seasons) once loaded — start hidden
-    var selectedButton  by remember { mutableStateOf(if (hasMultiSeason) 2 else 1) }
 
-    // Focus zone
+    val context = LocalContext.current
+    val voiceTranslateOptions = VOICE_SUBTITLE_MODES
+    val showVoiceTranslate = whisperManager != null
+
+    var trailerUrl by remember(series.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(series.id) {
+        if (onFetchTrailerUrl != null) {
+            val fetched = onFetchTrailerUrl()
+            if (!fetched.isNullOrBlank()) trailerUrl = fetched
+        }
+    }
+    val hasTrailer by remember { derivedStateOf { !trailerUrl.isNullOrBlank() } }
+    val showTrailerState = remember { mutableStateOf(false) }
+    var showTrailer by showTrailerState
+    val trailerStartedState = remember { mutableStateOf(false) }
+    var trailerStarted by trailerStartedState
+    LaunchedEffect(showTrailer) { if (!showTrailer) trailerStartedState.value = false }
+
+    val trailerCount   = if (hasTrailer) 1 else 0
+    val hasGoToSeries  = onGoToSeries != null
+    val goToSeriesIdx  = if (hasGoToSeries) 2 else -1
+    val seasonBaseIdx  = 2 + (if (hasGoToSeries) 1 else 0)
+    val whisperBtnIdx  = seasonBaseIdx + (if (hasMultiSeason) 1 else 0)
+    val trailerBtnIdx  = if (hasTrailer) whisperBtnIdx + (if (showVoiceTranslate) 1 else 0) else -1
+    val barButtonCount = 2 + (if (hasGoToSeries) 1 else 0) + (if (hasMultiSeason) 1 else 0) + (if (showVoiceTranslate) 1 else 0) + trailerCount
+
+    var selectedButton  by remember { mutableStateOf(if (hasMultiSeason) seasonBaseIdx else 1) }
+    var pressedButton   by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(barButtonCount) {
+        if (selectedButton >= barButtonCount) selectedButton = barButtonCount - 1
+    }
+
     var inGrid           by remember { mutableStateOf(false) }
     var focusedGridIndex by remember { mutableStateOf(defaultIndex) }
-
-    // Info bar state — drives inline overlay
     var infoBarState     by remember { mutableStateOf<InfoBarState>(InfoBarState.Idle) }
-    // Which overlay button is selected (varies by state)
     var overlayButton    by remember { mutableStateOf(0) }
+    var voiceTranslateIndex by remember { mutableStateOf(0) }
 
     val focusedEpisode = remember(focusedGridIndex, episodesForSeason) {
         episodesForSeason.getOrNull(focusedGridIndex)
     }
 
-    // Reset overlay when focused episode changes
+    // NR rating override — user can manually set rating when cert is NR/null
+    var ratingOverride    by remember { mutableStateOf<String?>(null) }
+    var showRatingPicker  by remember { mutableStateOf(false) }
+
+    // Displayed cert — may be fetched on open if blank, or overridden by user
+    var fetchedCert by remember(series.certification) { mutableStateOf(series.certification) }
+    LaunchedEffect(series.id) {
+        if (fetchedCert.isNullOrBlank() && onFetchCertification != null) {
+            val fetched = onFetchCertification()
+            if (!fetched.isNullOrBlank()) fetchedCert = fetched
+        }
+    }
+    val displayedCert by remember { derivedStateOf { ratingOverride ?: fetchedCert } }
+
+    var displayedLang by remember(series.originalLanguage) { mutableStateOf(series.originalLanguage) }
+    LaunchedEffect(series.id) {
+        if (displayedLang.isNullOrBlank() && onFetchOriginalLanguage != null) {
+            val fetched = onFetchOriginalLanguage()
+            if (!fetched.isNullOrBlank()) displayedLang = fetched
+        }
+    }
+
+    // Restrict playback if cert (possibly fetched live) exceeds profile's max age rating
+    val isContentRestricted by remember(maxAgeRating, allowNr) {
+        derivedStateOf {
+            val cert = displayedCert
+            when {
+                cert.isNullOrBlank() -> false
+                maxAgeRating == null -> cert == "NR" && !allowNr
+                else -> !isAllowedByAgeRatingSD(cert, maxAgeRating, allowNr)
+            }
+        }
+    }
+
     LaunchedEffect(focusedGridIndex) { infoBarState = InfoBarState.Idle }
 
     val dialogFocus         = remember { FocusRequester() }
-    val seasonButtonFR      = remember { FocusRequester() }
-    val closeButtonFR       = remember { FocusRequester() }
     val gridFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    val gridState           = rememberLazyGridState()
+    val gridState           = remember(selectedSeason) { LazyListState() }
     val scope               = rememberCoroutineScope()
 
-    // Focus dialog and set selectedButton when seasons load
+    // When restriction kicks in (cert fetched live), exit the episode grid so D-pad can't trigger play
+    LaunchedEffect(isContentRestricted) {
+        if (isContentRestricted) {
+            inGrid = false
+        }
+    }
+
     LaunchedEffect(seasons) {
         if (seasons.isEmpty()) return@LaunchedEffect
         kotlinx.coroutines.delay(80)
-        selectedButton = if (hasMultiSeason) 2 else 1
-        // Focus first episode in grid like CatchUpDetailsDialog
-        if (episodesForSeason.isNotEmpty()) {
+        selectedButton = if (hasMultiSeason) seasonBaseIdx else 1
+        if (episodesForSeason.isNotEmpty() && !isContentRestricted) {
             inGrid = true
             val target = defaultIndex.coerceIn(0, episodesForSeason.lastIndex)
             focusedGridIndex = target
@@ -199,7 +297,7 @@ fun SeriesDetailsDialog(
 
     LaunchedEffect(selectedSeason) {
         focusedGridIndex = 0; inGrid = false; infoBarState = InfoBarState.Idle
-        gridState.scrollToItem(0)
+        gridFocusRequesters.clear()
     }
 
     LaunchedEffect(episodesForSeason, defaultIndex) {
@@ -209,10 +307,9 @@ fun SeriesDetailsDialog(
         }
     }
 
-    // Helper: trigger download flow for focused episode
     fun startDownloadFlow(ep: EpisodeEntity) {
         infoBarState = InfoBarState.CheckingSize
-        overlayButton = 1 // default Download
+        overlayButton = 1
         scope.launch {
             val available = getAvailableStorageBytesEp()
             val size = getEpisodeSizeBytes(ep.streamUrl)
@@ -223,24 +320,162 @@ fun SeriesDetailsDialog(
         }
     }
 
-    // Helper: play episode
+    fun playWithWhisper(action: () -> Unit) {
+        if (whisperManager == null) { action(); return }
+        val mode = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.first  // null=None, false=Transcribe, true=→EN
+        if (mode == null) {
+            scope.launch { context.saveWhisperSubtitles(false); action() }
+            return
+        }
+        whisperManager.setTranslateToEnglish(mode)
+        scope.launch {
+            context.saveWhisperSubtitles(true)
+            context.saveWhisperTranslateTo(mode)
+            action()
+        }
+    }
+
     fun playEp(ep: EpisodeEntity, fromStart: Boolean) {
         val resumePos = episodeProgressMap[ep.id] ?: 0L
-        onPlayEpisode(ep.streamUrl, ep.id,
-            if (!fromStart && resumePos > 0L) resumePos else 0L,
-            series.id, series.name, ep.seasonNum, ep.episodeNum, ep.name)
+        playWithWhisper {
+            onPlayEpisode(ep.streamUrl, ep.id,
+                if (!fromStart && resumePos > 0L) resumePos else 0L,
+                series.id, series.name, ep.seasonNum, ep.episodeNum, ep.name)
+        }
+    }
+
+    if (showRatingPicker) {
+        RatingPickerDialogSD(
+            onDismiss = { showRatingPicker = false },
+            onSelect  = { rating ->
+                ratingOverride = rating
+                onRatingOverride?.invoke(rating)
+                showRatingPicker = false
+            }
+        )
     }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.90f).fillMaxHeight(0.90f),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        androidx.compose.runtime.LaunchedEffect(Unit) { dialogWindow?.setDimAmount(0.85f) }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.90f)
+                .clip(RoundedCornerShape(12.dp))
         ) {
+            // ── Full-bleed backdrop ───────────────────────────────────────────
+            if (showTrailer && !trailerUrl.isNullOrBlank()) {
+                val videoId = remember(trailerUrl) { extractYoutubeId(trailerUrl!!) }
+                if (videoId != null) {
+                    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                                settings.javaScriptEnabled = true
+                                settings.mediaPlaybackRequiresUserGesture = false
+                                settings.domStorageEnabled = true
+                                settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+                                webChromeClient = WebChromeClient()
+                                webViewClient = WebViewClient()
+                                addJavascriptInterface(object : Any() {
+                                    @JavascriptInterface
+                                    fun onTrailerEnded() {
+                                        mainHandler.post { showTrailerState.value = false }
+                                    }
+                                    @JavascriptInterface
+                                    fun onTrailerStarted() {
+                                        mainHandler.post { trailerStartedState.value = true }
+                                    }
+                                }, "TrailerBridge")
+                                val html = """<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>*{margin:0;padding:0}body{background:#000;overflow:hidden}#p{position:fixed;top:0;left:0;width:100%;height:100%}</style>
+</head><body>
+<div id="p"></div>
+<script>
+var s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);
+var player;
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player('p',{
+    videoId:'$videoId',
+    playerVars:{autoplay:1,controls:1,playsinline:1,rel:0,modestbranding:1,origin:'https://www.themoviedb.org'},
+    events:{onStateChange:function(e){if(e.data===0)TrailerBridge.onTrailerEnded();if(e.data===1)TrailerBridge.onTrailerStarted();}}
+  });
+}
+</script>
+</body></html>"""
+                                loadDataWithBaseURL("https://www.themoviedb.org/", html, "text/html", "UTF-8", null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    val overlayAlpha by animateFloatAsState(
+                        targetValue   = if (trailerStarted) 0f else 1f,
+                        animationSpec = tween(400),
+                        label         = "trailerOverlay"
+                    )
+                    if (overlayAlpha > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = overlayAlpha }
+                                .background(Color.Black)
+                        )
+                    }
+                } else {
+                    showTrailer = false
+                }
+            } else {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(series.backdropUrl ?: series.posterUrl)
+                        .crossfade(400)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter
+                )
+            }
+
+            // ── Gradient overlay — fades out during trailer ───────────────────
+            AnimatedVisibility(
+                visible = !showTrailer,
+                enter   = fadeIn(tween(400)),
+                exit    = fadeOut(tween(400)),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.Black.copy(alpha = 0.40f),
+                                0.40f to Color.Black.copy(alpha = 0.55f),
+                                0.72f to Color.Black.copy(alpha = 0.80f),
+                                1.0f  to Color.Black.copy(alpha = 0.97f),
+                            )
+                        )
+                    )
+                )
+            }
+
+            // ── Floating Close (top-right) ────────────────────────────────────
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
+                DialogActionPill(
+                    icon      = Icons.Default.Close,
+                    label     = "Close",
+                    selected  = !inGrid && selectedButton == 0,
+                    isPressed = pressedButton == 0,
+                    accent    = accent,
+                    onClick   = onDismiss,
+                )
+            }
+
+            // ── Content column ────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -249,13 +484,12 @@ fun SeriesDetailsDialog(
                     .onKeyEvent { e ->
                         if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
 
-                        // ── Overlay active: intercept left/right/enter ────────
                         val overlay = infoBarState
                         if (overlay !is InfoBarState.Idle && overlay !is InfoBarState.CheckingSize) {
                             val overlayCount = when (overlay) {
-                                is InfoBarState.ResumeChoice  -> if (onDownloadEpisode != null) 3 else 2
-                                is InfoBarState.PlayChoice    -> if (onDownloadEpisode != null) 2 else 1
-                                is InfoBarState.StorageInfo   -> 2
+                                is InfoBarState.ResumeChoice    -> if (onDownloadEpisode != null) 3 else 2
+                                is InfoBarState.PlayChoice      -> if (onDownloadEpisode != null) 2 else 1
+                                is InfoBarState.StorageInfo     -> 2
                                 is InfoBarState.LowSpaceWarning -> 2
                                 else -> 0
                             }
@@ -280,7 +514,7 @@ fun SeriesDetailsDialog(
                                             1 -> {
                                                 if (overlay.lowAfter) infoBarState = InfoBarState.LowSpaceWarning
                                                 else if (!overlay.notEnough && ep != null) {
-                                                    onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum}E${ep.episodeNum} - ${ep.name}")
+                                                    onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum} E${ep.episodeNum}")
                                                     infoBarState = InfoBarState.Idle
                                                 }
                                             }
@@ -288,7 +522,7 @@ fun SeriesDetailsDialog(
                                         is InfoBarState.LowSpaceWarning -> when (overlayButton) {
                                             0 -> { infoBarState = InfoBarState.Idle }
                                             1 -> {
-                                                if (ep != null) onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum}E${ep.episodeNum} - ${ep.name}")
+                                                if (ep != null) onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum} E${ep.episodeNum}")
                                                 infoBarState = InfoBarState.Idle
                                             }
                                         }
@@ -306,11 +540,13 @@ fun SeriesDetailsDialog(
                             Key.DirectionLeft -> {
                                 if (!inGrid) { selectedButton = (selectedButton - 1 + barButtonCount) % barButtonCount; true }
                                 else {
-                                    val col = focusedGridIndex % GRID_COLS
-                                    if (col > 0) {
+                                    if (focusedGridIndex > 0) {
                                         val prev = focusedGridIndex - 1
                                         focusedGridIndex = prev
-                                        scope.launch { gridFocusRequesters[prev]?.requestFocus() }
+                                        scope.launch {
+                                            gridState.animateScrollToItem(prev)
+                                            try { gridFocusRequesters[prev]?.requestFocus() } catch (_: Exception) {}
+                                        }
                                         true
                                     } else false
                                 }
@@ -318,11 +554,13 @@ fun SeriesDetailsDialog(
                             Key.DirectionRight -> {
                                 if (!inGrid) { selectedButton = (selectedButton + 1) % barButtonCount; true }
                                 else {
-                                    val col = focusedGridIndex % GRID_COLS
-                                    if (col < GRID_COLS - 1 && focusedGridIndex < episodesForSeason.lastIndex) {
+                                    if (focusedGridIndex < episodesForSeason.lastIndex) {
                                         val next = focusedGridIndex + 1
                                         focusedGridIndex = next
-                                        scope.launch { gridFocusRequesters[next]?.requestFocus() }
+                                        scope.launch {
+                                            gridState.animateScrollToItem(next)
+                                            try { gridFocusRequesters[next]?.requestFocus() } catch (_: Exception) {}
+                                        }
                                         true
                                     } else false
                                 }
@@ -334,77 +572,54 @@ fun SeriesDetailsDialog(
                                     scope.launch {
                                         gridState.animateScrollToItem(target)
                                         kotlinx.coroutines.delay(60)
-                                        gridFocusRequesters[target]?.requestFocus()
+                                        try { gridFocusRequesters[target]?.requestFocus() } catch (_: Exception) {}
                                     }
                                     true
                                 } else if (inGrid) {
-                                    val next = focusedGridIndex + GRID_COLS
-                                    if (next < episodesForSeason.size) {
-                                        focusedGridIndex = next
-                                        scope.launch {
-                                            gridState.animateScrollToItem(next)
-                                            kotlinx.coroutines.delay(40)
-                                            gridFocusRequesters[next]?.requestFocus()
-                                        }
-                                        true
-                                    } else {
-                                        // Bottom of grid → action bar
-                                        inGrid = false
-                                        selectedButton = barButtonCount - 1
-                                        try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                        true
-                                    }
+                                    inGrid = false
+                                    selectedButton = barButtonCount - 1
+                                    try { dialogFocus.requestFocus() } catch (_: Exception) {}
+                                    true
                                 } else false
                             }
                             Key.DirectionUp -> {
                                 if (inGrid) {
-                                    val prev = focusedGridIndex - GRID_COLS
-                                    if (prev >= 0) {
-                                        focusedGridIndex = prev
-                                        scope.launch {
-                                            gridState.animateScrollToItem(prev)
-                                            kotlinx.coroutines.delay(40)
-                                            gridFocusRequesters[prev]?.requestFocus()
-                                        }
-                                    } else {
-                                        inGrid = false
-                                        try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                    }
-                                    true
-                                } else if (!inGrid && episodesForSeason.isNotEmpty()) {
-                                    // Bar → last row of grid
-                                    inGrid = true
-                                    val lastRow = ((episodesForSeason.size - 1) / GRID_COLS) * GRID_COLS
-                                    val target = (lastRow + (focusedGridIndex % GRID_COLS))
-                                        .coerceAtMost(episodesForSeason.lastIndex)
-                                    focusedGridIndex = target
-                                    scope.launch {
-                                        gridState.animateScrollToItem(target)
-                                        kotlinx.coroutines.delay(60)
-                                        gridFocusRequesters[target]?.requestFocus()
-                                    }
+                                    inGrid = false
+                                    try { dialogFocus.requestFocus() } catch (_: Exception) {}
                                     true
                                 } else false
                             }
+                            Key.Back -> { onDismiss(); true }
                             Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                                 if (!inGrid) {
-                                    when {
-                                        selectedButton == 0 -> onDismiss()
-                                        selectedButton == 1 -> onToggleWatchlist()
-                                        selectedButton == 2 && hasMultiSeason -> seasonDropdownExpanded = true
+                                    val btn = selectedButton
+                                    pressedButton = btn
+                                    scope.launch {
+                                        delay(120)
+                                        pressedButton = null
+                                        when {
+                                            btn == 0 -> onDismiss()
+                                            btn == 1 -> onToggleWatchlist()
+                                            btn == goToSeriesIdx && hasGoToSeries -> onGoToSeries?.invoke()
+                                            btn == seasonBaseIdx && hasMultiSeason -> seasonDropdownExpanded = true
+                                            btn == whisperBtnIdx && showVoiceTranslate ->
+                                                voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size
+                                            btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() -> showTrailer = !showTrailer
+                                        }
                                     }
                                     true
                                 } else {
-                                    // Enter on grid cell — show overlay
                                     val ep = episodesForSeason.getOrNull(focusedGridIndex)
                                     if (ep != null) {
-                                        if ((episodeProgressMap[ep.id] ?: 0L) > 0L) {
+                                        if (isContentRestricted) {
+                                            // Consume key — restriction UI shown in episode row
+                                        } else if ((episodeProgressMap[ep.id] ?: 0L) > 0L) {
                                             infoBarState = InfoBarState.ResumeChoice
-                                            overlayButton = 1 // default Resume
+                                            overlayButton = 1
                                         } else {
                                             if (onDownloadEpisode != null) {
                                                 infoBarState = InfoBarState.PlayChoice
-                                                overlayButton = 0 // default Play
+                                                overlayButton = 0
                                             } else {
                                                 playEp(ep, fromStart = true)
                                             }
@@ -417,50 +632,197 @@ fun SeriesDetailsDialog(
                         }
                     }
             ) {
-                // ── Header ────────────────────────────────────────────────────
-                Box(modifier = Modifier.fillMaxWidth().height(headerHeight)) {
-                    AnimatedContent(
-                        targetState = series.backdropUrl ?: series.posterUrl,
-                        transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
-                        label = "backdrop"
-                    ) { imageUrl ->
-                        AsyncImage(model = imageUrl, contentDescription = null,
-                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Spacer(Modifier.weight(1f))
+
+                // ── Series info ───────────────────────────────────────────────
+                Column(
+                    modifier            = Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Text(
+                        text       = series.name,
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color      = Color.White,
+                        maxLines   = 2,
+                        overflow   = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                    ) {
+                        if (!displayedLang.isNullOrEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.RecordVoiceOver, null, tint = Color.White.copy(alpha = 0.70f), modifier = Modifier.size(13.dp))
+                                Text(displayedLang!!.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.70f))
+                            }
+                        }
+                        if (!series.rating.isNullOrEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                                Text(series.rating!!.toDoubleOrNull()?.let { "%.1f".format(it) } ?: series.rating!!, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        val isNrRating = displayedCert.isNullOrBlank() ||
+                            displayedCert == "NR" || displayedCert == "Not Rated"
+                        if (!displayedCert.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.White.copy(alpha = 0.20f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.40f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(displayedCert!!, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        if (isNrRating) {
+                            Icon(
+                                imageVector        = Icons.Default.Edit,
+                                contentDescription = "Set rating",
+                                tint               = Color.White.copy(alpha = 0.60f),
+                                modifier           = Modifier
+                                    .size(13.dp)
+                                    .clickable { showRatingPicker = true },
+                            )
+                        }
+                        if (seasons.isNotEmpty()) {
+                            Text(
+                                text     = "${seasons.size} Season${if (seasons.size != 1) "s" else ""}",
+                                fontSize = 13.sp,
+                                color    = Color.White.copy(alpha = 0.70f),
+                            )
+                        }
+                        if (!series.genre.isNullOrEmpty()) {
+                            Text("·", color = Color.White.copy(alpha = 0.40f), fontSize = 13.sp)
+                            Text(series.genre!!, fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f))
+                        }
                     }
-                    Box(modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)))
-                    ))
-                    Row(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AsyncImage(model = series.posterUrl, contentDescription = series.name,
-                            modifier = Modifier.width(posterWidth).height(posterHeight).clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop)
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(series.name, style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (!series.rating.isNullOrEmpty()) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
-                                        Text(series.rating!!, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    if (!playlistName.isNullOrEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.PlaylistPlay, null, modifier = Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.45f))
+                            Text(playlistName, fontSize = 11.sp, color = Color.White.copy(alpha = 0.45f), maxLines = 1)
+                        }
+                    }
+                    if (!series.director.isNullOrEmpty()) {
+                        Text(
+                            text     = "Dir. ${series.director}",
+                            fontSize = 12.sp,
+                            color    = Color.White.copy(alpha = 0.60f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (!series.cast.isNullOrEmpty()) {
+                        Text(
+                            text     = series.cast!!,
+                            fontSize = 12.sp,
+                            color    = Color.White.copy(alpha = 0.55f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (!series.plot.isNullOrBlank()) {
+                        Text(
+                            text     = series.plot!!,
+                            fontSize = 13.sp,
+                            color    = Color.White.copy(alpha = 0.70f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    // ── Action buttons ────────────────────────────────────────
+                    if (seasonsLoaded) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                        ) {
+                            DialogActionPill(
+                                icon      = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                label     = if (isBookmarked) "Remove from My List" else "My List",
+                                selected  = !inGrid && selectedButton == 1,
+                                isPressed = pressedButton == 1,
+                                accent    = accent,
+                                onClick   = onToggleWatchlist,
+                            )
+                            if (hasGoToSeries) {
+                                DialogActionPill(
+                                    icon      = Icons.Default.VideoLibrary,
+                                    label     = "Go to Series",
+                                    selected  = !inGrid && selectedButton == goToSeriesIdx,
+                                    isPressed = pressedButton == goToSeriesIdx,
+                                    accent    = accent,
+                                    onClick   = { onGoToSeries?.invoke() },
+                                )
+                            }
+                            if (hasMultiSeason) {
+                                Box {
+                                    DialogActionPill(
+                                        icon      = Icons.Default.Tv,
+                                        label     = "Season $selectedSeason",
+                                        trailing  = Icons.Default.ArrowDropDown,
+                                        selected  = !inGrid && selectedButton == 2,
+                                        isPressed = pressedButton == 2,
+                                        accent    = accent,
+                                        onClick   = { seasonDropdownExpanded = true },
+                                    )
+                                    DropdownMenu(
+                                        expanded         = seasonDropdownExpanded,
+                                        onDismissRequest = {
+                                            seasonDropdownExpanded = false
+                                            selectedButton = seasonBaseIdx
+                                            try { dialogFocus.requestFocus() } catch (_: Exception) {}
+                                        }
+                                    ) {
+                                        seasons.forEach { season ->
+                                            DropdownMenuItem(
+                                                text = { Text("Season $season") },
+                                                onClick = { selectedSeason = season; seasonDropdownExpanded = false },
+                                                leadingIcon = {
+                                                    if (season == selectedSeason)
+                                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                    else
+                                                        Icon(Icons.Default.Tv, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            )
+                                        }
                                     }
                                 }
-                                if (seasons.isNotEmpty()) {
-                                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)) {
-                                        Text("${seasons.size} Season${if (seasons.size != 1) "s" else ""}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
-                                }
-                                if (!series.genre.isNullOrEmpty())
-                                    Text(series.genre!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                            if (showVoiceTranslate) {
+                                val modeLabel = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.second ?: "None"
+                                DialogActionPill(
+                                    icon      = Icons.Default.RecordVoiceOver,
+                                    label     = "AI: $modeLabel",
+                                    selected  = !inGrid && selectedButton == whisperBtnIdx,
+                                    isPressed = pressedButton == whisperBtnIdx,
+                                    accent    = accent,
+                                    onClick   = { voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size },
+                                )
+                            }
+                            if (hasTrailer) {
+                                DialogActionPill(
+                                    icon      = if (showTrailer) Icons.Default.Stop else Icons.Default.Movie,
+                                    label     = if (showTrailer) "Stop Trailer" else "Trailer",
+                                    selected  = !inGrid && selectedButton == trailerBtnIdx,
+                                    isPressed = pressedButton == trailerBtnIdx,
+                                    accent    = accent,
+                                    onClick   = { if (!trailerUrl.isNullOrBlank()) showTrailer = !showTrailer },
+                                )
                             }
                         }
                     }
                 }
 
-                // ── Info bar / inline overlay ─────────────────────────────────
+                // ── Info bar ──────────────────────────────────────────────────
                 val infoBarHeight = when (infoBarState) {
                     is InfoBarState.StorageInfo, is InfoBarState.LowSpaceWarning -> 72.dp
                     else -> 52.dp
@@ -469,88 +831,111 @@ fun SeriesDetailsDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(infoBarHeight)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .background(Color.Black.copy(alpha = 0.70f))
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     when (val state = infoBarState) {
                         is InfoBarState.Idle -> {
                             if (focusedEpisode != null) {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp),
-                                    modifier = Modifier.align(Alignment.CenterStart)) {
-                                    Text("E${focusedEpisode.episodeNum} · ${focusedEpisode.name}",
-                                        style = MaterialTheme.typography.bodyMedium,
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier            = Modifier.align(Alignment.CenterStart),
+                                ) {
+                                    Text(
+                                        "E${focusedEpisode.episodeNum} · ${focusedEpisode.name}",
+                                        fontSize   = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        color      = Color.White,
+                                        maxLines   = 1,
+                                        overflow   = TextOverflow.Ellipsis,
+                                    )
                                     if (!focusedEpisode.plot.isNullOrEmpty())
-                                        Text(focusedEpisode.plot!!,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            focusedEpisode.plot!!,
+                                            fontSize = 12.sp,
+                                            color    = Color.White.copy(alpha = 0.65f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
                                 }
                             } else {
-                                Text("Select an episode",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                    modifier = Modifier.align(Alignment.CenterStart))
+                                Text(
+                                    "Select an episode",
+                                    fontSize = 13.sp,
+                                    color    = Color.White.copy(alpha = 0.40f),
+                                    modifier = Modifier.align(Alignment.CenterStart),
+                                )
                             }
                         }
                         is InfoBarState.ResumeChoice -> {
-                            // Start Over | Resume | Download
-                            Row(modifier = Modifier.align(Alignment.Center),
+                            Row(
+                                modifier              = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
                                 OverlayButton("↺  Start Over", overlayButton == 0) {}
-                                OverlayButton("▶  Resume", overlayButton == 1) {}
+                                OverlayButton("▶  Resume",    overlayButton == 1) {}
                                 if (onDownloadEpisode != null)
                                     OverlayButton("⬇  Download", overlayButton == 2) {}
                             }
                         }
                         is InfoBarState.PlayChoice -> {
-                            Row(modifier = Modifier.align(Alignment.Center),
+                            Row(
+                                modifier              = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
                                 OverlayButton("▶  Play", overlayButton == 0) {}
                                 if (onDownloadEpisode != null)
                                     OverlayButton("⬇  Download", overlayButton == 1) {}
                             }
                         }
                         is InfoBarState.CheckingSize -> {
-                            Row(modifier = Modifier.align(Alignment.Center),
+                            Row(
+                                modifier              = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Text("Checking size…", style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                                Text("Checking size…", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
                             }
                         }
                         is InfoBarState.StorageInfo -> {
-                            Column(modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Episode: ${formatBytesEp(state.episodeSize)}  ·  Available: ${formatBytesEp(state.available)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = when {
-                                        state.notEnough  -> MaterialTheme.colorScheme.error
-                                        state.lowAfter   -> MaterialTheme.colorScheme.tertiary
-                                        else             -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    })
+                            Column(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalAlignment   = Alignment.CenterHorizontally,
+                                verticalArrangement   = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    "Episode: ${formatBytesEp(state.episodeSize)}  ·  Available: ${formatBytesEp(state.available)}",
+                                    fontSize = 12.sp,
+                                    color    = when {
+                                        state.notEnough -> MaterialTheme.colorScheme.error
+                                        state.lowAfter  -> MaterialTheme.colorScheme.tertiary
+                                        else            -> Color.White.copy(alpha = 0.75f)
+                                    },
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OverlayButton("Cancel", overlayButton == 0) {}
+                                    OverlayButton("Cancel",   overlayButton == 0) {}
                                     OverlayButton("Download", overlayButton == 1, enabled = !state.notEnough) {}
                                 }
                             }
                         }
                         is InfoBarState.LowSpaceWarning -> {
-                            Column(modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Low storage — less than ${formatBytesEp(LOW_SPACE_BUFFER_EP)} will remain after download.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Column(
+                                modifier              = Modifier.fillMaxWidth(),
+                                horizontalAlignment   = Alignment.CenterHorizontally,
+                                verticalArrangement   = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    "Low storage — less than ${formatBytesEp(LOW_SPACE_BUFFER_EP)} will remain.",
+                                    fontSize = 12.sp,
+                                    color    = MaterialTheme.colorScheme.tertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OverlayButton("Cancel", overlayButton == 0) {}
+                                    OverlayButton("Cancel",          overlayButton == 0) {}
                                     OverlayButton("Continue Anyway", overlayButton == 1) {}
                                 }
                             }
@@ -558,48 +943,77 @@ fun SeriesDetailsDialog(
                     }
                 }
 
-                HorizontalDivider()
-
-                // ── Thumbnail grid ─────────────────────────────────────────────
+                // ── Episode row ───────────────────────────────────────────────
                 when {
-                    isLoading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CircularProgressIndicator()
-                            Text("Loading episodes…", style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    isContentRestricted -> Box(
+                        Modifier.fillMaxWidth().height(190.dp).background(Color.Black.copy(alpha = 0.70f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                        ) {
+                            Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(32.dp))
+                            Text("Content Restricted", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text(
+                                "This series is not available with your current profile settings.",
+                                fontSize = 12.sp, color = Color.White.copy(alpha = 0.65f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            )
                         }
                     }
-                    episodesForSeason.isEmpty() -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                        Text("No episodes available", style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    isLoading -> Box(
+                        Modifier.fillMaxWidth().height(190.dp).background(Color.Black.copy(alpha = 0.70f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                            Text("Loading episodes…", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
+                        }
                     }
-                    else -> LazyVerticalGrid(
-                        columns = GridCells.Fixed(GRID_COLS),
-                        state = gridState,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    episodesForSeason.isEmpty() -> Box(
+                        Modifier.fillMaxWidth().height(190.dp).background(Color.Black.copy(alpha = 0.70f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("No episodes available", fontSize = 13.sp, color = Color.White.copy(alpha = 0.5f))
+                    }
+                    else -> LazyRow(
+                        state                 = gridState,
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .height(190.dp)
+                            .background(Color.Black.copy(alpha = 0.70f)),
+                        contentPadding        = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         itemsIndexed(episodesForSeason, key = { _, ep -> ep.id }) { index, episode ->
                             val fr = remember { FocusRequester() }
                             LaunchedEffect(fr) { gridFocusRequesters[index] = fr }
 
-                            val isFocused = inGrid && focusedGridIndex == index
-                            val episodePos = episodeProgressMap[episode.id] ?: 0L
-                            val hasProgress = episodePos > 0L
+                            val isFocused       = inGrid && focusedGridIndex == index
+                            val episodePos      = episodeProgressMap[episode.id] ?: 0L
+                            val hasProgress     = episodePos > 0L
                             val progressFraction = remember(episodePos, episode.duration) {
                                 if (hasProgress && !episode.duration.isNullOrEmpty()) {
                                     val ms = parseDurationToMs(episode.duration!!)
-                                    if (ms > 0L) (episodePos.toFloat() / ms.toFloat()).coerceIn(0f, 1f)
-                                    else 0f
+                                    if (ms > 0L) (episodePos.toFloat() / ms.toFloat()).coerceIn(0f, 1f) else 0f
                                 } else 0f
                             }
 
                             Box(
                                 modifier = Modifier
-                                    .aspectRatio(16f / 9f)
+                                    .width(236.dp)
+                                    .fillMaxHeight()
                                     .clip(RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = if (isFocused) 2.dp else 1.dp,
+                                        color = if (isFocused) accent else Color.White.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(8.dp),
+                                    )
                                     .focusRequester(fr)
                                     .focusable()
                                     .onFocusChanged { fs ->
@@ -608,154 +1022,85 @@ fun SeriesDetailsDialog(
                                             infoBarState = InfoBarState.Idle
                                         }
                                     }
-                                    .then(
-                                        if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                        else Modifier
-                                    )
                                     .clickable {
-                                        focusedGridIndex = index; inGrid = true
-                                        // Direct click always plays (resume if progress)
-                                        onPlayEpisode(episode.streamUrl, episode.id,
-                                            if (hasProgress) episodePos else 0L,
-                                            series.id, series.name,
-                                            episode.seasonNum, episode.episodeNum, episode.name)
+                                        if (!isContentRestricted) {
+                                            focusedGridIndex = index; inGrid = true
+                                            onPlayEpisode(
+                                                episode.streamUrl, episode.id,
+                                                if (hasProgress) episodePos else 0L,
+                                                series.id, series.name,
+                                                episode.seasonNum, episode.episodeNum, episode.name,
+                                            )
+                                        }
                                     }
                             ) {
-                                if (!episode.posterUrl.isNullOrEmpty()) {
-                                    AsyncImage(model = episode.posterUrl, contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                val thumbModel = episode.posterUrl?.takeIf { it.isNotEmpty() }
+                                    ?: series.posterUrl?.takeIf { it.isNotEmpty() }
+                                    ?: series.backdropUrl
+                                if (thumbModel != null) {
+                                    AsyncImage(
+                                        model              = thumbModel,
+                                        contentDescription = null,
+                                        modifier           = Modifier.fillMaxSize(),
+                                        contentScale       = ContentScale.Crop,
+                                    )
                                 } else {
-                                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+                                    Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.08f)))
                                 }
-                                Box(Modifier.fillMaxSize().background(
-                                    Color.Black.copy(alpha = if (isFocused) 0.15f else 0.4f)
-                                ))
-                                Surface(
-                                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                                // Dark scrim — lighter on focus
+                                Box(
+                                    Modifier.fillMaxSize().background(
+                                        Color.Black.copy(alpha = if (isFocused) 0.10f else 0.38f)
+                                    )
+                                )
+                                // Episode number badge
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(6.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.Black.copy(alpha = 0.70f))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
                                 ) {
                                     Text(
-                                        "Episode ${episode.episodeNum}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
+                                        "E${episode.episodeNum}",
+                                        fontSize   = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = Color.White,
                                     )
                                 }
+                                // Play icon on focus
                                 if (isFocused) {
-                                    Icon(Icons.Default.PlayArrow, null, tint = Color.White,
-                                        modifier = Modifier.size(28.dp).align(Alignment.Center))
-                                }
-                                if (progressFraction >= 0.9f) {
-                                    Box(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)) {
-                                        Text("✓", style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onPrimary)
-                                    }
-                                }
-                                // Progress bar — surface background, primary fill
-                                if (progressFraction > 0f) {
-                                    Box(modifier = Modifier.fillMaxWidth().height(6.dp).align(Alignment.BottomCenter)) {
-                                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)))
-                                        Box(Modifier.fillMaxHeight().fillMaxWidth(progressFraction)
-                                            .background(MaterialTheme.colorScheme.primary))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // ── Action bar — only render once seasons are known to prevent flicker ──
-                if (seasonsLoaded) Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Spacer(Modifier.weight(1f))
-
-                    // 0 = Close — always OutlinedButton, border highlights when selected
-                    val closeSelected = !inGrid && selectedButton == 0
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (closeSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                            contentColor = if (closeSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = if (closeSelected) 2.dp else 1.dp,
-                            color = if (closeSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier.focusRequester(closeButtonFR)
-                    ) {
-                        Icon(Icons.Default.Close, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Close")
-                    }
-
-                    // 1 = My List
-                    val myListSelected = !inGrid && selectedButton == 1
-                    OutlinedButton(
-                        onClick = onToggleWatchlist,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (myListSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                            contentColor = if (myListSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = if (myListSelected) 2.dp else 1.dp,
-                            color = if (myListSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                    ) {
-                        Icon(if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (isBookmarked) "Remove from My List" else "Add to My List")
-                    }
-
-                    // 2 = Season dropdown (rightmost, default)
-                    if (hasMultiSeason) {
-                        Box {
-                            val seasonSelected = !inGrid && selectedButton == 2
-                            OutlinedButton(
-                                onClick = { seasonDropdownExpanded = true },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (seasonSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                                    contentColor = if (seasonSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                ),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = if (seasonSelected) 2.dp else 1.dp,
-                                    color = if (seasonSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                ),
-                                modifier = Modifier.focusRequester(seasonButtonFR)
-                            ) {
-                                Icon(Icons.Default.Tv, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Season $selectedSeason")
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.ArrowDropDown, null, Modifier.size(18.dp))
-                            }
-                            DropdownMenu(
-                                expanded = seasonDropdownExpanded,
-                                onDismissRequest = {
-                                    seasonDropdownExpanded = false
-                                    selectedButton = 2
-                                    try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                }
-                            ) {
-                                seasons.forEach { season ->
-                                    DropdownMenuItem(
-                                        text = { Text("Season $season") },
-                                        onClick = { selectedSeason = season; seasonDropdownExpanded = false },
-                                        leadingIcon = {
-                                            if (season == selectedSeason) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                            else Icon(Icons.Default.Tv, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
+                                    Icon(
+                                        Icons.Default.PlayArrow, null,
+                                        tint     = Color.White,
+                                        modifier = Modifier.size(32.dp).align(Alignment.Center),
                                     )
+                                }
+                                // Watched tick
+                                if (progressFraction >= 0.9f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(6.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(accent)
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("✓", fontSize = 10.sp, color = background)
+                                    }
+                                }
+                                // Progress bar
+                                if (progressFraction > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(4.dp)
+                                            .align(Alignment.BottomCenter)
+                                    ) {
+                                        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.25f)))
+                                        Box(Modifier.fillMaxHeight().fillMaxWidth(progressFraction).background(accent))
+                                    }
                                 }
                             }
                         }
@@ -764,20 +1109,88 @@ fun SeriesDetailsDialog(
             }
         }
     }
+
 }
 
-// ── Small overlay button ──────────────────────────────────────────────────────
+private fun isAllowedByAgeRatingSD(cert: String?, maxAge: String?, allowNr: Boolean): Boolean {
+    if (cert == "NR" || cert == null) return allowNr
+    if (maxAge == null) return true
+    val order = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
+    val certOrder = order[cert] ?: return true
+    val maxOrder  = order[maxAge] ?: return true
+    return certOrder <= maxOrder
+}
+
+// ── Top-bar action pill ───────────────────────────────────────────────────────
+@Composable
+private fun DialogActionPill(
+    icon:      ImageVector,
+    label:     String,
+    selected:  Boolean,
+    isPressed: Boolean = false,
+    accent:    Color,
+    trailing:  ImageVector? = null,
+    onClick:   () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(if (selected) accent else Color.Black.copy(alpha = 0.55f))
+            .border(
+                width = if (selected) 0.dp else 1.dp,
+                color = if (selected) Color.Transparent else Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(50.dp),
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(
+            imageVector        = icon,
+            contentDescription = null,
+            modifier           = Modifier.size(14.dp),
+            tint               = if (selected) Color.White else Color.White.copy(alpha = 0.85f),
+        )
+        Text(
+            text       = label,
+            fontSize   = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color      = if (selected) Color.White else Color.White.copy(alpha = 0.85f),
+        )
+        if (trailing != null) {
+            Icon(
+                imageVector        = trailing,
+                contentDescription = null,
+                modifier           = Modifier.size(14.dp),
+                tint               = Color.White.copy(alpha = 0.85f),
+            )
+        }
+    }
+}
+
+// ── Inline overlay button ─────────────────────────────────────────────────────
 @Composable
 private fun OverlayButton(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     if (selected) {
-        Button(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
+        Button(
+            onClick            = onClick,
+            enabled            = enabled,
+            shape              = RoundedCornerShape(6.dp),
+            contentPadding     = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text(label, fontSize = 12.sp)
         }
     } else {
-        OutlinedButton(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(
+            onClick        = onClick,
+            enabled        = enabled,
+            shape          = RoundedCornerShape(6.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            colors         = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+            border         = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+        ) {
+            Text(label, fontSize = 12.sp)
         }
     }
 }
@@ -794,4 +1207,43 @@ private fun parseDurationToMs(duration: String): Long {
             else -> 0L
         }
     } catch (_: Exception) { 0L }
+}
+
+@Composable
+private fun RatingPickerDialogSD(
+    onDismiss: () -> Unit,
+    onSelect:  (String) -> Unit,
+) {
+    val accent  = LocalNsAccent.current
+    val bgColor = LocalNsBackground.current
+    val ratings = listOf("G", "PG", "PG-13", "R", "NC-17", "U", "12", "12A", "15", "18", "R18", "TV-Y", "TV-G", "TV-PG", "TV-14", "TV-MA", "NR")
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xF0161616),
+        ) {
+            Column(
+                modifier            = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("Set Rating", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                ratings.chunked(4).forEach { rowRatings ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowRatings.forEach { rating ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(accent)
+                                    .clickable { onSelect(rating) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(rating, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = bgColor)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
