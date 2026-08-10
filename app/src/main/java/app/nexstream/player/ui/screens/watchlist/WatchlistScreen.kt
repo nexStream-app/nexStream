@@ -25,8 +25,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.data.local.entity.EpisodeEntity
+import app.nexstream.player.data.local.entity.MovieEntity
+import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
+import app.nexstream.player.ui.screens.movies.ModernMovieDetailsDialog
+import app.nexstream.player.ui.screens.series.SeriesDetailsDialog
 import app.nexstream.player.downloads.NexStreamDownloadManager
 import app.nexstream.player.recording.NexStreamRecordingManager
 import app.nexstream.player.recording.RecordingItem
@@ -74,6 +79,7 @@ fun WatchlistScreen(
     onPlayFile: (filePath: String, title: String) -> Unit = { _, _ -> },
     firstItemFocusRequester: FocusRequester? = null,
     onRequestSidebarFocus: () -> Unit = {},
+    onLaunchPlayer: (url: String, movieId: String?, episodeId: String?, seriesId: String?, startPos: Long, title: String?, subtitle: String?) -> Unit = { _, _, _, _, _, _, _ -> },
     viewModel: WatchlistViewModel = hiltViewModel()
 ) {
     val nsTheme = LocalNexStreamTheme.current
@@ -82,6 +88,59 @@ fun WatchlistScreen(
 
     val allItems by viewModel.allItems.collectAsState()
     var dialogItem by remember { mutableStateOf<WatchlistEntity?>(null) }
+
+    var movieDialogEntity    by remember { mutableStateOf<MovieEntity?>(null) }
+    var movieDialogUpdated   by remember { mutableStateOf<MovieEntity?>(null) }
+    var seriesDialogEntity   by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
+    var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var seriesDialogLoading  by remember { mutableStateOf(false) }
+    var channelDialogEntity  by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
+
+    LaunchedEffect(dialogItem) {
+        val item = dialogItem
+        movieDialogEntity    = null
+        movieDialogUpdated   = null
+        seriesDialogEntity   = null
+        seriesDialogUpdated  = null
+        seriesDialogEpisodes = emptyList()
+        seriesDialogSeasons  = emptyList()
+        channelDialogEntity  = null
+        if (item == null) return@LaunchedEffect
+        when (item.type) {
+            WatchlistType.MOVIE -> {
+                val base = viewModel.getMovieById(item.id)
+                movieDialogEntity = base
+                if (base != null) {
+                    val detailed = viewModel.loadMovieDetails(base)
+                    if (detailed != null) movieDialogUpdated = detailed
+                }
+            }
+            WatchlistType.SERIES -> {
+                val s = viewModel.getSeriesById(item.id)
+                seriesDialogEntity = s
+                if (s != null) {
+                    seriesDialogLoading = true
+                    val localEps = viewModel.getLocalEpisodes(s.id)
+                    if (localEps.isNotEmpty()) {
+                        seriesDialogEpisodes = localEps
+                        seriesDialogSeasons  = viewModel.getLocalSeasons(s.id)
+                    } else {
+                        val (updated, fetchedEps) = viewModel.loadSeriesDetails(s)
+                        seriesDialogEpisodes = fetchedEps
+                        seriesDialogSeasons  = fetchedEps.map { it.seasonNum }.distinct().sorted()
+                        if (updated != null) seriesDialogUpdated = updated
+                    }
+                    seriesDialogLoading = false
+                }
+            }
+            WatchlistType.CHANNEL -> {
+                channelDialogEntity = viewModel.getChannelById(item.id)
+            }
+            else -> {}
+        }
+    }
 
     var searchQuery    by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
@@ -305,35 +364,113 @@ fun WatchlistScreen(
         )
     }
 
-    dialogItem?.let { selected ->
-        val goToLabel = when (selected.type) {
-            WatchlistType.CHANNEL -> "Go to EPG"
-            WatchlistType.MOVIE   -> "Go to Movies"
-            WatchlistType.SERIES  -> "Go to Series"
-            WatchlistType.MUSIC   -> "Go to Music"
-        }
-        ContentActionDialog(
-            name       = selected.name,
-            posterUrl  = selected.posterUrl,
-            goToLabel  = goToLabel,
-            removeLabel = "Remove from My List",
-            onDismiss  = { dialogItem = null },
-            onRemove   = {
-                dialogItem = null
-                viewModel.removeFromWatchlist(selected.id, selected.type)
-            },
-            onGoTo     = {
-                dialogItem = null
-                when (selected.type) {
-                    WatchlistType.CHANNEL -> onGoToEpgForChannel(selected.name)
-                    WatchlistType.MOVIE   -> onGoToMovie(selected.name)
-                    WatchlistType.SERIES  -> onGoToSeries(selected.name)
-                    WatchlistType.MUSIC   -> selected.streamUrl?.let { url ->
-                        onChannelClick(url, selected.name)
-                    }
-                }
+    // Show full MovieDetailsDialog for movies, SeriesDetailsDialog for series,
+    // ContentActionDialog for channels/music or when entity not found in DB.
+    val selectedItem = dialogItem
+    if (selectedItem != null) {
+        val movie = movieDialogEntity
+        val series = seriesDialogEntity
+
+        when {
+            selectedItem.type == WatchlistType.MOVIE && movie != null -> {
+                val displayMovie = movieDialogUpdated ?: movie
+                val resumePos = displayMovie.lastPlayedPosition
+                ModernMovieDetailsDialog(
+                    movie          = displayMovie,
+                    resumePosition = resumePos,
+                    isBookmarked   = true,
+                    onDismiss      = { movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null },
+                    onPlay         = { startPos ->
+                        onLaunchPlayer(displayMovie.streamUrl, displayMovie.id, null, null, startPos, displayMovie.name, null)
+                        movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
+                    },
+                    onToggleWatchlist = {
+                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
+                        movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
+                    },
+                    onFetchCertification    = { viewModel.fetchMovieCertification(displayMovie.id, displayMovie.name) },
+                    onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
+                    onFetchRtData           = { viewModel.fetchMovieRtData(displayMovie.id, displayMovie.name) },
+                    onFetchTrailerUrl       = { viewModel.fetchMovieTrailerUrl(displayMovie) },
+                )
             }
-        )
+            selectedItem.type == WatchlistType.SERIES && series != null -> {
+                val displaySeries = seriesDialogUpdated ?: series
+                SeriesDetailsDialog(
+                    series        = displaySeries,
+                    episodes      = seriesDialogEpisodes,
+                    seasons       = seriesDialogSeasons,
+                    isLoading     = seriesDialogLoading,
+                    isBookmarked  = true,
+                    onDismiss     = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
+                    onToggleWatchlist = {
+                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
+                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
+                    },
+                    onGoToSeries = {
+                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
+                        onGoToSeries(selectedItem.name)
+                    },
+                    onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
+                    onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
+                    onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
+                    onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
+                        onLaunchPlayer(streamUrl, null, episodeId, seriesId, startPos, seriesName, "S${seasonNum}E${episodeNum} - $episodeName")
+                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
+                    }
+                )
+            }
+            selectedItem.type == WatchlistType.CHANNEL && channelDialogEntity != null -> {
+                val ch = channelDialogEntity!!
+                ChannelDetailsDialog(
+                    channel      = ch,
+                    isBookmarked = true,
+                    onDismiss    = { dialogItem = null },
+                    onWatch      = {
+                        onChannelClick(ch.streamUrl, ch.name)
+                        dialogItem = null
+                    },
+                    onToggleWatchlist = {
+                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
+                        dialogItem = null
+                    },
+                    onGoToEpg = {
+                        onGoToEpgForChannel(ch.name)
+                        dialogItem = null
+                    }
+                )
+            }
+            else -> {
+                val goToLabel = when (selectedItem.type) {
+                    WatchlistType.CHANNEL -> "Go to EPG"
+                    WatchlistType.MOVIE   -> "Go to Movies"
+                    WatchlistType.SERIES  -> "Go to Series"
+                    WatchlistType.MUSIC   -> "Go to Music"
+                }
+                ContentActionDialog(
+                    name        = selectedItem.name,
+                    posterUrl   = selectedItem.posterUrl,
+                    goToLabel   = goToLabel,
+                    removeLabel = "Remove from My List",
+                    onDismiss   = { dialogItem = null },
+                    onRemove    = {
+                        dialogItem = null
+                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
+                    },
+                    onGoTo = {
+                        dialogItem = null
+                        when (selectedItem.type) {
+                            WatchlistType.CHANNEL -> onGoToEpgForChannel(selectedItem.name)
+                            WatchlistType.MOVIE   -> onGoToMovie(selectedItem.name)
+                            WatchlistType.SERIES  -> onGoToSeries(selectedItem.name)
+                            WatchlistType.MUSIC   -> selectedItem.streamUrl?.let { url ->
+                                onChannelClick(url, selectedItem.name)
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 
     if (showClearConfirm) {

@@ -2,6 +2,9 @@ package app.nexstream.player.ui.screens.watchlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nexstream.player.data.local.entity.EpisodeEntity
+import app.nexstream.player.data.local.entity.MovieEntity
+import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
@@ -86,6 +89,49 @@ class WatchlistViewModel @Inject constructor(
         if (currentlyInList) removeFromWatchlist(item.id, item.type)
         else addToWatchlist(item)
     }
+
+    suspend fun getMovieById(id: String): MovieEntity? = repository.getMovieById(id)
+
+    suspend fun getSeriesById(id: String): SeriesEntity? = repository.getSeriesById(id)
+
+    suspend fun getChannelById(id: String): app.nexstream.player.data.local.entity.ChannelEntity? = repository.getChannelById(id)
+
+    suspend fun getLocalEpisodes(seriesId: String): List<EpisodeEntity> =
+        try { repository.getEpisodesForSeries(seriesId).first() } catch (_: Exception) { emptyList() }
+
+    suspend fun getLocalSeasons(seriesId: String): List<Int> =
+        try { repository.getSeasonsForSeries(seriesId).first() } catch (_: Exception) { emptyList() }
+
+    suspend fun loadMovieDetails(movie: MovieEntity): MovieEntity? {
+        val vodId = movie.id.removePrefix("${movie.playlistId}-")
+        return repository.getMovieDetails(movie.playlistId, vodId)
+    }
+
+    suspend fun loadSeriesDetails(series: SeriesEntity) =
+        repository.getSeriesDetails(series.playlistId, series.seriesId)
+
+    suspend fun fetchMovieCertification(movieId: String, movieName: String) =
+        repository.fetchCertificationForMovieSingle(movieId, movieName)
+
+    suspend fun fetchMovieOriginalLanguage(movieId: String, movieName: String) =
+        repository.fetchOriginalLanguageForMovieSingle(movieId, movieName)
+
+    suspend fun fetchMovieRtData(movieId: String, movieName: String) =
+        repository.fetchRtDataForMovieSingle(movieId, movieName)
+
+    suspend fun fetchMovieTrailerUrl(movie: MovieEntity): String? {
+        if (!movie.trailerUrl.isNullOrBlank()) return movie.trailerUrl
+        return repository.fetchTrailerUrlForMovie(movie.name)
+    }
+
+    suspend fun fetchSeriesCertification(seriesId: String, seriesName: String) =
+        repository.fetchCertificationForSeriesSingle(seriesId, seriesName)
+
+    suspend fun fetchSeriesOriginalLanguage(seriesId: String, seriesName: String) =
+        repository.fetchOriginalLanguageForSeriesSingle(seriesId, seriesName)
+
+    suspend fun fetchSeriesTrailerUrl(seriesName: String) =
+        repository.fetchTrailerUrlForSeries(seriesName)
 
     fun clearAllForType(selectedType: String?) {
         viewModelScope.launch {

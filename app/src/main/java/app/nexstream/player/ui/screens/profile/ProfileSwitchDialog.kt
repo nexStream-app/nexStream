@@ -1,7 +1,6 @@
 package app.nexstream.player.ui.screens.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -172,12 +171,12 @@ fun ThemedPinEntryDialog(
     val backspaceFocus = remember { FocusRequester() }
     val cancelFocus    = remember { FocusRequester() }
 
-    // Zone: 0 = row1 (0-4), 1 = row2 (5-9), 2 = action row
-    var focusedDigit by remember { mutableStateOf(0) } // index into digits list
+    // -1 = no digit focused (Cancel/Backspace has focus or nothing yet)
+    var focusedDigit by remember { mutableStateOf(-1) }
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(80)
-        try { digitFocusRequesters[0].requestFocus() } catch (_: Exception) {}
+        try { cancelFocus.requestFocus() } catch (_: Exception) {}
     }
 
     Dialog(
@@ -324,64 +323,81 @@ fun ThemedPinEntryDialog(
                 }
 
                 // Action row: ← Backspace  |  Cancel
+                var backspaceFocused by remember { mutableStateOf(false) }
+                var cancelFocused    by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    var backspaceFocused by remember { mutableStateOf(false) }
-                    var cancelFocused by remember { mutableStateOf(false) }
-
                     // Backspace
-                    OutlinedButton(
-                        onClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
-                        shape = RoundedCornerShape(8.dp),
+                    Box(
                         modifier = Modifier
                             .weight(1f)
+                            .height(48.dp)
                             .focusRequester(backspaceFocus)
-                            .onFocusChanged { backspaceFocused = it.isFocused }
+                            .onFocusChanged { backspaceFocused = it.isFocused; if (it.isFocused) focusedDigit = -1 }
+                            .focusable()
                             .onKeyEvent { e ->
-                                if (e.type == KeyEventType.KeyDown) when (e.key) {
-                                    Key.DirectionUp   -> { try { digitFocusRequesters[7].requestFocus() } catch (_: Exception) {}; true }
+                                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                when (e.key) {
+                                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { if (pin.isNotEmpty()) pin = pin.dropLast(1); true }
+                                    Key.DirectionUp    -> { try { digitFocusRequesters[7].requestFocus() } catch (_: Exception) {}; true }
                                     Key.DirectionRight -> { try { cancelFocus.requestFocus() } catch (_: Exception) {}; true }
-                                    Key.DirectionLeft  -> true
+                                    Key.DirectionLeft, Key.DirectionDown -> true
                                     else -> false
-                                } else false
-                            },
-                        colors = if (backspaceFocused)
-                            ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        else ButtonDefaults.outlinedButtonColors()
+                                }
+                            }
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (backspaceFocused) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .clickable { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(androidx.compose.material.icons.Icons.Default.Backspace, null,
-                            Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Delete")
+                        Row(
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Backspace, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Delete", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
                     }
 
                     // Cancel
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(8.dp),
+                    Box(
                         modifier = Modifier
                             .weight(1f)
+                            .height(48.dp)
                             .focusRequester(cancelFocus)
-                            .onFocusChanged { cancelFocused = it.isFocused }
+                            .onFocusChanged { cancelFocused = it.isFocused; if (it.isFocused) focusedDigit = -1 }
+                            .focusable()
                             .onKeyEvent { e ->
-                                if (e.type == KeyEventType.KeyDown) when (e.key) {
-                                    Key.DirectionUp   -> { try { digitFocusRequesters[8].requestFocus() } catch (_: Exception) {}; true }
-                                    Key.DirectionLeft -> { try { backspaceFocus.requestFocus() } catch (_: Exception) {}; true }
-                                    Key.DirectionRight -> true
+                                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                when (e.key) {
+                                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { onDismiss(); true }
+                                    Key.DirectionUp    -> { try { digitFocusRequesters[8].requestFocus() } catch (_: Exception) {}; true }
+                                    Key.DirectionLeft  -> { try { backspaceFocus.requestFocus() } catch (_: Exception) {}; true }
+                                    Key.DirectionRight, Key.DirectionDown -> true
                                     else -> false
-                                } else false
-                            },
-                        colors = if (cancelFocused)
-                            ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        else ButtonDefaults.outlinedButtonColors()
+                                }
+                            }
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (cancelFocused) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(androidx.compose.material.icons.Icons.Default.Close, null,
-                            Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Cancel")
+                        Row(
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Cancel", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
             }
