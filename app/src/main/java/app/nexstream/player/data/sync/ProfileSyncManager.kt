@@ -134,22 +134,26 @@ class ProfileSyncManager @Inject constructor(
                 dao.upsertProfile(entity)
                 dao.deleteFiltersForProfile(entity.id)
 
-                // Sync appearance
-                val appearance = p.optJSONObject("appearance")
-                if (appearance != null) {
-                    profileAppearanceDao.upsertAppearance(ProfileAppearanceEntity(
-                        profileId          = serverId,
-                        themeMode          = appearance.optString("theme_mode", "DARK"),
-                        fontScale          = if (appearance.has("font_scale")) appearance.getDouble("font_scale").toFloat() else null,
-                        fontWeight         = appearance.optString("font_weight").takeIf { it.isNotEmpty() },
-                        uiStyle            = appearance.optString("ui_style", "CLASSIC"),
-                        tvAspectRatio      = appearance.optString("tv_aspect_ratio", "FILL"),
-                        movieAspectRatio   = appearance.optString("movie_aspect_ratio", "FIT"),
-                        seriesAspectRatio  = appearance.optString("series_aspect_ratio", "FIT"),
-                        epgMiniPlayer      = appearance.optBoolean("epg_mini_player", true),
-                        keyboardFontScale  = appearance.optDouble("keyboard_font_scale", 1.0).toFloat(),
-                        updatedAt          = serverTime
-                    ))
+                // Sync appearance — isolated try-catch so a bad value can't abort the profile loop
+                try {
+                    val appearance = p.optJSONObject("appearance")
+                    if (appearance != null) {
+                        profileAppearanceDao.upsertAppearance(ProfileAppearanceEntity(
+                            profileId          = serverId,
+                            themeMode          = appearance.optString("theme_mode", "DARK"),
+                            fontScale          = if (appearance.has("font_scale") && !appearance.isNull("font_scale")) appearance.getDouble("font_scale").toFloat() else null,
+                            fontWeight         = appearance.optString("font_weight").takeIf { it.isNotEmpty() },
+                            uiStyle            = appearance.optString("ui_style", "CLASSIC"),
+                            tvAspectRatio      = appearance.optString("tv_aspect_ratio", "FILL"),
+                            movieAspectRatio   = appearance.optString("movie_aspect_ratio", "FIT"),
+                            seriesAspectRatio  = appearance.optString("series_aspect_ratio", "FIT"),
+                            epgMiniPlayer      = appearance.optBoolean("epg_mini_player", true),
+                            keyboardFontScale  = appearance.optDouble("keyboard_font_scale", 1.0).toFloat(),
+                            updatedAt          = serverTime
+                        ))
+                    }
+                } catch (e: Exception) {
+                    Log.w(tag, "Appearance sync failed for profile $serverId — skipping", e)
                 }
 
                 val filters = p.optJSONArray("filters") ?: continue
