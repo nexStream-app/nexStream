@@ -1,13 +1,14 @@
 package app.nexstream.player.ui.screens.catchup
 
 import androidx.activity.compose.BackHandler
+import app.nexstream.player.ui.components.TvKeyboardSheet
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -44,6 +45,12 @@ import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LocalNsAccent
+import app.nexstream.player.ui.theme.LocalNsBackground
+import app.nexstream.player.ui.theme.LocalUiStyle
+import app.nexstream.player.ui.theme.UiStyle
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -116,6 +123,8 @@ class CatchUpViewModel @Inject constructor(
 
     val isLoadingListings: StateFlow<Boolean>             = _loading.asStateFlow()
     val thumbnails:        StateFlow<Map<String, String>> = _thumbnails.asStateFlow()
+    val playlists = repository.getAllPlaylists()
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Available dates derived from listings — updates as parallel fetches complete
     val availableDates: StateFlow<List<Long>> = _listings
@@ -148,29 +157,23 @@ class CatchUpViewModel @Inject constructor(
             val accumulated = Mutex()
             val partial     = mutableListOf<ProgramEntity>()
             coroutineScope {
-                val deferreds   = channels.map { channel ->
+                val deferreds = channels.map { channel ->
                     async(Dispatchers.IO) {
                         try {
                             val epgId = channel.epgChannelId ?: return@async
                             val result = repository.getProgramsForChannelInRange(epgId, start, now)
                                 .first()
                                 .filter { it.endTime <= now && it.startTime >= start }
-                            accumulated.withLock {
-                                partial.addAll(result)
-                                // Emit partial so dates/panel update immediately
-                                _listings.value = partial.distinctBy { "${it.title}|${it.startTime}" }
-                                    .sortedByDescending { it.startTime }
-                            }
+                            accumulated.withLock { partial.addAll(result) }
                         } catch (_: Exception) {}
                     }
                 }
                 deferreds.awaitAll()
             } // end coroutineScope
-            val combined = partial
 
-            val deduped = combined
+            val deduped = partial
                 .distinctBy { "${it.title}|${it.startTime}" }
-                .sortedByDescending { it.startTime }
+                .sortedBy { it.title }
             android.util.Log.d("CatchUp", "Total: ${deduped.size} listings, ${deduped.map { it.title }.distinct().size} unique")
             _listings.value = deduped
             fetchThumbnails(deduped)
@@ -208,7 +211,6 @@ class CatchUpViewModel @Inject constructor(
                                 val url = "https://image.tmdb.org/t/p/w300$path"
                                 cached[title] = url
                                 newEntries.add(TmdbPosterEntity(title, url))
-                                _thumbnails.value = cached.toMap()
                                 break
                             }
                         }
@@ -217,7 +219,11 @@ class CatchUpViewModel @Inject constructor(
                     android.util.Log.w("CatchUp", "TMDB '$title': ${e::class.simpleName}")
                 }
             }
-            if (newEntries.isNotEmpty()) tmdbDao.upsertAll(newEntries)
+            if (newEntries.isNotEmpty()) {
+                tmdbDao.upsertAll(newEntries)
+                // Single emission for all newly fetched posters — avoids per-card redraws
+                _thumbnails.value = cached.toMap()
+            }
         }
     }
 
@@ -258,9 +264,14 @@ fun CatchUpScreen(
     onPlayTimeshift:    (streamUrl: String, programmeName: String, subtitle: String, description: String, durationMs: Long) -> Unit,
     onGridViewReady:    (app.nexstream.player.ui.components.PosterGridView?) -> Unit = {},
     onContentFocused:   () -> Unit = {},  // called when grid receives focus — MainScreen sets zone=CONTENT
+    onRequestSidebarFocus: () -> Unit = {},
     onDialogOpen:       (Boolean) -> Unit = {},
     onDownloadEpisode:  ((streamUrl: String, title: String) -> Unit)? = null,
-    restoreTick:        Int = 0,
+    showSearch:              Boolean = false,
+    restoreTick:             Int = 0,
+    onKeyboardDismissed:      (() -> Unit)? = null,
+    onKeyboardDismissedEmpty: (() -> Unit)? = null,
+    onDateSelect: (String?) -> Unit = {},
     viewModel:          CatchUpViewModel     = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel   = hiltViewModel()
 ) {
@@ -270,6 +281,7 @@ fun CatchUpScreen(
     val isLoading   by viewModel.isLoadingListings.collectAsState()
     val thumbnails  by viewModel.thumbnails.collectAsState()
     val watchlistIds by watchlistViewModel.watchlistIds.collectAsState()
+    val playlists    by viewModel.playlists.collectAsState()
 
     val today      = remember { todayStart() }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -278,22 +290,46 @@ fun CatchUpScreen(
         if (catchUpChannels.isNotEmpty()) viewModel.fetchAllCatchUpListings(catchUpChannels)
     }
 
+    var searchQuery    by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf("") }
+    var showKeyboard   by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showSearch) {
+        if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
+        else { showKeyboard = false }
+    }
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isBlank()) { debouncedQuery = ""; return@LaunchedEffect }
+        kotlinx.coroutines.delay(300)
+        debouncedQuery = searchQuery
+    }
+    var wasShowingKeyboard by remember { mutableStateOf(false) }
+    LaunchedEffect(showKeyboard) {
+        if (!showKeyboard && wasShowingKeyboard) {
+            kotlinx.coroutines.delay(200)
+            if (searchQuery.isNotBlank()) onKeyboardDismissed?.invoke()
+            else onKeyboardDismissedEmpty?.invoke()
+        }
+        wasShowingKeyboard = showKeyboard
+    }
+
     // Programmes filtered by date AND only those with a TMDB poster
     val selectedDateMs = if (selectedDateKey != null && selectedDateKey != "FAVOURITES")
         selectedDateKey.toLongOrNull() else null
 
-    val programmesForView = remember(allListings, selectedDateMs, selectedDateKey, thumbnails, watchlistIds) {
+    val programmesForView = remember(allListings, selectedDateMs, selectedDateKey, watchlistIds, debouncedQuery) {
         val dateFiltered = if (selectedDateMs == null) allListings
         else { val end = selectedDateMs + 86_400_000L; allListings.filter { it.startTime >= selectedDateMs && it.startTime < end } }
 
-        val withPosters = dateFiltered.filter { thumbnails.containsKey(it.title) }
+        val dedupedByTitle = dateFiltered.distinctBy { it.title }.sortedBy { it.title }
 
-        val dedupedByTitle = withPosters.distinctBy { it.title }.sortedBy { it.title }
-
-        // Favourites filter — programme title must be in watchlist
-        if (selectedDateKey == "FAVOURITES") {
-            dedupedByTitle.filter { prog -> watchlistIds.any { id -> id.contains(prog.title) } }
+        val listByDate = if (selectedDateKey == "FAVOURITES") {
+            dedupedByTitle.filter { prog -> prog.title.hashCode().toString() in watchlistIds }
         } else dedupedByTitle
+
+        if (showSearch && debouncedQuery.isNotBlank())
+            listByDate.filter { it.title.contains(debouncedQuery, ignoreCase = true) }
+        else listByDate
     }
 
     var selectedProgramme     by remember { mutableStateOf<String?>(null) }
@@ -322,12 +358,19 @@ fun CatchUpScreen(
 
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
+    BackHandler(enabled = showKeyboard) { showKeyboard = false }
     BackHandler(enabled = selectedProgramme != null) { selectedProgramme = null }
 
     LaunchedEffect(selectedProgramme) { onDialogOpen(selectedProgramme != null) }
 
     if (selectedProgramme != null && episodesForProgramme.isNotEmpty()) {
-        val isBookmarked = watchlistIds.any { it.contains(selectedProgramme!!) }
+        val isBookmarked = selectedProgramme!!.hashCode().toString() in watchlistIds
+        val catchUpPlaylistName = if (playlists.size > 1) {
+            val firstChannel = episodesForProgramme.firstOrNull()?.let { ep ->
+                catchUpChannels.find { ch -> ch.epgChannelId == ep.channelId }
+            }
+            playlists.find { it.id == firstChannel?.playlistId }?.name
+        } else null
         CatchUpDetailsDialog(
             programmeName = selectedProgramme!!,
             posterUrl     = thumbnails[selectedProgramme!!],
@@ -336,6 +379,7 @@ fun CatchUpScreen(
             today         = today,
             timeFormat    = timeFormat,
             isBookmarked  = isBookmarked,
+            playlistName  = catchUpPlaylistName,
             onToggleWatchlist = {
                 watchlistViewModel.toggleWatchlist(
                     WatchlistEntity(
@@ -359,16 +403,29 @@ fun CatchUpScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        val uiStyle = LocalUiStyle.current
+        if (uiStyle == UiStyle.MODERN) {
+            ModernCatchUpContent(
+                programmes      = programmesForView,
+                thumbnails      = thumbnails,
+                catchUpChannels = catchUpChannels,
+                isLoading       = isLoading,
+                today           = today,
+                timeFormat      = timeFormat,
+                onProgrammeClick = { title -> selectedProgramme = title },
+            )
+        } else {
+        Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
                 text = when {
-                    selectedDateKey == "FAVOURITES" -> "Catch Up · Favourites"
-                    selectedDateKey != null         -> "Catch Up · ${catchUpDateLabel(selectedDateKey.toLong(), today)}"
-                    else                            -> "Catch Up · All"
+                    selectedDateKey == "FAVOURITES" -> "Favourites"
+                    selectedDateKey != null         -> catchUpDateLabel(selectedDateKey.toLong(), today)
+                    else                            -> "All"
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = sTheme.categoryText
@@ -379,19 +436,20 @@ fun CatchUpScreen(
         when {
             catchUpChannels.isEmpty() -> EmptyState(Icons.Default.Replay, "No catch-up channels available")
             isLoading                 -> LoadingState()
-            programmesForView.isEmpty() && thumbnails.isEmpty() -> LoadingState("Loading posters…")
             programmesForView.isEmpty() -> EmptyState(Icons.Default.Schedule, "No programmes available")
             else -> {
-                // Map programmes to PosterItems for PosterGridView — same as Series/Movies
+                // Map programmes to PosterItems for PosterGridView — only show cards that have a TMDB poster
                 val posterItems = remember(programmesForView, thumbnails) {
-                    programmesForView.map { prog ->
-                        app.nexstream.player.ui.components.PosterItem(
-                            id        = prog.title,
-                            name      = prog.title,
-                            posterUrl = thumbnails[prog.title],
-                            badge     = catchUpChannels.firstOrNull { it.id == prog.channelId }?.name?.take(14)
-                        )
-                    }
+                    programmesForView
+                        .filter { thumbnails[it.title] != null }
+                        .map { prog ->
+                            app.nexstream.player.ui.components.PosterItem(
+                                id        = prog.title,
+                                name      = prog.title,
+                                posterUrl = thumbnails[prog.title],
+                                badge     = catchUpChannels.firstOrNull { it.id == prog.channelId }?.name?.take(14)
+                            )
+                        }
                 }
                 val primaryColor       = MaterialTheme.colorScheme.primary.toArgb()
                 val onPrimaryColor     = MaterialTheme.colorScheme.onPrimary.toArgb()
@@ -404,7 +462,7 @@ fun CatchUpScreen(
                 // Use a holder so update{} can refresh the callback with latest state
                 val onLongClickRef     = remember { mutableStateOf<((String) -> Unit)?>(null) }
                 onLongClickRef.value   = { title ->
-                    val isBookmarked = watchlistIds.any { it.contains(title) }
+                    val isBookmarked = title.hashCode().toString() in watchlistIds
                     watchlistViewModel.toggleWatchlist(
                         WatchlistEntity(
                             id        = title.hashCode().toString(),
@@ -425,7 +483,7 @@ fun CatchUpScreen(
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
                         app.nexstream.player.ui.components.PosterGridView(ctx).also { gridViewRef.value = it; onGridViewReady(it) }.apply {
-                            setColumnCount(5)
+                            setColumnCount(6)
                             blockFocus()
                             callbacks = object : app.nexstream.player.ui.components.PosterGridCallbacks {
                                 override fun onItemClick(item: app.nexstream.player.ui.components.PosterItem, index: Int) {
@@ -437,7 +495,7 @@ fun CatchUpScreen(
                                 override fun onItemFocused(index: Int) {
                                     onContentFocused()  // grid has focus → zone = CONTENT
                                 }
-                                override fun onLeftEdge()  {}  // trapped — don't exit to rail
+                                override fun onLeftEdge()  { onRequestSidebarFocus() }
                                 override fun onTopEdge()   {}  // trapped — don't exit to header
                             }
                         }
@@ -463,6 +521,17 @@ fun CatchUpScreen(
                 )
             }
         }
+        }
+        } // end else (Classic UI)
+        TvKeyboardSheet(
+            visible       = showKeyboard,
+            value         = searchQuery,
+            onValueChange = { searchQuery = it },
+            onDone        = { showKeyboard = false },
+            onDismiss     = { showKeyboard = false },
+            hint          = "Search catch-up…",
+            modifier      = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -487,7 +556,7 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, me
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Details dialog — mirrors SeriesDetailsDialog with My List button, no seasons
+// Details dialog — styled to match SeriesDetailsDialog
 // ─────────────────────────────────────────────────────────────────────────────
 
 private const val LOW_SPACE_BUFFER_CU = 250L * 1024 * 1024
@@ -535,17 +604,61 @@ private sealed class CatchUpInfoBarState {
     object LowSpaceWarning : CatchUpInfoBarState()
 }
 
+// ── Action pill — matches DialogActionPill in SeriesDetailsDialog exactly ────
+@Composable
+private fun CatchUpDialogPill(
+    icon:       ImageVector?,
+    label:      String,
+    isSelected: Boolean,
+    isPressed:  Boolean = false,
+    accent:     Color,
+    onClick:    () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(if (isSelected) accent else Color.Black.copy(alpha = 0.55f))
+            .border(
+                width = if (isSelected) 0.dp else 1.dp,
+                color = if (isSelected) Color.Transparent else Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(50.dp),
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = null,
+                modifier           = Modifier.size(14.dp),
+                tint               = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f),
+            )
+        }
+        Text(
+            text       = label,
+            fontSize   = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color      = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f),
+        )
+    }
+}
+
+// ── Overlay button — matches SeriesDetailsDialog style ────────────────────────
 @Composable
 private fun CatchUpOverlayButton(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     if (selected) {
         Button(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(6.dp),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text(label, fontSize = 12.sp)
         }
     } else {
         OutlinedButton(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))) {
+            Text(label, fontSize = 12.sp)
         }
     }
 }
@@ -561,12 +674,15 @@ fun CatchUpDetailsDialog(
     today:             Long,
     timeFormat:        SimpleDateFormat,
     isBookmarked:      Boolean,
+    playlistName:      String? = null,
     onToggleWatchlist: () -> Unit,
     viewModel:         CatchUpViewModel,
     onDownloadEpisode: ((streamUrl: String, title: String) -> Unit)? = null,
     onDismiss:         () -> Unit,
     onPlay:            (streamUrl: String, programmeName: String, subtitle: String, description: String, durationMs: Long) -> Unit
 ) {
+    val accent     = LocalNsAccent.current
+    val background = LocalNsBackground.current
     val sevenDaysAgo = remember { System.currentTimeMillis() - 7 * 86_400_000L }
     val limitedEpisodes = remember(episodes) {
         episodes.filter { it.startTime >= sevenDaysAgo }
@@ -574,9 +690,9 @@ fun CatchUpDetailsDialog(
             .sortedByDescending { it.startTime }
     }
 
-    // Focus state — mirrors SeriesDetailsDialog exactly
-    val barButtonCount   = 2  // Close | My List
-    var selectedButton   by remember { mutableIntStateOf(1) } // default My List (rightmost)
+    val barButtonCount   = 2  // 0 = Close, 1 = My List
+    var selectedButton   by remember { mutableIntStateOf(1) }
+    var pressedButton    by remember { mutableStateOf<Int?>(null) }
     var inGrid           by remember { mutableStateOf(false) }
     var focusedGridIndex by remember { mutableIntStateOf(0) }
     var infoBarState     by remember { mutableStateOf<CatchUpInfoBarState>(CatchUpInfoBarState.Idle) }
@@ -586,17 +702,15 @@ fun CatchUpDetailsDialog(
 
     LaunchedEffect(focusedGridIndex) { infoBarState = CatchUpInfoBarState.Idle }
 
-    val dialogFocus      = remember { FocusRequester() }
-    val closeButtonFR    = remember { FocusRequester() }
-    val gridFRs          = remember(limitedEpisodes.size) { mutableMapOf<Int, FocusRequester>() }
-    val gridState        = rememberLazyGridState()
-    val scope            = rememberCoroutineScope()
+    val dialogFocus = remember { FocusRequester() }
+    val gridFRs     = remember(limitedEpisodes.size) { mutableMapOf<Int, FocusRequester>() }
+    val gridState   = rememberLazyListState()
+    val scope       = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(150)
-        // Focus first grid item on load — this is working correctly
         if (limitedEpisodes.isNotEmpty()) {
-            inGrid = true
-            focusedGridIndex = 0
+            inGrid = true; focusedGridIndex = 0
             try { gridFRs[0]?.requestFocus() } catch (_: Exception) {
                 try { dialogFocus.requestFocus() } catch (_: Exception) {}
             }
@@ -606,8 +720,6 @@ fun CatchUpDetailsDialog(
     }
 
     fun buildUrl(ep: ProgramEntity): String? {
-        // ProgramEntity.channelId = epgChannelId string (e.g. "itv1.uk") from XMLTV parser
-        // Match by epgChannelId first, then fall back to id
         val ch = channels.firstOrNull { it.epgChannelId == ep.channelId }
             ?: channels.firstOrNull { it.id == ep.channelId }
             ?: channels.firstOrNull()
@@ -621,8 +733,7 @@ fun CatchUpDetailsDialog(
     }
 
     fun startDownloadFlow(ep: ProgramEntity) {
-        infoBarState = CatchUpInfoBarState.CheckingSize
-        overlayButton = 1
+        infoBarState = CatchUpInfoBarState.CheckingSize; overlayButton = 1
         scope.launch {
             val url       = buildUrl(ep) ?: run { infoBarState = CatchUpInfoBarState.Idle; return@launch }
             val available = getAvailableStorageBytesCu()
@@ -635,14 +746,12 @@ fun CatchUpDetailsDialog(
     }
 
     fun playEp(ep: ProgramEntity) {
-        val url       = buildUrl(ep) ?: return
+        val url      = buildUrl(ep) ?: return
         val dateLabel = catchUpDateLabel(startOfDay(ep.startTime), today)
-        val timeFmt   = timeFormat.format(java.util.Date(ep.startTime))
-        val durMins   = ((ep.endTime - ep.startTime) / 60_000L).toInt()
-        val subtitle  = "$dateLabel · $timeFmt · ${formatDur(durMins)}"
-        val desc      = ep.description ?: ""
+        val timeFmt  = timeFormat.format(java.util.Date(ep.startTime))
+        val durMins  = ((ep.endTime - ep.startTime) / 60_000L).toInt()
         onDismiss()
-        onPlay(url, programmeName, subtitle, desc, ep.endTime - ep.startTime)
+        onPlay(url, programmeName, "$dateLabel · $timeFmt · ${formatDur(durMins)}", ep.description ?: "", ep.endTime - ep.startTime)
     }
 
     androidx.compose.ui.window.Dialog(
@@ -650,15 +759,52 @@ fun CatchUpDetailsDialog(
         properties = androidx.compose.ui.window.DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress      = true,
-            dismissOnClickOutside   = true
+            dismissOnClickOutside   = true,
         )
     ) {
-        Surface(
-            modifier       = Modifier.fillMaxWidth(0.90f).fillMaxHeight(0.90f),
-            shape          = RoundedCornerShape(16.dp),
-            color          = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        androidx.compose.runtime.LaunchedEffect(Unit) { dialogWindow?.setDimAmount(0.85f) }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.90f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(background)
         ) {
+            // ── Full-bleed backdrop ───────────────────────────────────────
+            if (posterUrl != null) {
+                AsyncImage(model = posterUrl, contentDescription = null,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter)
+            }
+
+            // ── Gradient overlay ──────────────────────────────────────────
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f  to Color.Black.copy(alpha = 0.40f),
+                            0.40f to Color.Black.copy(alpha = 0.55f),
+                            0.72f to Color.Black.copy(alpha = 0.80f),
+                            1.0f  to Color.Black.copy(alpha = 0.97f),
+                        )
+                    )
+                )
+            )
+
+            // ── Floating Close at top-right ───────────────────────────────
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
+                CatchUpDialogPill(
+                    icon       = Icons.Default.Close,
+                    label      = "Close",
+                    isSelected = !inGrid && selectedButton == 0,
+                    isPressed  = pressedButton == 0,
+                    accent     = accent,
+                    onClick    = onDismiss,
+                )
+            }
+
+            // ── Content column ────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -667,13 +813,13 @@ fun CatchUpDetailsDialog(
                     .onKeyEvent { e ->
                         if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
 
-                        // ── Overlay active — intercept all nav ─────────────────
-                        val overlayActive = infoBarState !is CatchUpInfoBarState.Idle
+                        val overlayActive = infoBarState !is CatchUpInfoBarState.Idle &&
+                                infoBarState !is CatchUpInfoBarState.CheckingSize
                         if (overlayActive) {
                             val maxBtn = when (infoBarState) {
-                                is CatchUpInfoBarState.PlayChoice     -> if (onDownloadEpisode != null) 2 else 1
-                                is CatchUpInfoBarState.StorageInfo    -> 2
-                                is CatchUpInfoBarState.LowSpaceWarning-> 2
+                                is CatchUpInfoBarState.PlayChoice      -> if (onDownloadEpisode != null) 2 else 1
+                                is CatchUpInfoBarState.StorageInfo     -> 2
+                                is CatchUpInfoBarState.LowSpaceWarning -> 2
                                 else -> 1
                             }
                             when (e.key) {
@@ -713,22 +859,24 @@ fun CatchUpDetailsDialog(
                                 else -> false
                             }
                         } else {
-                            // ── Normal navigation ──────────────────────────────
                             when (e.key) {
                                 Key.DirectionLeft -> {
                                     if (!inGrid) { selectedButton = (selectedButton - 1 + barButtonCount) % barButtonCount; true }
                                     else {
-                                        val col = focusedGridIndex % CATCHUP_GRID_COLS
-                                        if (col > 0) { focusedGridIndex--; scope.launch { gridFRs[focusedGridIndex]?.requestFocus() }; true }
-                                        else false
+                                        if (focusedGridIndex > 0) {
+                                            focusedGridIndex--
+                                            scope.launch { gridState.animateScrollToItem(focusedGridIndex); kotlinx.coroutines.delay(40); gridFRs[focusedGridIndex]?.requestFocus() }
+                                            true
+                                        } else false
                                     }
                                 }
                                 Key.DirectionRight -> {
                                     if (!inGrid) { selectedButton = (selectedButton + 1) % barButtonCount; true }
                                     else {
-                                        val col = focusedGridIndex % CATCHUP_GRID_COLS
-                                        if (col < CATCHUP_GRID_COLS - 1 && focusedGridIndex < limitedEpisodes.lastIndex) {
-                                            focusedGridIndex++; scope.launch { gridFRs[focusedGridIndex]?.requestFocus() }; true
+                                        if (focusedGridIndex < limitedEpisodes.lastIndex) {
+                                            focusedGridIndex++
+                                            scope.launch { gridState.animateScrollToItem(focusedGridIndex); kotlinx.coroutines.delay(40); gridFRs[focusedGridIndex]?.requestFocus() }
+                                            true
                                         } else false
                                     }
                                 }
@@ -736,108 +884,113 @@ fun CatchUpDetailsDialog(
                                     if (!inGrid && limitedEpisodes.isNotEmpty()) {
                                         inGrid = true
                                         val target = focusedGridIndex.coerceIn(0, limitedEpisodes.lastIndex)
-                                        scope.launch {
-                                            gridState.animateScrollToItem(target)
-                                            kotlinx.coroutines.delay(60)
-                                            gridFRs[target]?.requestFocus()
-                                        }
+                                        scope.launch { gridState.animateScrollToItem(target); kotlinx.coroutines.delay(60); gridFRs[target]?.requestFocus() }
                                         true
-                                    } else if (inGrid) {
-                                        val next = focusedGridIndex + CATCHUP_GRID_COLS
-                                        if (next < limitedEpisodes.size) {
-                                            focusedGridIndex = next
-                                            scope.launch { gridState.animateScrollToItem(next); kotlinx.coroutines.delay(40); gridFRs[next]?.requestFocus() }
-                                            true
-                                        } else {
-                                            // Bottom of grid → action bar
-                                            inGrid = false; selectedButton = barButtonCount - 1
-                                            try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                            true
-                                        }
                                     } else false
                                 }
                                 Key.DirectionUp -> {
                                     if (inGrid) {
-                                        val prev = focusedGridIndex - CATCHUP_GRID_COLS
-                                        if (prev >= 0) {
-                                            focusedGridIndex = prev
-                                            scope.launch { gridState.animateScrollToItem(prev); kotlinx.coroutines.delay(40); gridFRs[prev]?.requestFocus() }
-                                        } else {
-                                            inGrid = false
-                                            try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                        }
+                                        inGrid = false
+                                        try { dialogFocus.requestFocus() } catch (_: Exception) {}
                                         true
                                     } else if (!inGrid && limitedEpisodes.isNotEmpty()) {
                                         inGrid = true
-                                        val lastRow = ((limitedEpisodes.size - 1) / CATCHUP_GRID_COLS) * CATCHUP_GRID_COLS
-                                        val target = (lastRow + (focusedGridIndex % CATCHUP_GRID_COLS)).coerceAtMost(limitedEpisodes.lastIndex)
-                                        focusedGridIndex = target
-                                        scope.launch { gridState.animateScrollToItem(target); kotlinx.coroutines.delay(60); gridFRs[target]?.requestFocus() }
+                                        focusedGridIndex = focusedGridIndex.coerceIn(0, limitedEpisodes.lastIndex)
+                                        scope.launch { gridState.animateScrollToItem(focusedGridIndex); kotlinx.coroutines.delay(60); gridFRs[focusedGridIndex]?.requestFocus() }
                                         true
                                     } else false
                                 }
                                 Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                                     if (!inGrid) {
-                                        when (selectedButton) {
-                                            0 -> onDismiss()
-                                            1 -> onToggleWatchlist()
+                                        val btn = selectedButton
+                                        pressedButton = btn
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(120); pressedButton = null
+                                            when (btn) { 0 -> onDismiss(); 1 -> onToggleWatchlist() }
                                         }
                                         true
                                     } else {
                                         val ep = limitedEpisodes.getOrNull(focusedGridIndex)
-                                        if (ep != null) {
-                                            infoBarState = CatchUpInfoBarState.PlayChoice
-                                            overlayButton = 0
-                                        }
+                                        if (ep != null) { infoBarState = CatchUpInfoBarState.PlayChoice; overlayButton = 0 }
                                         true
                                     }
                                 }
+                                Key.Back -> { onDismiss(); true }
                                 else -> false
                             }
                         }
                     }
             ) {
-                // ── Header / backdrop ─────────────────────────────────────────
-                Box(modifier = Modifier.fillMaxWidth().height(140.dp)) {
-                    if (posterUrl != null) {
-                        AsyncImage(model = posterUrl, contentDescription = null,
-                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    } else {
-                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+                Spacer(Modifier.weight(1f))
+
+                // ── Programme info ────────────────────────────────────────
+                Column(
+                    modifier            = Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Text(programmeName, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                        color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "${limitedEpisodes.size} episode${if (limitedEpisodes.size != 1) "s" else ""} · last 7 days",
+                        fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f),
+                    )
+                    if (!playlistName.isNullOrEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.PlaylistPlay, null, modifier = Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.45f))
+                            Text(playlistName, fontSize = 11.sp, color = Color.White.copy(alpha = 0.45f), maxLines = 1)
+                        }
                     }
-                    Box(modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)))
-                    ))
+                    Spacer(Modifier.height(8.dp))
                     Row(
-                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Bottom
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
                     ) {
-                        if (posterUrl != null) {
-                            AsyncImage(model = posterUrl, contentDescription = programmeName,
-                                modifier = Modifier.width(56.dp).height(80.dp).clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop)
-                        }
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(programmeName, style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold, color = Color.White,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text("${limitedEpisodes.size} episode${if (limitedEpisodes.size != 1) "s" else ""} · last 7 days",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.8f))
-                        }
+                        CatchUpDialogPill(
+                            icon       = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            label      = if (isBookmarked) "Remove from My List" else "My List",
+                            isSelected = !inGrid && selectedButton == 1,
+                            isPressed  = pressedButton == 1,
+                            accent     = accent,
+                            onClick    = onToggleWatchlist,
+                        )
                     }
                 }
 
-                // ── Info bar / inline overlay — mirrors SeriesDetailsDialog ───
+                // ── Info bar ──────────────────────────────────────────────
+                val infoBarHeight = when (infoBarState) {
+                    is CatchUpInfoBarState.StorageInfo, is CatchUpInfoBarState.LowSpaceWarning -> 72.dp
+                    else -> 52.dp
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .height(infoBarHeight)
+                        .background(Color.Black.copy(alpha = 0.70f))
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     when (val st = infoBarState) {
+                        is CatchUpInfoBarState.Idle -> {
+                            if (focusedEpisode != null) {
+                                val ep        = focusedEpisode
+                                val dateLabel = catchUpDateLabel(startOfDay(ep.startTime), today)
+                                val timeLabel = timeFormat.format(java.util.Date(ep.startTime))
+                                val durMins   = ((ep.endTime - ep.startTime) / 60_000L).toInt()
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.align(Alignment.CenterStart)) {
+                                    Text("$dateLabel · $timeLabel · ${formatDur(durMins)}",
+                                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                        color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (!ep.description.isNullOrEmpty())
+                                        Text(ep.description!!, fontSize = 12.sp,
+                                            color = Color.White.copy(alpha = 0.65f),
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            } else {
+                                Text("Select an episode", fontSize = 13.sp,
+                                    color = Color.White.copy(alpha = 0.40f),
+                                    modifier = Modifier.align(Alignment.CenterStart))
+                            }
+                        }
                         is CatchUpInfoBarState.PlayChoice -> {
                             Row(modifier = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -851,20 +1004,25 @@ fun CatchUpDetailsDialog(
                             Row(modifier = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Text("Checking size…", style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                                Text("Checking size…", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
                             }
                         }
                         is CatchUpInfoBarState.StorageInfo -> {
                             Column(modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Episode: ${formatBytesCu(st.size)}  ·  Available: ${formatBytesCu(st.available)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = when { st.notEnough -> MaterialTheme.colorScheme.error; st.lowAfter -> MaterialTheme.colorScheme.tertiary; else -> MaterialTheme.colorScheme.onSurfaceVariant })
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "Episode: ${formatBytesCu(st.size)}  ·  Available: ${formatBytesCu(st.available)}",
+                                    fontSize = 12.sp,
+                                    color = when {
+                                        st.notEnough -> MaterialTheme.colorScheme.error
+                                        st.lowAfter  -> MaterialTheme.colorScheme.tertiary
+                                        else         -> Color.White.copy(alpha = 0.75f)
+                                    },
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    CatchUpOverlayButton("Cancel", overlayButton == 0) { infoBarState = CatchUpInfoBarState.Idle }
+                                    CatchUpOverlayButton("Cancel",   overlayButton == 0) { infoBarState = CatchUpInfoBarState.Idle }
                                     CatchUpOverlayButton("Download", overlayButton == 1, enabled = !st.notEnough) {}
                                 }
                             }
@@ -872,192 +1030,121 @@ fun CatchUpDetailsDialog(
                         is CatchUpInfoBarState.LowSpaceWarning -> {
                             Column(modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Low storage — less than ${formatBytesCu(LOW_SPACE_BUFFER_CU)} will remain after download.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "Low storage — less than ${formatBytesCu(LOW_SPACE_BUFFER_CU)} will remain.",
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    CatchUpOverlayButton("Cancel", overlayButton == 0) { infoBarState = CatchUpInfoBarState.Idle }
+                                    CatchUpOverlayButton("Cancel",          overlayButton == 0) { infoBarState = CatchUpInfoBarState.Idle }
                                     CatchUpOverlayButton("Continue Anyway", overlayButton == 1) {}
                                 }
                             }
                         }
-                        is CatchUpInfoBarState.Idle -> {
-                            if (focusedEpisode != null) {
-                                val ep        = focusedEpisode
-                                val dateLabel = catchUpDateLabel(startOfDay(ep.startTime), today)
-                                val timeLabel = timeFormat.format(java.util.Date(ep.startTime))
-                                val durMins   = ((ep.endTime - ep.startTime) / 60_000L).toInt()
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp),
-                                    modifier = Modifier.align(Alignment.CenterStart)) {
-                                    Text("$dateLabel · $timeLabel · ${formatDur(durMins)}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (!ep.description.isNullOrEmpty()) {
-                                        Text(ep.description!!,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+
+                // ── Episode grid ──────────────────────────────────────────
+                when {
+                    limitedEpisodes.isEmpty() -> Box(
+                        Modifier.fillMaxWidth().height(200.dp).background(Color.Black.copy(alpha = 0.70f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("No episodes in the last 7 days", fontSize = 13.sp, color = Color.White.copy(alpha = 0.5f))
+                    }
+                    else -> LazyRow(
+                        state                 = gridState,
+                        modifier              = Modifier.fillMaxWidth().height(190.dp).background(Color.Black.copy(alpha = 0.70f)),
+                        contentPadding        = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        itemsIndexed(limitedEpisodes, key = { idx, ep -> "${idx}_${ep.startTime}_${ep.endTime}" }) { index, episode ->
+                            val fr      = remember { FocusRequester() }
+                            LaunchedEffect(fr) { gridFRs[index] = fr }
+                            val isFocused = inGrid && focusedGridIndex == index
+                            val dateLabel = remember(episode.startTime) { catchUpDateLabel(startOfDay(episode.startTime), today) }
+                            val timeLabel = remember(episode.startTime) { timeFormat.format(java.util.Date(episode.startTime)) }
+                            val durMins   = ((episode.endTime - episode.startTime) / 60_000L).toInt()
+                            val chName    = remember(episode.channelId) {
+                                (channels.firstOrNull { it.epgChannelId == episode.channelId }
+                                    ?: channels.firstOrNull { it.id == episode.channelId })?.name?.take(12)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(236.dp)
+                                    .fillParentMaxHeight()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(
+                                        width = if (isFocused) 2.dp else 1.dp,
+                                        color = if (isFocused) accent else Color.White.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(8.dp),
+                                    )
+                                    .focusRequester(fr)
+                                    .focusable()
+                                    .onFocusChanged { fs ->
+                                        if (fs.isFocused) {
+                                            focusedGridIndex = index; inGrid = true
+                                            infoBarState = CatchUpInfoBarState.Idle
+                                        }
+                                    }
+                                    .clickable {
+                                        focusedGridIndex = index; inGrid = true
+                                        infoBarState = CatchUpInfoBarState.PlayChoice; overlayButton = 0
+                                    }
+                            ) {
+                                if (posterUrl != null) {
+                                    AsyncImage(model = posterUrl, contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                                        alignment = androidx.compose.ui.Alignment.TopCenter)
+                                } else {
+                                    Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.08f)))
+                                }
+                                // Dark scrim — lighter on focus
+                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (isFocused) 0.10f else 0.38f)))
+                                // Date badge — top start
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart).padding(6.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.Black.copy(alpha = 0.70f))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Text(dateLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                }
+                                // Channel badge — top end
+                                if (chName != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd).padding(6.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(accent.copy(alpha = 0.85f))
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(chName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                     }
                                 }
-                            } else {
-                                Text("Select an episode",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                    modifier = Modifier.align(Alignment.CenterStart))
+                                // Time + duration — bottom start
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart).padding(6.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.Black.copy(alpha = 0.70f))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Text("$timeLabel · ${formatDur(durMins)}", fontSize = 11.sp, color = Color.White)
+                                }
+                                // Play icon on focus
+                                if (isFocused) {
+                                    Icon(Icons.Default.PlayArrow, null, tint = Color.White,
+                                        modifier = Modifier.size(32.dp).align(Alignment.Center))
+                                }
                             }
                         }
                     }
                 }
 
-                HorizontalDivider()
-
-                // ── Episode grid ──────────────────────────────────────────────
-                LazyVerticalGrid(
-                    columns               = GridCells.Fixed(CATCHUP_GRID_COLS),
-                    state                 = gridState,
-                    modifier              = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding        = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement   = Arrangement.spacedBy(6.dp)
-                ) {
-                    itemsIndexed(
-                        items = limitedEpisodes,
-                        key   = { idx, ep -> "${idx}_${ep.startTime}_${ep.endTime}" }
-                    ) { index, episode ->
-                        val fr        = remember { FocusRequester() }
-                        LaunchedEffect(fr) { gridFRs[index] = fr }
-                        val isFocused = inGrid && focusedGridIndex == index
-                        val dateLabel = remember(episode.startTime) { catchUpDateLabel(startOfDay(episode.startTime), today) }
-                        val timeLabel = remember(episode.startTime) { timeFormat.format(java.util.Date(episode.startTime)) }
-                        val durMins   = ((episode.endTime - episode.startTime) / 60_000L).toInt()
-
-                        Box(
-                            modifier = Modifier
-                                .aspectRatio(16f / 9f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .focusRequester(fr)
-                                .focusable()
-                                .onFocusChanged { fs ->
-                                    if (fs.isFocused) {
-                                        focusedGridIndex = index
-                                        inGrid           = true
-                                        infoBarState     = CatchUpInfoBarState.Idle
-                                    }
-                                }
-                                .then(
-                                    if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                    else Modifier
-                                )
-                                .clickable {
-                                    focusedGridIndex = index
-                                    inGrid           = true
-                                    infoBarState     = CatchUpInfoBarState.PlayChoice
-                                    overlayButton    = 0
-                                }
-                        ) {
-                            // Thumbnail — TMDB poster
-                            if (posterUrl != null) {
-                                AsyncImage(model = posterUrl, contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                            } else {
-                                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
-                            }
-                            // Dim overlay
-                            Box(Modifier.fillMaxSize().background(
-                                Color.Black.copy(alpha = if (isFocused) 0.15f else 0.45f)
-                            ))
-                            // Date badge — top left
-                            Surface(modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
-                                Text(dateLabel, style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp))
-                            }
-                            // Channel name badge — top right
-                            val chName = remember(episode.channelId) {
-                                channels.firstOrNull { it.epgChannelId == episode.channelId }?.name
-                                    ?: channels.firstOrNull { it.id == episode.channelId }?.name
-                                        ?.take(12) // truncate long names
-                            }
-                            if (chName != null) {
-                                Surface(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
-                                    Text(chName, style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp))
-                                }
-                            }
-                            // Time + duration
-                            Surface(modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
-                                shape = RoundedCornerShape(4.dp), color = Color.Black.copy(alpha = 0.75f)) {
-                                Text("$timeLabel · ${formatDur(durMins)}", style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp))
-                            }
-                            if (isFocused) {
-                                Icon(Icons.Default.PlayArrow, null, tint = Color.White,
-                                    modifier = Modifier.size(28.dp).align(Alignment.Center))
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // ── Action bar — mirrors SeriesDetailsDialog exactly ──────────
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Spacer(Modifier.weight(1f))
-
-                    // 0 = Close
-                    val closeSelected = !inGrid && selectedButton == 0
-                    OutlinedButton(
-                        onClick  = onDismiss,
-                        shape    = RoundedCornerShape(8.dp),
-                        colors   = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (closeSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                            contentColor   = if (closeSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border   = androidx.compose.foundation.BorderStroke(
-                            width = if (closeSelected) 2.dp else 1.dp,
-                            color = if (closeSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier.focusRequester(closeButtonFR)
-                    ) {
-                        Icon(Icons.Default.Close, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Close")
-                    }
-
-                    // 1 = My List (default focus — rightmost)
-                    val myListSelected = !inGrid && selectedButton == 1
-                    OutlinedButton(
-                        onClick = onToggleWatchlist,
-                        shape   = RoundedCornerShape(8.dp),
-                        colors  = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (myListSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
-                            contentColor   = if (myListSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        border  = androidx.compose.foundation.BorderStroke(
-                            width = if (myListSelected) 2.dp else 1.dp,
-                            color = if (myListSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                    ) {
-                        Icon(if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (isBookmarked) "Remove from My List" else "Add to My List")
-                    }
-                }
             }
         }
     }

@@ -26,6 +26,9 @@ class ReminderWorker @AssistedInject constructor(
         val startTime    = inputData.getLong(KEY_START_TIME, 0L)
 
         return try {
+            // Delete reminder from Room now that it has fired — auto-clears from the list
+            reminderDao.deleteById(reminderId)
+
             // Send local broadcast to MainActivity to show the overlay
             val intent = Intent(ACTION_SHOW_REMINDER).apply {
                 setPackage(context.packageName)

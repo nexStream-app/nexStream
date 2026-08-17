@@ -1,0 +1,135 @@
+================================================================================
+NexStream Changelog
+================================================================================
+
+--------------------------------------------------------------------------------
+Build 0073 — 2026-07-12
+--------------------------------------------------------------------------------
+
+FIXES & IMPROVEMENTS
+
+Clear All button in panel — consistent styling
+  The "Clear All" row at the bottom of the Recent and My List panels now uses
+  the same pill shape, padding, scale animation, and focus background as the
+  other panel category items (previously it was a flat row with no clip or
+  scale, so it looked visually different when focused).
+
+Clear confirm dialog — Cancel focused by default
+  The confirmation dialog for "Clear All" has been replaced with a custom pill2
+  dialog. "Cancel" is the left pill and receives focus by default so the
+  accidental-clear risk on D-pad is eliminated.  D-pad Left/Right toggles
+  between Cancel and Clear All; Center/OK activates the focused pill.
+
+Context-sensitive clearing in Recent
+  Clearing while a panel category is selected (Live TV / Movies / Episodes)
+  only removes items of that type. "All" clears everything.
+  This was already implemented in the ViewModel but the dialog now shows the
+  correct type label in every case.
+
+Context-sensitive clearing in My List — Recordings and Downloads
+  • Selecting "Recordings" then "Clear All" deletes all recording .ts files
+    from storage and removes their entries. The dialog title changes to
+    "Delete Recordings" and prominently warns that the action permanently
+    deletes files and cannot be undone.
+  • Selecting "Downloads" then "Clear All" cancels all active downloads,
+    deletes all downloaded files from storage, and cleans up the Android
+    DownloadManager entries. Same permanent-delete warning is shown.
+  • Live TV / Movies / Series clearing is unchanged — removes watchlist
+    entries only, no files are touched.
+
+Recording description saved and displayed
+  The EPG programme description (from the XMLTV "desc" element) is now saved
+  when a recording is started, both for immediate recordings and for scheduled
+  recordings via RecordingWorker.  The description is shown in the
+  RecordingDetailsDialog below the programme title.
+
+--------------------------------------------------------------------------------
+Build 0072 — 2026-07-12
+--------------------------------------------------------------------------------
+
+FIXES & IMPROVEMENTS
+
+Settings > Playlists — Refresh button highlight alignment
+  The focus highlight border on the refresh buttons (All / TV / Movies / Series /
+  Sports) now uses the OutlinedButton's own border parameter, so the focus ring
+  aligns precisely with the button edge instead of wrapping a larger touch target.
+  The Delete icon button likewise uses a fixed 40×40dp Box so the focus border
+  matches the visible button area.
+
+Default profile name
+  New installs (or first-time database creation) will now show "Default" as the
+  profile name instead of "nexStream User".
+
+PIN entry at app startup
+  If there is only one profile and it has a PIN set, the app now prompts for the
+  PIN on launch (just as it does when there are 2 or more profiles and a profile
+  with a PIN is selected).
+
+Recording title — programme name only
+  Recordings now save just the programme title (e.g., "EastEnders") rather than
+  including the channel name (e.g., "BBC One — EastEnders"). Applies to both
+  immediate recordings and scheduled recordings via RecordingWorker.
+
+Recording start — no more confirmation popup
+  Clicking Record in the EPG now starts the recording immediately (or schedules
+  it for future programmes) without requiring a separate "Make sure you have a
+  free connection" confirmation dialog. A snackbar confirms the action instead.
+
+Player timeline for recordings and downloads1
+  The seek slider and timestamps are now shown when playing back a locally saved
+  recording or downloaded file (file path starting with "/" or "file://").
+  Previously the timeline was hidden for all local files.
+
+Settings > Appearance — Player Defaults section
+  Moved to the bottom of the Appearance screen, below the App Layout section.
+  Hidden entirely on Android TV / Fire TV (aspect ratio defaults are only relevant
+  on mobile where touch controls let you switch on the fly).
+
+Sports Guide — multi-channel picker
+  When a sport event is available on more than one channel, a channel selector
+  widget appears between the action buttons. D-pad Left/Right while the picker
+  is focused cycles through available channels. "Watch Now" and "Go To EPG"
+  then use whichever channel is currently selected.
+
+Cinematic details dialogs (Picks, Recent, My List, Recordings, Downloads)
+  • ContentActionDialog (used by Picks, Recently Watched, and My List screens) has
+    been redesigned to match the ProgramDetailsDialog style: full-size backdrop
+    image, vertical gradient overlay, and pill-shaped action buttons at the bottom.
+  • RecordingDetailsDialog in the Recordings screen now uses the same cinematic
+    style with backdrop (programme poster or channel logo), gradient, and D-pad
+    navigable play/stop/delete pills.
+  • DownloadDetailsDialog in the Downloads screen likewise uses the cinematic style
+    with the download's TMDB poster as backdrop.
+
+Download title format for series episodes
+  Series episode downloads are now named "Series Name S1 E1" (e.g.,
+  "Breaking Bad S1 E5") instead of "Breaking Bad S1E5 - Episode Name".
+
+Settings > Player — USB / external storage detection
+  Improved traversal logic when locating external storage volumes: now tries
+  multiple levels (3–5 parent directories) and uses canRead() instead of
+  canWrite() so USB drives that are mounted read-only are also detected.
+
+--------------------------------------------------------------------------------
+Build 0071 — 2026-07-11
+--------------------------------------------------------------------------------
+
+Recording cards — smaller size and date group headers
+  Cards shrunk from 130dp min-size to 100dp, matching the "recently watched"
+  card size. Date-based section headers ("11th July 2026") now separate groups
+  of recordings, sorted newest-first.
+
+--------------------------------------------------------------------------------
+Build 0070 — 2026-07-10
+--------------------------------------------------------------------------------
+
+Recordings screen redesign
+  Replaced simple list with a 2:3 poster card grid. Cards show the programme
+  artwork with a channel logo fallback, and a status badge (REC / Done / Failed).
+  Clicking a card opens a details dialog with Play, Stop, and Delete actions.
+  Recording files now saved as .ts (MPEG-TS) instead of .mp4, fixing playback
+  on ExoPlayer with standard MPEG-TS streams.
+  Artwork URLs (programme icon + channel logo) are now threaded from EPGScreen
+  through RecordingService → NexStreamRecordingManager → RecordingItem → card.
+
+--------------------------------------------------------------------------------

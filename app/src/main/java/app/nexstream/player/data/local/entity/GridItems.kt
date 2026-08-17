@@ -12,7 +12,11 @@ data class MovieGridItem(
     val categoryName: String?,
     val streamUrl: String,
     val playlistId: String,
-    val lastPlayedPosition: Long = 0L
+    val lastPlayedPosition: Long = 0L,
+    val certification: String? = null,
+    val rating: String? = null,
+    val addedAt: Long = 0L,
+    val releaseDate: String? = null
 )
 
 /**
@@ -24,5 +28,8 @@ data class SeriesGridItem(
     val posterUrl: String?,
     val categoryName: String?,
     val playlistId: String,
-    val seasonCount: Int
+    val seasonCount: Int,
+    val certification: String? = null,
+    val rating: String? = null,
+    val releaseDate: String? = null
 )

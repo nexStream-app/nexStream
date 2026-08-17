@@ -9,6 +9,7 @@ import app.nexstream.player.data.local.entity.PlaylistEntity
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
+import app.nexstream.player.subtitle.WhisperSubtitleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -17,7 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SeriesViewModel @Inject constructor(
     val repository: PlaylistRepository,
-    val progressRepository: WatchProgressRepository
+    val progressRepository: WatchProgressRepository,
+    val whisperSubtitleManager: WhisperSubtitleManager
 ) : ViewModel() {
 
     @Inject lateinit var profileManager: ProfileManager
@@ -33,7 +35,7 @@ class SeriesViewModel @Inject constructor(
             if (list.isEmpty()) flowOf(emptyList())
             else combine(list.map { repository.getSeriesGridItems(it.id) }) { arrays ->
                 arrays.flatMap { it }
-            }.debounce(300) // Prevent recomposition on every batch insert during fetch
+            }.debounce(150) // Coalesce rapid batch inserts during fetch
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -55,7 +57,8 @@ class SeriesViewModel @Inject constructor(
             if (list.isEmpty()) flowOf(emptyList())
             else combine(list.map { repository.getSeriesGridItemsByCategory(it.id, category) }) { arrays ->
                 arrays.flatMap { it }
-            }.debounce(300)
+            }
+            // No debounce: data is already in DB at category-switch time
         }
 
     fun getProgressItemIds(profileId: String) = progressRepository.getProgressItemIds(profileId)
@@ -81,4 +84,14 @@ class SeriesViewModel @Inject constructor(
 
     suspend fun getEpisodesFromDb(seriesId: String): List<EpisodeEntity> =
         repository.getEpisodesForSeries(seriesId).first()
+
+    suspend fun fetchCertificationIfMissing(seriesId: String, seriesName: String): String? =
+        repository.fetchCertificationForSeriesSingle(seriesId, seriesName)
+
+    suspend fun fetchOriginalLanguageIfMissing(seriesId: String, seriesName: String): String? =
+        repository.fetchOriginalLanguageForSeriesSingle(seriesId, seriesName)
+
+    suspend fun fetchTrailerUrl(seriesName: String): String? =
+        repository.fetchTrailerUrlForSeries(seriesName)
+
 }

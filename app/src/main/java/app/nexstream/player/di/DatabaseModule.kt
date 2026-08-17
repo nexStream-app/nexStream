@@ -6,7 +6,6 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.nexstream.player.data.local.NexStreamDatabase
 import app.nexstream.player.data.local.dao.TmdbPosterDao
-import app.nexstream.player.data.local.entity.TmdbPosterEntity
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -167,7 +166,18 @@ object DatabaseModule {
                 NexStreamDatabase.MIGRATION_17_18,
                 NexStreamDatabase.MIGRATION_18_19,
                 NexStreamDatabase.MIGRATION_19_20,
-                NexStreamDatabase.MIGRATION_20_21
+                NexStreamDatabase.MIGRATION_20_21,
+                NexStreamDatabase.MIGRATION_21_22,
+                NexStreamDatabase.MIGRATION_22_23,
+                NexStreamDatabase.MIGRATION_23_24,
+                NexStreamDatabase.MIGRATION_24_25,
+                NexStreamDatabase.MIGRATION_25_26,
+                NexStreamDatabase.MIGRATION_26_27,
+                NexStreamDatabase.MIGRATION_27_28,
+                NexStreamDatabase.MIGRATION_28_29,
+                NexStreamDatabase.MIGRATION_29_30,
+                NexStreamDatabase.MIGRATION_30_31,
+                NexStreamDatabase.MIGRATION_31_32
             )
             .build()
     }
@@ -182,4 +192,7 @@ object DatabaseModule {
     @Provides @Singleton fun provideProfileDao(db: NexStreamDatabase)      = db.profileDao()
     @Provides @Singleton fun provideWatchProgressDao(db: NexStreamDatabase) = db.watchProgressDao()
     @Provides @Singleton fun provideTmdbPosterDao(db: NexStreamDatabase) = db.tmdbPosterDao()
+    @Provides fun provideMusicDao(db: NexStreamDatabase) = db.musicDao()
+    @Provides @Singleton fun provideProfileAppearanceDao(db: NexStreamDatabase) = db.profileAppearanceDao()
+    @Provides @Singleton fun provideChannelGroupDao(db: NexStreamDatabase) = db.channelGroupDao()
 }

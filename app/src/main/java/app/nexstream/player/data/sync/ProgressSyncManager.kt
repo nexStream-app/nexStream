@@ -1,5 +1,6 @@
 package app.nexstream.player.data.sync
 
+import android.content.Context
 import android.util.Log
 import app.nexstream.player.data.local.entity.WatchProgressEntity
 import app.nexstream.player.data.remote.ProgressApiService
@@ -7,7 +8,10 @@ import app.nexstream.player.data.remote.ProgressBatchRequest
 import app.nexstream.player.data.remote.ProgressItem
 import app.nexstream.player.data.repository.WatchProgressRepository
 import app.nexstream.player.license.LicencePreferences
+import app.nexstream.player.ui.theme.getCloudSyncEnabledFlow
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,14 +20,15 @@ import javax.inject.Singleton
 class ProgressSyncManager @Inject constructor(
     private val api:                ProgressApiService,
     val progressRepository:         WatchProgressRepository,
-    private val licencePreferences: LicencePreferences
+    private val licencePreferences: LicencePreferences,
+    @ApplicationContext private val context: Context,
 ) {
     private val tag = "ProgressSync"
 
     private fun authHeader(): String? {
-        val key = licencePreferences.getLicenceKey()
+        val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey()
         if (key == null) {
-            Log.w(tag, "No licence key — skipping sync")
+            Log.w(tag, "No licence key or trial sync key — skipping sync")
             return null
         }
         return "Bearer $key"
@@ -31,6 +36,7 @@ class ProgressSyncManager @Inject constructor(
 
     // ── Pull from server → write to Room ──────────────────────────────────────
     suspend fun pullFromServer(profileId: String) = withContext(Dispatchers.IO) {
+        if (!context.getCloudSyncEnabledFlow().first()) return@withContext
         val auth = authHeader() ?: return@withContext
         Log.d(tag, "pullFromServer: profileId=$profileId")
         try {
@@ -74,6 +80,7 @@ class ProgressSyncManager @Inject constructor(
 
     // ── Push all local progress → server ──────────────────────────────────────
     suspend fun pushAllToServer(profileId: String) = withContext(Dispatchers.IO) {
+        if (!context.getCloudSyncEnabledFlow().first()) return@withContext
         val auth = authHeader() ?: return@withContext
         Log.d(tag, "pushAllToServer: profileId=$profileId")
         try {
@@ -116,6 +123,7 @@ class ProgressSyncManager @Inject constructor(
         durationMs: Long,
         profileId:  String
     ) = withContext(Dispatchers.IO) {
+        if (!context.getCloudSyncEnabledFlow().first()) return@withContext
         val auth = authHeader() ?: return@withContext
         Log.d(tag, "pushSingle: $itemType $itemId pos=$positionMs profile=$profileId")
         try {

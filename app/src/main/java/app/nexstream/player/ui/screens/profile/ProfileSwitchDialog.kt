@@ -18,6 +18,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -348,6 +349,11 @@ fun ThemedPinEntryDialog(
                                     else -> false
                                 }
                             }
+                            .border(
+                                width = if (backspaceFocused) 2.dp else 0.dp,
+                                color = if (backspaceFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                            )
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (backspaceFocused) MaterialTheme.colorScheme.primaryContainer
@@ -383,6 +389,11 @@ fun ThemedPinEntryDialog(
                                     else -> false
                                 }
                             }
+                            .border(
+                                width = if (cancelFocused) 2.dp else 0.dp,
+                                color = if (cancelFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                            )
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (cancelFocused) MaterialTheme.colorScheme.primaryContainer
@@ -414,22 +425,41 @@ private fun PinDigitButton(
     onKeyEvent: (KeyEvent) -> Boolean,
     onClick: () -> Unit
 ) {
+    var localFocused by remember { mutableStateOf(false) }
+    val focused = isFocused || localFocused
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (focused) 1.14f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+            stiffness    = androidx.compose.animation.core.Spring.StiffnessMedium,
+        ),
+        label = "pinDigitScale",
+    )
     Box(
         modifier = Modifier
             .size(52.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .onFocusChanged {
+                localFocused = it.hasFocus
+                if (it.hasFocus) onFocus()
+            }
             .focusRequester(focusRequester)
             .focusable()
-            .onFocusChanged { if (it.isFocused) onFocus() }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && (
                             e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter
                             )) { onClick(); true }
                 else onKeyEvent(e)
             }
+            .border(
+                width = if (focused) 2.5.dp else 0.dp,
+                color = if (focused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                shape = RoundedCornerShape(10.dp),
+            )
             .clip(RoundedCornerShape(10.dp))
             .background(
-                if (isFocused) MaterialTheme.colorScheme.primary
+                if (focused) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceVariant
             )
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
@@ -439,7 +469,7 @@ private fun PinDigitButton(
             text = digit,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = if (isFocused) MaterialTheme.colorScheme.onPrimary
+            color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
             else MaterialTheme.colorScheme.onSurface
         )
     }

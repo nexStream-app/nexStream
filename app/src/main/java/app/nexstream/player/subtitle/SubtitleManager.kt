@@ -46,7 +46,8 @@ class SubtitleManager @Inject constructor(
                 languages = languages,  // ← was hardcoded "en"
                 subsPerPage = 30
             )
-            response.subtitles?.map {
+            response.subtitles?.mapNotNull {
+                if (it.language.isNullOrBlank()) return@mapNotNull null
                 SubtitleLanguage(
                     code = it.lang,
                     name = it.language,
@@ -54,7 +55,7 @@ class SubtitleManager @Inject constructor(
                     url = it.url,
                     releaseName = it.release_name ?: it.full_name
                 )
-            }?.sortedBy { it.name } ?: emptyList()   // ← remove distinctBy so all results show
+            }?.sortedBy { it.name } ?: emptyList()
         } catch (e: Exception) {
             android.util.Log.e("SubtitleManager", "Search failed", e)
             emptyList()
@@ -65,7 +66,7 @@ class SubtitleManager @Inject constructor(
         seriesName: String,
         seasonNumber: Int,
         episodeNumber: Int,
-        languages: String = "en"        // ← add this parameter
+        languages: String = "en"
     ): List<SubtitleLanguage> = withContext(Dispatchers.IO) {
         return@withContext try {
             val response = api.searchEpisode(
@@ -73,10 +74,11 @@ class SubtitleManager @Inject constructor(
                 filmName = seriesName,
                 seasonNumber = seasonNumber,
                 episodeNumber = episodeNumber,
-                languages = languages,  // ← was hardcoded "en"
+                languages = languages,
                 subsPerPage = 30
             )
-            response.subtitles?.map {
+            response.subtitles?.mapNotNull {
+                if (it.language.isNullOrBlank()) return@mapNotNull null
                 SubtitleLanguage(
                     code = it.lang,
                     name = it.language,

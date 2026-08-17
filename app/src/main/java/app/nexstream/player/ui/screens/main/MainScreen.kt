@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.data.local.entity.ChannelEntity
+import app.nexstream.player.data.local.entity.ChannelGroupEntity
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.MovieEntity
 import app.nexstream.player.data.local.entity.ProfileEntity
@@ -87,6 +88,20 @@ import app.nexstream.player.ui.screens.main.rootSection
 import kotlinx.coroutines.launch
 
 enum class Zone { RAIL, PANEL, CONTENT }
+
+private fun String?.asAppRoute(): AppRoute = when (this) {
+    "Home"      -> AppRoute.Home
+    "Recent"    -> AppRoute.Recent
+    "Movies"    -> AppRoute.Movies
+    "Series"    -> AppRoute.Series
+    "CatchUp"   -> AppRoute.CatchUp
+    "Picks"     -> AppRoute.Picks
+    "Search"    -> AppRoute.Search
+    "MyList"    -> AppRoute.MyList
+    "Reminders" -> AppRoute.Reminders
+    "Downloads" -> AppRoute.Downloads
+    else        -> AppRoute.Guide
+}
 
 @Composable
 fun MainScreen(
@@ -148,19 +163,7 @@ fun MainScreen(
     LaunchedEffect(startRouteStored) {
         if (!startRouteApplied && startRouteStored != null) {
             startRouteApplied = true
-            currentRoute = when (startRouteStored) {
-                "Home"      -> AppRoute.Home
-                "Recent"    -> AppRoute.Recent
-                "Movies"    -> AppRoute.Movies
-                "Series"    -> AppRoute.Series
-                "CatchUp"   -> AppRoute.CatchUp
-                "Picks"     -> AppRoute.Picks
-                "Search"    -> AppRoute.Search
-                "MyList"    -> AppRoute.MyList
-                "Reminders" -> AppRoute.Reminders
-                "Downloads" -> AppRoute.Downloads
-                else        -> AppRoute.Guide
-            }
+            currentRoute = startRouteStored.asAppRoute()
         }
     }
 
@@ -183,6 +186,7 @@ fun MainScreen(
     val movieCategories  by movieViewModel.getCategories().collectAsState(initial = emptyList())
     val guideCategories  by epgViewModel.getCategories().collectAsState(initial = emptyList())
     val seriesCategories by seriesViewModel.getCategories().collectAsState(initial = emptyList())
+    val guideChannelGroups: List<ChannelGroupEntity> by epgViewModel.channelGroups.collectAsState(initial = emptyList<ChannelGroupEntity>())
 
     var currentChannelUrl    by rememberSaveable { mutableStateOf("") }
     var currentMovieId       by rememberSaveable { mutableStateOf<String?>(null) }
@@ -685,7 +689,7 @@ fun MainScreen(
             onProfileSelected = { profile ->
                 showProfileSwitch = false
                 scope.launch { watchlistViewModel.profileManager.setActiveProfile(profile) }
-                currentRoute = AppRoute.Guide; sidebarPanelExpanded = false; sidebarExpandedRoute = null
+                currentRoute = startRouteStored.asAppRoute(); sidebarPanelExpanded = false; sidebarExpandedRoute = null
                 selectedMovieCategory = null; selectedSeriesCategory = null; selectedGuideCategory = null
                 scope.launch { kotlinx.coroutines.delay(200); zone = Zone.RAIL; sidebarRefocusTick++ }
             },
@@ -853,6 +857,7 @@ fun MainScreen(
                 activeProfileName     = activeProfile?.name ?: "Default",
                 activeProfileEmoji    = activeProfile?.emoji ?: "👤",
                 showSyncSettings     = !isReseller,
+                channelGroups         = guideChannelGroups,
                 selectedSettingsRoute = if (currentRoute.isSettings && currentRoute != AppRoute.Settings) currentRoute else null,
                 watchlistIds          = watchlistIds,
                 pendingEpgChannelName = pendingEpgChannelName,
@@ -1205,6 +1210,7 @@ private fun ClassicMainLayout(
     activeProfileName: String,
     activeProfileEmoji: String,
     showSyncSettings: Boolean,
+    channelGroups: List<ChannelGroupEntity>,
     selectedSettingsRoute: AppRoute?,
     watchlistIds: Set<String>,
     pendingEpgChannelName: String?,
@@ -1480,6 +1486,7 @@ private fun ClassicMainLayout(
                 onSearchRequest    = onSearchRequest,
                 onFavouritesSelected = onFavouritesSelected,
                 showSyncSettings   = showSyncSettings,
+                channelGroups      = channelGroups,
             )
         }
 
@@ -1979,7 +1986,8 @@ private fun MainContentArea(
                 onRefresh = onRefreshSports,
                 isRefreshing = isRefreshingSports,
             )
-            AppRoute.SettingsAppearance -> AppearanceScreen(firstItemFocusRequester = contentFR)
+            AppRoute.SettingsAppearance   -> AppearanceScreen(firstItemFocusRequester = contentFR)
+            AppRoute.SettingsChannelGroups -> app.nexstream.player.ui.screens.settings.ChannelGroupsScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsLicence    -> LicenceScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsProfiles -> {
                 var editingProfile by remember { mutableStateOf<ProfileEntity?>(null) }

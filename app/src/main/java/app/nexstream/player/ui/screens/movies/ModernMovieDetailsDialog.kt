@@ -529,16 +529,15 @@ function onYouTubeIframeAPIReady(){
                     showTrailer = false
                 }
             } else {
-                AnimatedContent(
-                    targetState  = movie.backdropUrl ?: movie.posterUrl,
-                    transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
-                    label = "movieBackdrop"
-                ) { url ->
-                    AsyncImage(
-                        model = url, contentDescription = null,
-                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-                    )
-                }
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data(movie.backdropUrl ?: movie.posterUrl)
+                        .crossfade(400)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
             }
 
             // ── Gradient overlay — fades out during trailer ───────────────────

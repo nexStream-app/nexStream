@@ -22,7 +22,9 @@ data class PosterItem(
     val posterUrl: String?,
     val badge: String? = null,
     val showProgressBadge: Boolean = false,
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val certification: String? = null,
+    val rating: String? = null
 )
 
 // ── Callbacks ─────────────────────────────────────────────────────────────────
@@ -66,7 +68,11 @@ class PosterAdapter(
     private val onFocusChanged: (Int, Boolean) -> Unit
 ) : RecyclerView.Adapter<PosterAdapter.VH>() {
 
-    var items: List<PosterItem> = emptyList()
+    private var _items: List<PosterItem> = emptyList()
+
+    val items: List<PosterItem> get() = _items
+    fun submitList(newItems: List<PosterItem>) { _items = newItems; notifyDataSetChanged() }
+
     var primaryColor: Int = 0xFF6200EE.toInt()
     var onPrimaryColor: Int = 0xFFFFFFFF.toInt()
     var tertiaryColor: Int = 0xFF018786.toInt()
@@ -80,14 +86,12 @@ class PosterAdapter(
     var onTopEdge: (() -> Unit)? = null
     var onBottomEdge: (() -> Unit)? = null
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = _items.size
 
     fun setItemsFocusable(focusable: Boolean) {
-        items.indices.forEach { i ->
-            // Will apply on next bind — store for use in onBindViewHolder
-        }
         _itemsFocusable = focusable
-        notifyItemRangeChanged(0, items.size)
+        // No notifyItemRangeChanged — PosterGridView updates currently attached views directly
+        // to avoid the rebind flash (image reload + scale reset on every item).
     }
     private var _itemsFocusable = false
 
@@ -195,16 +199,15 @@ class PosterGridView @JvmOverloads constructor(
             val cols = posterAdapter.columnCount
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    // Left key does nothing at any position — use back button for sidebar
                     edgeKeyDownTime = 0L; edgeFired = false
+                    if (pos % cols == 0) {
+                        posterAdapter.onLeftEdge?.invoke()
+                        return true
+                    }
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     if (pos / cols == 0) {
-                        val now = android.os.SystemClock.uptimeMillis()
                         if (event.repeatCount == 0) {
-                            edgeKeyDownTime = now
-                        } else if (now - edgeKeyDownTime > 300 && !edgeFired) {
-                            edgeFired = true
                             posterAdapter.onTopEdge?.invoke()
                         }
                         return true
@@ -256,7 +259,7 @@ class PosterGridView @JvmOverloads constructor(
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         recyclerView.clipToPadding = false
-        recyclerView.setPadding(dpToPx(16), dpToPx(20), dpToPx(16), dpToPx(16))
+        recyclerView.setPadding(dpToPx(32), dpToPx(20), dpToPx(32), dpToPx(16))
         recyclerView.isFocusable = false
         recyclerView.isFocusableInTouchMode = false
         recyclerView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -269,6 +272,7 @@ class PosterGridView @JvmOverloads constructor(
 
     fun blockFocus() {
         posterAdapter.setItemsFocusable(false)
+        for (i in 0 until recyclerView.childCount) recyclerView.getChildAt(i)?.isFocusable = false
         recyclerView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
     }
 
@@ -281,37 +285,38 @@ class PosterGridView @JvmOverloads constructor(
         recyclerView.addItemDecoration(GridSpacingDecoration(columns, dpToPx(8)))
     }
 
-    fun setItems(items: List<PosterItem>) {
-        val old = posterAdapter.items
-        if (old == items) return
-        posterAdapter.items = items
-        if (old.isEmpty()) {
-            posterAdapter.notifyDataSetChanged()
-        } else {
-            val minSize = minOf(old.size, items.size)
-            for (i in 0 until minSize) {
-                if (old[i] != items[i]) posterAdapter.notifyItemChanged(i)
-            }
-            when {
-                items.size > old.size -> posterAdapter.notifyItemRangeInserted(old.size, items.size - old.size)
-                items.size < old.size -> posterAdapter.notifyItemRangeRemoved(items.size, old.size - items.size)
-            }
-        }
+    fun setItems(newItems: List<PosterItem>) {
+        posterAdapter.submitList(newItems)
     }
 
     fun scrollToIndex(index: Int) {
         recyclerView.scrollToPosition(index)
     }
 
+    // Scroll so the row containing index appears at the top of the visible area
+    fun scrollToIndexTop(index: Int) {
+        (recyclerView.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.scrollToPositionWithOffset(index, 0)
+            ?: recyclerView.scrollToPosition(index)
+    }
+
     fun requestItemFocus(index: Int) {
-        recyclerView.post { requestItemFocusNow(index) }
+        recyclerView.post {
+            val ok = requestItemFocusNow(index)
+            android.util.Log.d("PosterGridFocus", "posted requestItemFocusNow($index)=$ok childCount=${recyclerView.childCount}")
+        }
     }
 
     fun requestItemFocusNow(index: Int): Boolean {
-        recyclerView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         posterAdapter.setItemsFocusable(true)
+        for (i in 0 until recyclerView.childCount) recyclerView.getChildAt(i)?.isFocusable = true
+        recyclerView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         val vh = recyclerView.findViewHolderForAdapterPosition(index)
-        return if (vh != null) { vh.itemView.requestFocus(); true } else false
+        android.util.Log.d("PosterGridFocus", "requestItemFocusNow($index) childCount=${recyclerView.childCount} vh=${vh != null}")
+        if (vh == null) return false
+        val focused = vh.itemView.requestFocus()
+        android.util.Log.d("PosterGridFocus", "requestFocus($index)=$focused isFocused=${vh.itemView.isFocused}")
+        return focused
     }
 
     override fun onAttachedToWindow() {
@@ -371,7 +376,7 @@ class PosterItemView @JvmOverloads constructor(
     }
 
     private val continueBadge = TextView(context).apply {
-        text = "▶ Continue"
+        text = "▶"
         textSize = 9f
         setTextColor(0xFFFFFFFF.toInt())
         setPadding(dpToPx(5), dpToPx(3), dpToPx(5), dpToPx(3))
@@ -388,6 +393,32 @@ class PosterItemView @JvmOverloads constructor(
         setPadding(0, 0, dpToPx(6), dpToPx(6))
         layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).also {
             it.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
+        }
+        visibility = View.GONE
+    }
+
+    private val certBadge = TextView(context).apply {
+        textSize = 9f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(0xFFFFFFFF.toInt())
+        setPadding(dpToPx(5), dpToPx(2), dpToPx(5), dpToPx(2))
+        layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).also {
+            it.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
+            it.rightMargin  = dpToPx(6)
+            it.bottomMargin = dpToPx(6)
+        }
+        visibility = View.GONE
+    }
+
+    private val ratingBadge = TextView(context).apply {
+        textSize = 9f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(0xFFFFFFFF.toInt())
+        setPadding(dpToPx(5), dpToPx(2), dpToPx(5), dpToPx(2))
+        layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).also {
+            it.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            it.topMargin  = dpToPx(6)
+            it.leftMargin = dpToPx(6)
         }
         visibility = View.GONE
     }
@@ -415,12 +446,16 @@ class PosterItemView @JvmOverloads constructor(
         seasonBadge.isClickable = false
         continueBadge.isClickable = false
         bookmarkIcon.isClickable = false
+        certBadge.isClickable = false
+        ratingBadge.isClickable = false
         addView(posterImage)
         addView(gradientOverlay)
         addView(titleText)
         addView(seasonBadge)
         addView(continueBadge)
         addView(bookmarkIcon)
+        addView(certBadge)
+        addView(ratingBadge)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -456,8 +491,9 @@ class PosterItemView @JvmOverloads constructor(
         normalBg.setColor(surfaceVariantColor)
         focusBg.setColor(surfaceVariantColor)
 
-        if (item.badge != null) {
-            seasonBadge.text = item.badge
+        val badgeText = item.badge
+        if (badgeText != null) {
+            seasonBadge.text = badgeText
             seasonBadge.setTextColor(onSurfaceColor)
             seasonBadge.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -467,6 +503,39 @@ class PosterItemView @JvmOverloads constructor(
             seasonBadge.visibility = View.VISIBLE
         } else {
             seasonBadge.visibility = View.GONE
+        }
+
+        val cert = item.certification
+        if (cert != null) {
+            certBadge.text = cert
+            certBadge.typeface = typeface
+            certBadge.setTextColor(0xFFFFFFFF.toInt())
+            certBadge.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(10).toFloat()
+                setColor(0xFFE53935.toInt())
+            }
+            certBadge.visibility = View.VISIBLE
+        } else {
+            certBadge.visibility = View.GONE
+        }
+
+        val ratingStr = item.rating?.takeIf { it.isNotBlank() && it != "0" && it != "0.0" }
+        if (ratingStr != null) {
+            ratingBadge.text = "★ $ratingStr"
+            ratingBadge.typeface = typeface
+            ratingBadge.setTextColor(0xFFFFFFFF.toInt())
+            ratingBadge.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(10).toFloat()
+                setColor(0xFFE65100.toInt())
+            }
+            // Stack below continueBadge if both are showing
+            (ratingBadge.layoutParams as? LayoutParams)?.topMargin =
+                if (item.showProgressBadge) dpToPx(30) else dpToPx(6)
+            ratingBadge.visibility = View.VISIBLE
+        } else {
+            ratingBadge.visibility = View.GONE
         }
 
         if (item.showProgressBadge) {
@@ -487,17 +556,32 @@ class PosterItemView @JvmOverloads constructor(
 
     fun setFocused(focused: Boolean, primaryColor: Int) {
         if (focused) {
-            // Thick border using theme primary colour + scale up for prominence
             focusBg.setStroke(dpToPx(4), primaryColor)
             focusBg.setColor(bgColor)
             background = focusBg
             scaleX = 1.08f; scaleY = 1.08f
+            val b = dpToPx(4)
+            (posterImage.layoutParams as? LayoutParams)?.also { lp ->
+                lp.setMargins(b, b, b, b)
+                posterImage.layoutParams = lp
+            }
+            posterImage.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(4).toFloat()
+                setColor(android.graphics.Color.TRANSPARENT)
+            }
+            posterImage.clipToOutline = true
             elevation = dpToPx(16).toFloat()
-            // Brighten title text when focused
             titleText.alpha = 1f
         } else {
             background = normalBg
             scaleX = 1f; scaleY = 1f
+            (posterImage.layoutParams as? LayoutParams)?.also { lp ->
+                lp.setMargins(0, 0, 0, 0)
+                posterImage.layoutParams = lp
+            }
+            posterImage.clipToOutline = false
+            posterImage.background = null
             elevation = dpToPx(2).toFloat()
             titleText.alpha = 0.85f
         }

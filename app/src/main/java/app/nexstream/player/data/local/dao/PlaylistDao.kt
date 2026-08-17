@@ -9,8 +9,11 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(playlist: PlaylistEntity)
 
-    @Query("SELECT * FROM playlists ORDER BY addedDate DESC")
+    @Query("SELECT * FROM playlists ORDER BY sortIndex ASC, addedDate ASC")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query("UPDATE playlists SET sortIndex = :sortIndex WHERE id = :playlistId")
+    suspend fun updateSortIndex(playlistId: String, sortIndex: Int)
 
     @Query("SELECT * FROM playlists WHERE id = :playlistId")
     suspend fun getPlaylistById(playlistId: String): PlaylistEntity?

@@ -342,23 +342,28 @@ fun PlayerScreen(
         if (smartBuffer && (isCatchup || isVod)) {
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    30_000,   // minBuffer  — keep 30s buffered ahead
-                    120_000,  // maxBuffer  — up to 2 mins for catchup/VOD
-                    1_500,    // bufferForPlayback — start fast
-                    5_000     // bufferAfterRebuffer
+                    30_000,  // minBuffer
+                    60_000,  // maxBuffer — reduced from 120s; 2 min was causing memory pressure on low-RAM Fire Sticks
+                    1_500,   // bufferForPlayback — start fast
+                    5_000    // bufferAfterRebuffer
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
-                .setBackBuffer(30_000, true) // 30s back-seek without re-fetch
+                .setBackBuffer(30_000, true)
                 .build()
         } else {
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(5_000, 20_000, 1_000, 3_000) // lean for live TV
+                .setBufferDurationsMs(
+                    10_000,  // minBuffer — increased from 5s; absorbs brief network hiccups on live TV
+                    30_000,  // maxBuffer
+                    1_500,   // bufferForPlayback
+                    5_000    // bufferAfterRebuffer
+                )
                 .build()
         }
 
     // ── Android TV: build ExoPlayer directly ──────────────────────────────────
     if (isAndroidTV) {
-        DisposableEffect(channelUrl, autoFrameRate, smartBuffer) {
+        DisposableEffect(channelUrl, smartBuffer) {
             val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
                 override fun buildAudioSink(
                     context: android.content.Context,
@@ -448,6 +453,8 @@ fun PlayerScreen(
             val trustAllOkHttp = okhttp3.OkHttpClient.Builder()
                 .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
                 .hostnameVerifier { _, _ -> true }
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
             val httpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustAllOkHttp)
             val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)

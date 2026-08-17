@@ -2,11 +2,11 @@ package app.nexstream.player.license
 
 import android.content.Context
 import android.os.Build
-import android.provider.Settings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withContext
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,20 +28,17 @@ class LicenceManager @Inject constructor(
     private val api: LicenceApiService,
     private val prefs: LicencePreferences
 ) {
-    fun getDeviceId(): String {
-        val androidId = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID
-        )
-        val bytes = MessageDigest.getInstance("SHA-256")
-            .digest(androidId.toByteArray())
-        return bytes.take(8).joinToString("") { "%02x".format(it) }.uppercase()
-    }
+    private val _activationEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val activationEvents: SharedFlow<Unit> = _activationEvents
+
+    fun notifyActivated() { _activationEvents.tryEmit(Unit) }
+
+    fun getDeviceId(): String = prefs.getOrCreateStableDeviceId()
 
     private fun getDeviceName(): String =
         "${Build.MANUFACTURER} ${Build.MODEL}".trim()
 
-    suspend fun activate(licenceKey: String): LicenceResult = withContext(Dispatchers.IO) {
+    suspend fun activate(licenceKey: String, isResellerAssigned: Boolean = false): LicenceResult = withContext(Dispatchers.IO) {
         return@withContext try {
             val request = ValidateRequest(
                 licence_key = licenceKey,
@@ -65,6 +62,8 @@ class LicenceManager @Inject constructor(
                     prefs.saveLicenceType(body.licence_type ?: "lifetime")
                     prefs.saveExpiresAt(body.expires_at)
                     prefs.saveDeviceLimit(body.device_limit ?: 1)
+                    prefs.saveResellerId(body.reseller_id)
+                    prefs.saveIsResellerAssigned(isResellerAssigned || body.reseller_id != null)
                     LicenceResult.Success(
                         email       = body.email ?: "",
                         licenceType = body.licence_type ?: "lifetime",
@@ -82,8 +81,14 @@ class LicenceManager @Inject constructor(
     suspend fun sendHeartbeat() = withContext(Dispatchers.IO) {
         val key = prefs.getLicenceKey() ?: return@withContext
         try {
-            api.heartbeat(auth = "Bearer $key", body = HeartbeatRequest(getDeviceId()))
-        } catch (_: Exception) { }
+            val resp = api.heartbeat(
+                auth = "Bearer $key",
+                body = HeartbeatRequest(device_id = getDeviceId(), device_name = getDeviceName())
+            )
+            android.util.Log.i("LicenceManager", "heartbeat: code=${resp.code()} success=${resp.body()?.success}")
+        } catch (e: Exception) {
+            android.util.Log.w("LicenceManager", "heartbeat failed: ${e.message}")
+        }
     }
 
     suspend fun getDevices(): DevicesResponse? = withContext(Dispatchers.IO) {
@@ -106,8 +111,11 @@ class LicenceManager @Inject constructor(
 
     fun deactivate()            = prefs.clearAll()
     fun isActivated()           = prefs.hasLicence()
+    fun getStoredLicenceKey()   = prefs.getLicenceKey()
     fun getStoredEmail()        = prefs.getEmail()
     fun getStoredLicenceType()  = prefs.getLicenceType()
     fun getStoredExpiresAt()    = prefs.getExpiresAt()
     fun getStoredDeviceLimit()  = prefs.getDeviceLimit()
+    fun getStoredResellerId()   = prefs.getResellerId()
+    fun isResellerAssigned()    = prefs.isResellerAssigned()
 }

@@ -1,11 +1,17 @@
 package app.nexstream.player.data.sync
 
+import android.content.Context
 import android.util.Log
+import app.nexstream.player.data.local.dao.ProfileAppearanceDao
 import app.nexstream.player.data.local.dao.ProfileDao
+import app.nexstream.player.data.local.entity.ProfileAppearanceEntity
 import app.nexstream.player.data.local.entity.ProfileCategoryFilter
 import app.nexstream.player.data.local.entity.ProfileEntity
 import app.nexstream.player.license.LicencePreferences
+import app.nexstream.player.ui.theme.getCloudSyncEnabledFlow
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,32 +21,46 @@ import javax.inject.Singleton
 @Singleton
 class ProfileSyncManager @Inject constructor(
     private val dao: ProfileDao,
-    private val licencePreferences: LicencePreferences
+    private val profileAppearanceDao: ProfileAppearanceDao,
+    private val licencePreferences: LicencePreferences,
+    @ApplicationContext private val context: Context,
 ) {
     private val tag = "ProfileSync"
     private val baseUrl = "https://nexstream.uk/api/profiles.php"
 
     private fun authHeader(): String? {
-        val key = licencePreferences.getLicenceKey()
-        Log.d(tag, "getLicenceKey() = $key")
-        if (key == null) Log.e(tag, "No licence key found in preferences")
+        val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey()
+        Log.d(tag, "authKey = $key")
+        if (key == null) Log.e(tag, "No licence key or trial sync key found in preferences")
         return key?.let { "Bearer $it" }
     }
 
     var onSyncComplete: (() -> Unit)? = null
 
-    suspend fun sendFcmToken(token: String) = withContext(Dispatchers.IO) {
-        val auth = authHeader() ?: return@withContext
+    suspend fun sendFcmToken(token: String, deviceId: String? = null) = withContext(Dispatchers.IO) {
+        // Always resolve deviceId so the server can upgrade trial rows to licensed rows.
+        // FCM registration uses only the real licence key — trial devices fall through to
+        // the device_id-only path on the server.
+        val resolvedDeviceId = deviceId ?: licencePreferences.getOrCreateStableDeviceId()
+        val auth = licencePreferences.getLicenceKey()?.let { "Bearer $it" }
+        if (auth == null && resolvedDeviceId.isEmpty()) {
+            Log.w(tag, "No licence key and no device_id — skipping FCM token registration")
+            return@withContext
+        }
         try {
-            val body = JSONObject().apply { put("token", token) }.toString()
+            val body = JSONObject().apply {
+                put("token", token)
+                put("device_id", resolvedDeviceId)
+            }.toString()
             postJson("https://nexstream.uk/api/fcm_tokens.php", auth, body)
-            Log.d(tag, "FCM token sent to server")
+            Log.d(tag, "FCM token sent to server (deviceId=$resolvedDeviceId, hasAuth=${auth != null})")
         } catch (e: Exception) {
             Log.e(tag, "Failed to send FCM token", e)
         }
     }
 
     suspend fun syncFromServer() = withContext(Dispatchers.IO) {
+        if (!context.getCloudSyncEnabledFlow().first()) return@withContext
         Log.d(tag, "syncFromServer() called")
 
         val auth = authHeader() ?: run {
@@ -92,7 +112,9 @@ class ProfileSyncManager @Inject constructor(
 
                 if (isDefault) {
                     val localDefault = dao.getDefaultProfile()
-                    if (localDefault != null && localDefault.id != serverId) {
+                    // Only delete the local default if it's not one of the profiles the server
+                    // sent — i.e. it's an auto-generated fresh-install placeholder.
+                    if (localDefault != null && localDefault.id != serverId && localDefault.id !in serverIds) {
                         Log.d(tag, "Replacing stale local default '${localDefault.name}' (${localDefault.id}) with server default '${p.getString("name")}' ($serverId)")
                         dao.forceDeleteProfile(localDefault.id)
                         dao.deleteFiltersForProfile(localDefault.id)
@@ -111,6 +133,24 @@ class ProfileSyncManager @Inject constructor(
                 )
                 dao.upsertProfile(entity)
                 dao.deleteFiltersForProfile(entity.id)
+
+                // Sync appearance
+                val appearance = p.optJSONObject("appearance")
+                if (appearance != null) {
+                    profileAppearanceDao.upsertAppearance(ProfileAppearanceEntity(
+                        profileId          = serverId,
+                        themeMode          = appearance.optString("theme_mode", "DARK"),
+                        fontScale          = if (appearance.has("font_scale")) appearance.getDouble("font_scale").toFloat() else null,
+                        fontWeight         = appearance.optString("font_weight").takeIf { it.isNotEmpty() },
+                        uiStyle            = appearance.optString("ui_style", "CLASSIC"),
+                        tvAspectRatio      = appearance.optString("tv_aspect_ratio", "FILL"),
+                        movieAspectRatio   = appearance.optString("movie_aspect_ratio", "FIT"),
+                        seriesAspectRatio  = appearance.optString("series_aspect_ratio", "FIT"),
+                        epgMiniPlayer      = appearance.optBoolean("epg_mini_player", true),
+                        keyboardFontScale  = appearance.optDouble("keyboard_font_scale", 1.0).toFloat(),
+                        updatedAt          = serverTime
+                    ))
+                }
 
                 val filters = p.optJSONArray("filters") ?: continue
                 val filterEntities = mutableListOf<ProfileCategoryFilter>()
@@ -148,6 +188,7 @@ class ProfileSyncManager @Inject constructor(
         movieCategories: List<String> = emptyList(),
         seriesCategories: List<String> = emptyList()
     ) = withContext(Dispatchers.IO) {
+        if (!context.getCloudSyncEnabledFlow().first()) return@withContext
         val auth = authHeader() ?: return@withContext
         Log.d(tag, "pushProfiles called")
         try {
@@ -164,6 +205,18 @@ class ProfileSyncManager @Inject constructor(
                         put("updated_at", f.updatedAt)
                     })
                 }
+                val appearance = profileAppearanceDao.getAppearance(profile.id)
+                val appearanceObj = JSONObject().apply {
+                    put("theme_mode",          appearance?.themeMode ?: "DARK")
+                    put("font_scale",          appearance?.fontScale)
+                    put("font_weight",         appearance?.fontWeight ?: "")
+                    put("ui_style",            appearance?.uiStyle ?: "CLASSIC")
+                    put("tv_aspect_ratio",     appearance?.tvAspectRatio ?: "FILL")
+                    put("movie_aspect_ratio",  appearance?.movieAspectRatio ?: "FIT")
+                    put("series_aspect_ratio", appearance?.seriesAspectRatio ?: "FIT")
+                    put("epg_mini_player",     appearance?.epgMiniPlayer ?: true)
+                    put("keyboard_font_scale", appearance?.keyboardFontScale ?: 1.0f)
+                }
                 profilesArray.put(JSONObject().apply {
                     put("id",            profile.id)
                     put("name",          profile.name)
@@ -174,6 +227,7 @@ class ProfileSyncManager @Inject constructor(
                     put("sort_order",    profile.sortOrder)
                     put("updated_at",    profile.updatedAt)
                     put("filters",       filtersArray)
+                    put("appearance",    appearanceObj)
                 })
             }
             val catsObj = JSONObject().apply {
@@ -213,10 +267,10 @@ class ProfileSyncManager @Inject constructor(
         }
     }
 
-    private fun postJson(url: String, auth: String, body: String) {
+    private fun postJson(url: String, auth: String?, body: String) {
         val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         conn.requestMethod = "POST"
-        conn.setRequestProperty("Authorization", auth)
+        if (auth != null) conn.setRequestProperty("Authorization", auth)
         conn.setRequestProperty("Content-Type", "application/json")
         conn.doOutput = true
         conn.outputStream.bufferedWriter().use { it.write(body) }

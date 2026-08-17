@@ -75,6 +75,7 @@ fun SearchScreen(
 
     var searchMovieDialog   by remember { mutableStateOf<MovieEntity?>(null) }
     var searchMovieUpdated  by remember { mutableStateOf<MovieEntity?>(null) }
+    var searchMovieReady    by remember { mutableStateOf(false) }
     var searchSeriesDialog   by remember { mutableStateOf<SeriesEntity?>(null) }
     var searchSeriesUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
     var searchSeriesEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
@@ -82,10 +83,12 @@ fun SearchScreen(
     var searchSeriesLoading  by remember { mutableStateOf(false) }
 
     LaunchedEffect(searchMovieDialog) {
-        val m = searchMovieDialog ?: run { searchMovieUpdated = null; return@LaunchedEffect }
+        val m = searchMovieDialog ?: run { searchMovieUpdated = null; searchMovieReady = false; return@LaunchedEffect }
+        searchMovieReady = false
         searchMovieUpdated = null
         val detailed = viewModel.loadMovieDetails(m)
         if (detailed != null) searchMovieUpdated = detailed
+        searchMovieReady = true
     }
 
     LaunchedEffect(searchSeriesDialog) {
@@ -316,7 +319,8 @@ fun SearchScreen(
         }
         } // end else (Classic UI)
 
-        searchMovieDialog?.let { movie ->
+        if (searchMovieDialog != null && searchMovieReady) {
+            val movie = searchMovieDialog!!
             val displayMovie = searchMovieUpdated ?: movie
             val isMovieBookmarked = movie.id in watchlistIds
             ModernMovieDetailsDialog(

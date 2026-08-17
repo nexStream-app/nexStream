@@ -12,10 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.UiStyle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.repository.PlaylistRepository
@@ -75,12 +78,6 @@ class AccountViewModel @Inject constructor(
                 val username = playlist.xtreamUsername ?: run { _state.value = AccountScreenState.NoPlaylist; return@launch }
                 val password = playlist.xtreamPassword ?: run { _state.value = AccountScreenState.NoPlaylist; return@launch }
 
-                // Requires: suspend fun getXtreamAccountInfo(host, username, password) in PlaylistRepository
-                // Add this to PlaylistRepository.kt:
-                //   suspend fun getXtreamAccountInfo(host: String, username: String, password: String): XtreamAccountInfo? {
-                //       return try { buildRetrofit(host).create(XtreamApiService::class.java).getAccountInfo(username, password) }
-                //       catch (e: Exception) { null }
-                //   }
                 val info = try {
                     repository.getXtreamAccountInfo(host, username, password)
                 } catch (e: Exception) {
@@ -127,136 +124,172 @@ fun AccountScreen(
     viewModel: AccountViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+    val refreshFr = remember { FocusRequester() }
+    var refreshFocused by remember { mutableStateOf(false) }
+    val uiStyle = rememberUiStyle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (uiStyle != UiStyle.MODERN) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Text(
-                text = "Account",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            // Refresh button
-            val refreshFr = remember { FocusRequester() }
-            var refreshFocused by remember { mutableStateOf(false) }
-            FilledTonalButton(
-                onClick = { viewModel.load() },
-                modifier = Modifier
-                    .focusRequester(refreshFr)
-                    .then(if (firstItemFocusRequester == null) Modifier else Modifier),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = if (refreshFocused) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.secondaryContainer
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Account",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = sTheme.categoryText,
+                    modifier = Modifier.weight(1f)
                 )
-            ) {
-                Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Refresh")
+                FilledTonalButton(
+                    onClick = { viewModel.load() },
+                    modifier = Modifier
+                        .focusRequester(refreshFr)
+                        .onFocusChanged { refreshFocused = it.isFocused },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (refreshFocused) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Refresh")
+                }
             }
         }
+        HorizontalDivider(color = sTheme.divider)
+        } // end if uiStyle != MODERN
 
-        when (val s = state) {
-            is AccountScreenState.Loading -> {
-                Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            is AccountScreenState.NoPlaylist -> {
-                AccountInfoCard(icon = Icons.Default.Warning, title = "No Xtream Playlist") {
-                    Text(
-                        "No Xtream account found. Add an Xtream playlist in Settings → Playlists.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            is AccountScreenState.Error -> {
-                AccountInfoCard(icon = Icons.Default.ErrorOutline, title = "Error", iconTint = MaterialTheme.colorScheme.error) {
-                    Text(
-                        s.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            is AccountScreenState.Success -> {
-                val info = s.info
-
-                // ── User Info ─────────────────────────────────────────────
-                AccountInfoCard(icon = Icons.Default.Person, title = "User Info") {
-                    AccountRow("Username",   info.username)
-                    AccountRow("Status",     info.status,
-                        valueColor = if (info.status.lowercase() == "active")
-                            MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error
-                    )
-                    AccountRow("Expiry",     info.expiry)
-                    if (info.isTrial) {
-                        AccountRow("Plan", "Trial", valueColor = MaterialTheme.colorScheme.tertiary)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            when (val s = state) {
+                is AccountScreenState.Loading -> {
+                    Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
                 }
 
-                // ── Connections ───────────────────────────────────────────
-                AccountInfoCard(icon = Icons.Default.DeviceHub, title = "Connections") {
-                    AccountRow("Active",     "${info.activeConnections}")
-                    AccountRow("Maximum",    "${info.maxConnections}")
-                    // Visual connection bar
-                    val used = if (info.maxConnections > 0)
-                        info.activeConnections.toFloat() / info.maxConnections.toFloat()
-                    else 0f
-                    Spacer(Modifier.height(8.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Connections used",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${info.activeConnections} / ${info.maxConnections}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        LinearProgressIndicator(
-                            progress = { used.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                            color = when {
-                                used >= 1f   -> MaterialTheme.colorScheme.error
-                                used >= 0.8f -> MaterialTheme.colorScheme.tertiary
-                                else         -> MaterialTheme.colorScheme.primary
-                            },
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                is AccountScreenState.NoPlaylist -> {
+                    SettingsSectionContainer(
+                        title = "No Xtream Playlist",
+                        icon = Icons.Default.Warning,
+                        uiStyle = uiStyle
+                    ) {
+                        Text(
+                            "No Xtream account found. Add an Xtream playlist in Settings → Playlists.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
                 }
 
-                // ── Server Info ───────────────────────────────────────────
-                AccountInfoCard(icon = Icons.Default.Dns, title = "Server Info") {
-                    AccountRow("Host",     info.host)
-                    AccountRow("Protocol", info.serverProtocol)
-                    AccountRow("Port",     info.port)
-                    AccountRow("Timezone", info.timezone)
+                is AccountScreenState.Error -> {
+                    SettingsSectionContainer(
+                        title = "Error",
+                        icon = Icons.Default.ErrorOutline,
+                        uiStyle = uiStyle
+                    ) {
+                        Text(
+                            s.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
-                Spacer(Modifier.height(32.dp))
-            }
-        }
-    }
+                is AccountScreenState.Success -> {
+                    val info = s.info
+
+                    // ── User Info ─────────────────────────────────────────────
+                    SettingsSectionContainer(
+                        title = "User Info",
+                        icon = Icons.Default.Person,
+                        uiStyle = uiStyle
+                    ) {
+                        SettingsInfoRow("Username", info.username)
+                        SettingsInfoRow(
+                            label = "Status",
+                            value = info.status,
+                            valueColor = if (info.status.lowercase() == "active")
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                        SettingsInfoRow("Expiry", info.expiry)
+                        if (info.isTrial) {
+                            SettingsInfoRow("Plan", "Trial")
+                        }
+                    }
+
+                    // ── Connections ───────────────────────────────────────────
+                    SettingsSectionContainer(
+                        title = "Connections",
+                        icon = Icons.Default.DeviceHub,
+                        uiStyle = uiStyle
+                    ) {
+                        SettingsInfoRow("Active",  "${info.activeConnections}")
+                        SettingsInfoRow("Maximum", "${info.maxConnections}")
+                        // Visual connection bar
+                        val used = if (info.maxConnections > 0)
+                            info.activeConnections.toFloat() / info.maxConnections.toFloat()
+                        else 0f
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Connections used",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${info.activeConnections} / ${info.maxConnections}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            LinearProgressIndicator(
+                                progress = { used.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color = when {
+                                    used >= 1f   -> MaterialTheme.colorScheme.error
+                                    used >= 0.8f -> MaterialTheme.colorScheme.tertiary
+                                    else         -> MaterialTheme.colorScheme.primary
+                                },
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
+                    }
+
+                    // ── Server Info ───────────────────────────────────────────
+                    SettingsSectionContainer(
+                        title = "Server Info",
+                        icon = Icons.Default.Dns,
+                        uiStyle = uiStyle
+                    ) {
+                        SettingsInfoRow("Host",     info.host)
+                        SettingsInfoRow("Protocol", info.serverProtocol)
+                        SettingsInfoRow("Port",     info.port)
+                        SettingsInfoRow("Timezone", info.timezone)
+                    }
+
+                    Spacer(Modifier.height(32.dp))
+                }
+            }  // end when
+        }      // end inner Column
+    }          // end outer Column
 }
 
-// ── Reusable components ───────────────────────────────────────────────────────
+// ── Legacy reusable components — kept for backward compatibility ───────────────
 
 @Composable
 private fun AccountInfoCard(
@@ -265,28 +298,21 @@ private fun AccountInfoCard(
     iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimaryContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
-                    }
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
                 }
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            content()
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        content()
     }
 }
 

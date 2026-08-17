@@ -61,7 +61,8 @@ data class XtreamVodStream(
     @SerializedName("director") val director: String?,
     @SerializedName("genre") val genre: String?,
     @SerializedName("duration") val duration: String?,
-    @SerializedName("backdrop_path") val backdropPath: List<String>?
+    @SerializedName("backdrop_path") val backdropPath: List<String>?,
+    @SerializedName("original_language") val originalLanguage: String? = null
 )
 
 data class XtreamVodCategory(
@@ -105,7 +106,8 @@ data class MovieInfo(
     @SerializedName("rating") val rating: String?,
     @SerializedName("duration") val duration: String?,
     @SerializedName("backdrop_path") val backdropPath: List<String>?,
-    @SerializedName("youtube_trailer") val youtubeTrailer: String?
+    @SerializedName("youtube_trailer") val youtubeTrailer: String?,
+    @SerializedName("original_language") val originalLanguage: String? = null
 )
 
 data class MovieData(
@@ -133,7 +135,8 @@ data class XtreamSeries(
     @SerializedName("releaseDate") val releaseDate: String? = null,
     @SerializedName("rating") val rating: String? = null,
     @SerializedName("category_id") val categoryId: String? = null,
-    @SerializedName("backdrop_path") val backdropPath: List<String>? = null  // ← was String?
+    @SerializedName("backdrop_path") val backdropPath: List<String>? = null,
+    @SerializedName("original_language") val originalLanguage: String? = null
 )
 
 data class XtreamSeriesInfo(
@@ -150,8 +153,8 @@ data class XtreamSeriesInfoDetail(
     @SerializedName("genre") val genre: String? = null,
     @SerializedName("releaseDate") val releaseDate: String? = null,
     @SerializedName("rating") val rating: String? = null,
-    @SerializedName("backdrop_path") val backdropPath: List<String>? = null  // ← was String?
-
+    @SerializedName("backdrop_path") val backdropPath: List<String>? = null,
+    @SerializedName("original_language") val originalLanguage: String? = null
 )
 
 data class XtreamEpisode(

@@ -1,5 +1,6 @@
 package app.nexstream.player.ui.screens.series
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.draw.clip
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.SeriesGridItem
@@ -53,6 +55,27 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import app.nexstream.player.ui.theme.LocalUiStyle
+import app.nexstream.player.ui.theme.UiStyle
+import app.nexstream.player.ui.theme.getSeriesSortOrderFlow
+import app.nexstream.player.ui.theme.saveSeriesSortOrder
+
+private enum class SeriesSortOrder(val label: String) {
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), AGE_RATING("Age Rating")
+}
+
+private val SERIES_AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
+private fun seriesCertOrder(cert: String?): Int =
+    if (cert == null || cert == "NR") Int.MAX_VALUE else SERIES_AGE_CERT_ORDER[cert] ?: Int.MAX_VALUE
+
+private fun parseSeriesReleaseDateSortKey(date: String?): Long {
+    if (date.isNullOrBlank()) return 0L
+    val parts = date.trim().split("-")
+    val year  = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val month = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val day   = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    return year.toLong() * 10000L + month * 100L + day
+}
 
 @Composable
 fun SeriesScreen(
@@ -69,13 +92,20 @@ fun SeriesScreen(
     onDialogOpen: (Boolean) -> Unit = {},
     onDownloadEpisode: ((streamUrl: String, title: String) -> Unit)? = null,
     onContentFocused: () -> Unit = {},
+    showSearch: Boolean = false,
+    autoSearchQuery: String? = null,
+    onAutoSearchConsumed: () -> Unit = {},
+    silentFilterQuery: String? = null,
+    onSilentFilterConsumed: () -> Unit = {},
+    onKeyboardDismissed: (() -> Unit)? = null,
+    onKeyboardDismissedEmpty: (() -> Unit)? = null,
+    onCategorySelect: (String?) -> Unit = {},
     viewModel: SeriesViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
-    val _allSeriesList by viewModel.getSeriesByCategory(
-        if (selectedCategory == "__favourites__" || selectedCategory == "__search__") null
-        else selectedCategory
-    ).collectAsState(initial = emptyList())
+    val categoryForFlow = if (selectedCategory == "__favourites__") null else selectedCategory
+    val _allSeriesList by remember(categoryForFlow) { viewModel.getSeriesByCategory(categoryForFlow) }
+        .collectAsState(initial = emptyList())
     val playlists by viewModel.playlists.collectAsState()
     // Avoid flashing "No playlists" before Room emits first value
     var isInitialising by remember { mutableStateOf(true) }
@@ -92,26 +122,98 @@ fun SeriesScreen(
     val watchedCountsForProfile by viewModel.getWatchedCountsForProfile(profileId).collectAsState(emptyMap())
     var searchQuery by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
-    LaunchedEffect(selectedCategory) { if (selectedCategory != "__search__") { searchQuery = ""; debouncedQuery = "" } }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) { debouncedQuery = ""; return@LaunchedEffect }
-        kotlinx.coroutines.delay(300)
-        debouncedQuery = searchQuery
+        // Don't search while keyboard is visible — apply when it closes
     }
+    val maxAgeRating = activeProfile?.maxAgeRating
+    val allowNr      = activeProfile?.allowNr ?: true
     var allSeriesList by remember { mutableStateOf<List<SeriesGridItem>>(emptyList()) }
-    LaunchedEffect(_allSeriesList, watchlistIds, selectedCategory, debouncedQuery) {
+    var posterItems   by remember { mutableStateOf<List<PosterItem>>(emptyList()) }
+    var selectedSeries by remember { mutableStateOf<SeriesEntity?>(null) }
+    val openDialogSeriesId = selectedSeries?.id
+    val needsFavoritesFilter = selectedCategory == "__favourites__"
+    val sortOrderName by androidx.compose.ui.platform.LocalContext.current.applicationContext.getSeriesSortOrderFlow().collectAsState(initial = SeriesSortOrder.A_Z.name)
+    val sortOrder = SeriesSortOrder.entries.firstOrNull { it.name == sortOrderName } ?: SeriesSortOrder.A_Z
+    var showSortDialog by remember { mutableStateOf(false) }
+    val sortButtonFR = remember { FocusRequester() }
+    var isSorting by remember { mutableStateOf(false) }
+    LaunchedEffect(System.identityHashCode(_allSeriesList), System.identityHashCode(watchlistIds), needsFavoritesFilter, debouncedQuery, maxAgeRating, allowNr, openDialogSeriesId, silentFilterQuery, sortOrder) {
+        isSorting = true
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            val base = if (selectedCategory == "__favourites__") _allSeriesList.filter { it.id in watchlistIds } else _allSeriesList
-            if (selectedCategory == "__search__" && debouncedQuery.isNotBlank()) base.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
-            else base
+            val base = if (needsFavoritesFilter) _allSeriesList.filter { it.id in watchlistIds } else _allSeriesList
+            val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base
+            val filtered = when {
+                silentFilterQuery != null -> ageFiltered.filter { it.name.contains(silentFilterQuery, ignoreCase = true) }
+                showSearch && debouncedQuery.isNotBlank() -> ageFiltered.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
+                else -> ageFiltered
+            }
+            when (sortOrder) {
+                SeriesSortOrder.A_Z            -> filtered.sortedBy { it.name.lowercase() }
+                SeriesSortOrder.Z_A            -> filtered.sortedByDescending { it.name.lowercase() }
+                SeriesSortOrder.RATING         -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
+                SeriesSortOrder.RECENTLY_ADDED -> filtered.sortedByDescending { parseSeriesReleaseDateSortKey(it.releaseDate) }
+                SeriesSortOrder.AGE_RATING     -> filtered.sortedBy { seriesCertOrder(it.certification) }
+            }
+        }
+        if (result.isEmpty() && allSeriesList.isNotEmpty() && _allSeriesList.isEmpty()) {
+            kotlinx.coroutines.delay(150)
         }
         allSeriesList = result
+        isSorting = false
+    }
+    LaunchedEffect(System.identityHashCode(allSeriesList), System.identityHashCode(watchlistIds), System.identityHashCode(watchedCountsForProfile)) {
+        posterItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            allSeriesList.map { s ->
+                PosterItem(
+                    id                = s.id,
+                    name              = s.name,
+                    posterUrl         = s.posterUrl,
+                    showProgressBadge = (watchedCountsForProfile[s.id] ?: 0) > 0,
+                    isBookmarked      = s.id in watchlistIds,
+                    certification     = s.certification,
+                    rating            = s.rating?.toDoubleOrNull()?.let { "%.1f".format(it) } ?: s.rating
+                )
+            }
+        }
     }
     val context = LocalContext.current
 
     val seriesList = allSeriesList
 
-    var selectedSeries by remember { mutableStateOf<SeriesEntity?>(null) }
+    var gridViewRef by remember { mutableStateOf<PosterGridView?>(null) }
+    var handledSilentQuery by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(silentFilterQuery, allSeriesList.size, posterItems.size, gridViewRef) {
+        val query = silentFilterQuery ?: run { handledSilentQuery = null; return@LaunchedEffect }
+        if (query == handledSilentQuery) return@LaunchedEffect
+        if (allSeriesList.isEmpty()) return@LaunchedEffect
+        if (posterItems.isEmpty()) return@LaunchedEffect   // wait for posterItems to be computed
+        val view = gridViewRef ?: return@LaunchedEffect
+        // Filter is active — item is at index 0; scroll and focus it
+        onItemFocused(0)
+        view.scrollToIndexTop(0)
+        // Wait for submitList diff to complete and ViewHolder to be bound
+        kotlinx.coroutines.delay(100)
+        var attempt = 0
+        while (attempt < 20) {
+            view.scrollToIndexTop(0)
+            if (view.requestItemFocusNow(0)) break
+            kotlinx.coroutines.delay(50)
+            attempt++
+        }
+        handledSilentQuery = query   // mark handled only after focus attempt finishes
+        onContentFocused()
+    }
+    var isReloadingAll by remember { mutableStateOf(false) }
+    val prevSilentFilter = remember { mutableStateOf<String?>(null) }
+    // Single effect with both keys — set and clear run in the same coroutine, no race condition
+    LaunchedEffect(silentFilterQuery, allSeriesList.size) {
+        val wasFiltered = prevSilentFilter.value != null
+        prevSilentFilter.value = silentFilterQuery
+        if (wasFiltered && silentFilterQuery == null) isReloadingAll = true
+        if (isReloadingAll && allSeriesList.size > 1) isReloadingAll = false
+    }
+
     var lastSeriesForDialog by remember { mutableStateOf<SeriesEntity?>(null) }
     var lastPlayedEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var lastEpisodesForDialog by remember { mutableStateOf<List<app.nexstream.player.data.local.entity.EpisodeEntity>>(emptyList()) }
@@ -135,6 +237,71 @@ fun SeriesScreen(
         loadedEpisodes.map { it.seasonNum }.distinct().sorted()
     }
     var isLoadingDetails by remember { mutableStateOf(false) }
+    var showKeyboard by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showSearch) {
+        if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
+        else { showKeyboard = false }
+    }
+    // Pre-fill query and open keyboard when navigated from Picks
+    LaunchedEffect(autoSearchQuery) {
+        if (autoSearchQuery != null) {
+            searchQuery = autoSearchQuery
+            showKeyboard = true
+            onAutoSearchConsumed()
+        }
+    }
+    var wasShowingKeyboard by remember { mutableStateOf(false) }
+    LaunchedEffect(showKeyboard) {
+        if (!showKeyboard && wasShowingKeyboard) {
+            if (searchQuery.isNotBlank()) {
+                debouncedQuery = searchQuery
+                kotlinx.coroutines.delay(200)
+                onKeyboardDismissed?.invoke()
+            } else {
+                kotlinx.coroutines.delay(200)
+                onKeyboardDismissedEmpty?.invoke()
+            }
+        }
+        wasShowingKeyboard = showKeyboard
+    }
+
+    if (showSortDialog) {
+        AlertDialog(
+            onDismissRequest = { showSortDialog = false },
+            title = { Text("Sort by") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SeriesSortOrder.entries.forEach { option ->
+                        val selected = option == sortOrder
+                        Surface(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { scope.launch { context.applicationContext.saveSeriesSortOrder(option.name) }; showSortDialog = false },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surface,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(option.label, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurface)
+                                if (selected) Icon(Icons.Default.Check, null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Cancel") } }
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -152,169 +319,232 @@ fun SeriesScreen(
                 }
             }
             else -> {
-                var gridViewRef by remember { mutableStateOf<PosterGridView?>(null) }
                 val currentSeriesList = remember { mutableStateOf<List<SeriesGridItem>>(emptyList()) }
-                LaunchedEffect(allSeriesList) { currentSeriesList.value = allSeriesList }
+                LaunchedEffect(System.identityHashCode(allSeriesList)) { currentSeriesList.value = allSeriesList }
                 val nsTheme = LocalNexStreamTheme.current
                 val sTheme = nsTheme.sidebar
                 val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+                val uiStyleOuter = LocalUiStyle.current
 
                 Column(modifier = Modifier.fillMaxSize()
                 ) {
-                    if (selectedCategory == "__search__") {
-                        val searchFR = remember { FocusRequester() }
-                        var showKeyboard by remember { mutableStateOf(false) }
-                        LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); showKeyboard = true }
-                        Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().focusRequester(searchFR).focusable().clickable { showKeyboard = true },
-                                shape = RoundedCornerShape(12.dp), color = sTheme.categorySelectedBg, tonalElevation = 2.dp
+                    if (uiStyleOuter != UiStyle.MODERN) {
+                    Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.CenterStart) {
+                        if (silentFilterQuery != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Icon(Icons.Default.Search, null, tint = sTheme.railIconActive, modifier = Modifier.size(20.dp))
-                                    Text(searchQuery.ifEmpty { "Search series..." }, style = MaterialTheme.typography.bodyMedium,
-                                        color = if (searchQuery.isEmpty()) sTheme.categoryText.copy(alpha = 0.5f) else sTheme.categoryText,
-                                        modifier = Modifier.weight(1f))
-                                    if (searchQuery.isNotEmpty()) Icon(Icons.Default.Close, "Clear",
-                                        tint = sTheme.categoryText.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(18.dp).clickable { searchQuery = "" })
+                                Text(
+                                    text = "\"$silentFilterQuery\"",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = sTheme.categoryText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { onSilentFilterConsumed() }) {
+                                    Text("Back to All", color = sTheme.categoryText.copy(alpha = 0.7f))
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = when (selectedCategory) {
+                                            "__favourites__" -> "Favourites"
+                                            null -> "All"
+                                            else -> selectedCategory
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = sTheme.categoryText
+                                    )
+                                    if (isSorting) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text  = "(Sorting...)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = sTheme.categoryText.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    onClick = { showSortDialog = true },
+                                    modifier = Modifier
+                                        .focusRequester(sortButtonFR)
+                                        .onKeyEvent { e ->
+                                            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                            when (e.key) {
+                                                Key.DirectionDown -> { gridViewRef?.requestItemFocus(0); true }
+                                                else -> false
+                                            }
+                                        }
+                                ) {
+                                    Icon(Icons.Default.SwapVert, contentDescription = "Sort",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = sTheme.categoryText.copy(alpha = 0.7f))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(sortOrder.label, style = MaterialTheme.typography.bodySmall,
+                                        color = sTheme.categoryText.copy(alpha = 0.7f))
                                 }
                             }
                         }
-                        app.nexstream.player.ui.components.TvKeyboardSheet(
-                            visible       = showKeyboard,
-                            value         = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            onDone        = { showKeyboard = false },
-                            onDismiss     = { showKeyboard = false },
-                            hint          = "Search series…"
-                        )
-                    } else {
-                        Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
-                            contentAlignment = Alignment.CenterStart) {
-                            Text(
-                                text = when (selectedCategory) {
-                                    "__favourites__" -> "Favourites"
-                                    null -> "All"
-                                    else -> selectedCategory
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                                color = sTheme.categoryText
-                            )
-                        }
                     }
                     HorizontalDivider(color = sTheme.divider)
+                    } // end if uiStyleOuter != MODERN
 
                     when {
-                        // Only show spinner when actually loading — not when favourites/search is genuinely empty
-                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && selectedCategory != "__search__" -> {
+                        isReloadingAll -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                                    Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        // Only show spinner when actually loading — not when favourites/search is genuinely empty,
+                        // and not during a silentGoTo (grid must be created so gridViewRef can be set)
+                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && !showSearch && silentFilterQuery == null -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         }
                         seriesList.isEmpty() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(when (selectedCategory) {
-                                    "__favourites__" -> "No series in your favourites yet"
-                                    "__search__" -> "No results found"
+                                Text(when {
+                                    selectedCategory == "__favourites__" -> "No series in your favourites yet"
+                                    silentFilterQuery != null -> "No series found"
+                                    showSearch -> "No results found"
                                     else -> "No series in this category"
                                 }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         else -> {
-                            val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
-                            val onPrimaryColor = MaterialTheme.colorScheme.onPrimary.toArgb()
-                            val tertiaryColor = MaterialTheme.colorScheme.tertiary.toArgb()
-                            val onTertiaryColor = MaterialTheme.colorScheme.onTertiary.toArgb()
-                            val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
-                            val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
-                            val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
-                            val posterItems = remember(seriesList, watchlistIds, watchedCountsForProfile) {
-                                seriesList.map { s ->
-                                    PosterItem(
-                                        id = s.id,
-                                        name = s.name,
-                                        posterUrl = s.posterUrl,
-                                        badge = if (s.seasonCount > 1) "${s.seasonCount} Seasons" else null,
-                                        showProgressBadge = (watchedCountsForProfile[s.id] ?: 0) > 0,
-                                        isBookmarked = s.id in watchlistIds
-                                    )
-                                }
-                            }
-                            AndroidView(
-                                factory = { ctx ->
-                                    PosterGridView(ctx).also { gridViewRef = it; onGridViewReady(it) }.apply {
-                                        setColumnCount(6)
-                                        blockFocus()
-                                        callbacks = object : PosterGridCallbacks {
-                                            override fun onItemClick(item: PosterItem, index: Int) {
-                                                val series = currentSeriesList.value.firstOrNull { it.id == item.id } ?: return
-                                                onItemFocused(index)
-                                                isLoadingDetails = true
-                                                selectedSeriesId = null
-                                                scope.launch {
-                                                    val fullSeries = viewModel.repository.getSeriesById(series.id)
-                                                    selectedSeries = fullSeries
-                                                    val rawId = series.id.removePrefix("${series.playlistId}-")
-                                                    // Fetch from server to ensure latest episode data
-                                                    viewModel.loadSeriesDetails(
-                                                        playlistId = series.playlistId, seriesId = rawId
-                                                    )
-                                                    // Now point the live Flow at this series — DB already has latest
-                                                    selectedSeriesId = series.id
-                                                    isLoadingDetails = false
-                                                }
-                                            }
-                                            override fun onItemLongClick(item: PosterItem, index: Int) {
-                                                val series = currentSeriesList.value.firstOrNull { it.id == item.id } ?: return
-                                                val isBookmarked = series.id in watchlistIds
-                                                watchlistViewModel.toggleWatchlist(WatchlistEntity(
-                                                    id = series.id,
-                                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                                                    type = WatchlistType.SERIES, name = series.name,
-                                                    posterUrl = series.posterUrl, streamUrl = null
-                                                ), isBookmarked)
-                                                scope.launch { snackbarHostState.showSnackbar(
-                                                    if (!isBookmarked) "${series.name} added to My List"
-                                                    else "${series.name} removed from My List"
-                                                )}
-                                            }
-                                            override fun onItemFocused(index: Int) { onItemFocused(index) }
-                                            override fun onLeftEdge() { /* left key does nothing — use back button */ }
-                                            override fun onTopEdge() { }
+                            if (uiStyleOuter == UiStyle.MODERN) {
+                                val recentlyWatched by viewModel.repository.getRecentlyWatched().collectAsState(initial = emptyList())
+                                ModernSeriesContent(
+                                    seriesList       = seriesList,
+                                    continueWatching = recentlyWatched,
+                                    progressItemIds  = progressItemIds,
+                                    watchedCounts    = watchedCountsForProfile,
+                                    selectedCategory = selectedCategory,
+                                    onSeriesClick    = { series ->
+                                        isLoadingDetails = true
+                                        selectedSeriesId = null
+                                        scope.launch {
+                                            val fullSeries = viewModel.repository.getSeriesById(series.id)
+                                            selectedSeries = fullSeries
+                                            val rawId = series.id.removePrefix("${series.playlistId}-")
+                                            viewModel.loadSeriesDetails(playlistId = series.playlistId, seriesId = rawId)
+                                            selectedSeriesId = series.id
+                                            isLoadingDetails = false
                                         }
-                                    }
-                                },
-                                update = { view ->
-                                    view.primaryColor = primaryColor
-                                    view.onPrimaryColor = onPrimaryColor
-                                    view.tertiaryColor = tertiaryColor
-                                    view.onTertiaryColor = onTertiaryColor
-                                    view.surfaceVariantColor = surfaceVariantColor
-                                    view.surfaceColor = surfaceColor
-                                    view.onSurfaceColor = onSurfaceColor
-                                    val prevSize = view.itemCount
-                                    view.setItems(posterItems)
-                                    // Scroll to top and restore focus when category changes
-                                    if (prevSize != posterItems.size) {
-                                        view.scrollToIndex(0)
-                                        view.requestItemFocus(0)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    // canFocus=false on the Compose wrapper — focus goes
-                                    // directly to PosterItemView children via requestFocus override
-                                    .focusProperties { canFocus = false }
-                                    .focusable(false)
-                            )
+                                    },
+                                    onContinueWatchingClick = { item ->
+                                        val seriesId = item.seriesId ?: return@ModernSeriesContent
+                                        scope.launch {
+                                            val fullSeries = viewModel.repository.getSeriesById(seriesId)
+                                            selectedSeries = fullSeries
+                                            selectedSeriesId = seriesId
+                                        }
+                                    },
+                                )
+                            } else {
+                                val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
+                                val onPrimaryColor = MaterialTheme.colorScheme.onPrimary.toArgb()
+                                val tertiaryColor = MaterialTheme.colorScheme.tertiary.toArgb()
+                                val onTertiaryColor = MaterialTheme.colorScheme.onTertiary.toArgb()
+                                val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
+                                val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
+                                val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                                AndroidView(
+                                    factory = { ctx ->
+                                        PosterGridView(ctx).also { gridViewRef = it; onGridViewReady(it) }.apply {
+                                            setColumnCount(6)
+                                            blockFocus()
+                                            callbacks = object : PosterGridCallbacks {
+                                                override fun onItemClick(item: PosterItem, index: Int) {
+                                                    val series = currentSeriesList.value.firstOrNull { it.id == item.id } ?: return
+                                                    onItemFocused(index)
+                                                    isLoadingDetails = true
+                                                    selectedSeriesId = null
+                                                    scope.launch {
+                                                        val fullSeries = viewModel.repository.getSeriesById(series.id)
+                                                        selectedSeries = fullSeries
+                                                        val rawId = series.id.removePrefix("${series.playlistId}-")
+                                                        // Fetch from server to ensure latest episode data
+                                                        viewModel.loadSeriesDetails(
+                                                            playlistId = series.playlistId, seriesId = rawId
+                                                        )
+                                                        // Now point the live Flow at this series — DB already has latest
+                                                        selectedSeriesId = series.id
+                                                        isLoadingDetails = false
+                                                    }
+                                                }
+                                                override fun onItemLongClick(item: PosterItem, index: Int) {
+                                                    val series = currentSeriesList.value.firstOrNull { it.id == item.id } ?: return
+                                                    val isBookmarked = series.id in watchlistIds
+                                                    watchlistViewModel.toggleWatchlist(WatchlistEntity(
+                                                        id = series.id,
+                                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                                        type = WatchlistType.SERIES, name = series.name,
+                                                        posterUrl = series.posterUrl, streamUrl = null
+                                                    ), isBookmarked)
+                                                    scope.launch { snackbarHostState.showSnackbar(
+                                                        if (!isBookmarked) "${series.name} added to My List"
+                                                        else "${series.name} removed from My List"
+                                                    )}
+                                                }
+                                                override fun onItemFocused(index: Int) { onItemFocused(index) }
+                                                override fun onLeftEdge() { onRequestSidebarFocus() }
+                                                override fun onTopEdge() { runCatching { sortButtonFR.requestFocus() } }
+                                            }
+                                        }
+                                    },
+                                    update = { view ->
+                                        view.primaryColor = primaryColor
+                                        view.onPrimaryColor = onPrimaryColor
+                                        view.tertiaryColor = tertiaryColor
+                                        view.onTertiaryColor = onTertiaryColor
+                                        view.surfaceVariantColor = surfaceVariantColor
+                                        view.surfaceColor = surfaceColor
+                                        view.onSurfaceColor = onSurfaceColor
+                                        val prevSize = view.itemCount
+                                        view.setItems(posterItems)
+                                        if (prevSize > 0 && prevSize != posterItems.size && silentFilterQuery == null) {
+                                            view.scrollToIndex(0)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        // canFocus=false on the Compose wrapper — focus goes
+                                        // directly to PosterItemView children via requestFocus override
+                                        .focusProperties { canFocus = false }
+                                        .focusable(false)
+                                )
+                            } // end else (Classic UI)
                         }
                     }
                 }
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
+        app.nexstream.player.ui.components.TvKeyboardSheet(
+            visible       = showKeyboard,
+            value         = searchQuery,
+            onValueChange = { searchQuery = it },
+            onDone        = { showKeyboard = false },
+            onDismiss     = { showKeyboard = false },
+            hint          = "Search series…",
+            modifier      = Modifier.fillMaxSize()
+        )
     }
+
+    androidx.activity.compose.BackHandler(enabled = showKeyboard) { showKeyboard = false }
 
     LaunchedEffect(selectedSeries) {
         onDialogOpen(selectedSeries != null)
@@ -335,7 +565,17 @@ fun SeriesScreen(
             episodeProgressMap = episodeProgressMap,
             isLoading = isLoadingDetails, isBookmarked = isDialogBookmarked,
             initialFocusEpisodeId = lastPlayedEpisodeId,
+            maxAgeRating = activeProfile?.maxAgeRating,
+            allowNr = activeProfile?.allowNr ?: true,
+            playlistName = playlists.find { it.id == series.playlistId }?.let { p ->
+                val label = when (p.type) { "XTREAM" -> "Xtream Codes"; "JELLYFIN" -> "Jellyfin"; else -> p.type }
+                "$label · ${p.name}"
+            },
             onDownloadEpisode = onDownloadEpisode,
+            onFetchCertification = { viewModel.fetchCertificationIfMissing(series.id, series.name) },
+            onFetchOriginalLanguage = { viewModel.fetchOriginalLanguageIfMissing(series.id, series.name) },
+            whisperManager = viewModel.whisperSubtitleManager,
+            onFetchTrailerUrl = { viewModel.fetchTrailerUrl(series.name) },
             onToggleWatchlist = {
                 watchlistViewModel.toggleWatchlist(WatchlistEntity(id = series.id,
                     profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
@@ -396,36 +636,27 @@ fun SeriesCard(
                     contentScale = ContentScale.Crop
                 )
                 if (isFocused) Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
-                // Continue badge — top left
+                // Continue badge — top left (play icon only)
                 if (hasProgress) {
                     Surface(
                         modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(Icons.Default.PlayCircle, null,
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(10.dp))
-                            Text("Continue",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        Icon(Icons.Default.PlayCircle, null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp).size(10.dp))
                     }
                 }
-                // Season count — top right
-                if (series.seasonCount > 0) {
+                // Certification badge — top right
+                if (series.certification != null) {
                     Surface(
                         modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
                         Text(
-                            if (series.seasonCount == 1) "1 Season" else "${series.seasonCount} Seasons",
+                            series.certification,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
@@ -451,4 +682,14 @@ fun SeriesCard(
             }
         } // Card
     } // outer Box
+}
+
+private fun isAllowedByAgeRating(certification: String?, maxAgeRating: String?, allowNr: Boolean = true): Boolean {
+    if (certification == "NR") return allowNr
+    if (maxAgeRating == null) return true
+    if (certification == null) return true
+    val order = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
+    val certOrder = order[certification] ?: return true
+    val maxOrder  = order[maxAgeRating]  ?: return true
+    return certOrder <= maxOrder
 }

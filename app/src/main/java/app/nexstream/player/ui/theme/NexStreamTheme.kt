@@ -19,7 +19,7 @@ data class NexStreamIdentity(
 
 data class NexStreamTypography(
     val scale: Float = 1.0f,
-    val bold: Boolean = false,
+    val weight: String = "normal", // "normal" | "semibold" | "bold"
 )
 
 
@@ -131,3 +131,19 @@ data class NexStreamTheme(
 val LocalNexStreamTheme = staticCompositionLocalOf<NexStreamTheme> {
     error("No NexStreamTheme provided — wrap your app in NexStreamThemeProvider")
 }
+
+// ─────────────────────────────────────────────────────────────
+// Modern UI semantic tokens — provided by NexStreamThemeProvider,
+// sourced from the active NexStreamTheme. Use in Modern UI
+// composables only; never hardcode colour values there.
+// ─────────────────────────────────────────────────────────────
+
+val LocalNsBackground      = staticCompositionLocalOf { Color.Black }
+val LocalNsSurface         = staticCompositionLocalOf { Color(0xFF1A1A1A) }
+val LocalNsSurfaceFocused  = staticCompositionLocalOf { Color(0xFF2D2D7A) }
+val LocalNsAccent          = staticCompositionLocalOf { Color(0xFF5B7FFF) }
+val LocalNsTextPrimary     = staticCompositionLocalOf { Color.White }
+val LocalNsTextSecondary   = staticCompositionLocalOf { Color(0xFFAAAAAA) }
+val LocalNsTextOnAccent    = staticCompositionLocalOf { Color.White }
+val LocalNsGradientOverlay = staticCompositionLocalOf { Color.Black.copy(alpha = 0.65f) }
+val LocalNsDivider         = staticCompositionLocalOf { Color(0xFF333333) }

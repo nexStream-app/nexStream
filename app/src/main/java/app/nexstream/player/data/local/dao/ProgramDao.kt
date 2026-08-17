@@ -28,19 +28,18 @@ interface ProgramDao {
     @Query("SELECT * FROM programs WHERE channelId IN (:channelIds) AND endTime >= :startTime AND startTime <= :endTime ORDER BY startTime DESC")
     fun getProgramsForChannelsInRange(channelIds: List<String>, startTime: Long, endTime: Long): Flow<List<ProgramEntity>>
 
-    // ADD to ProgramDao:
-    @Query("SELECT * FROM programs WHERE title LIKE '%' || :query || '%' ORDER BY startTime DESC LIMIT 50")
-    fun searchPrograms(query: String): Flow<List<ProgramEntity>>
+    @Query("SELECT * FROM programs WHERE title LIKE '%' || :query || '%' AND startTime <= :now AND endTime >= :now ORDER BY startTime DESC LIMIT 50")
+    fun searchPrograms(query: String, now: Long): Flow<List<ProgramEntity>>
 
     @Query("DELETE FROM programs")
     suspend fun deleteAllPrograms()
 
     @SuppressWarnings(RoomWarnings.CURSOR_MISMATCH)
     @Query("""
-    SELECT id, title, startTime, endTime, channelId, description 
-    FROM programs 
-    WHERE channelId = :channelId 
-    AND startTime >= :startTime 
+    SELECT id, title, startTime, endTime, channelId, description
+    FROM programs
+    WHERE channelId = :channelId
+    AND startTime >= :startTime
     AND startTime <= :endTime
     ORDER BY startTime DESC
 """)
@@ -49,5 +48,10 @@ interface ProgramDao {
         startTime: Long,
         endTime: Long
     ): Flow<List<ProgramEntity>>
+
+    // One-shot EPG lookup for sports event enrichment: finds a program on any of the given
+    // channels whose start time falls within the ±45-minute window around the event start.
+    @Query("SELECT * FROM programs WHERE channelId IN (:channelIds) AND startTime BETWEEN :fromMs AND :toMs LIMIT 1")
+    suspend fun findProgramNearStartTime(channelIds: List<String>, fromMs: Long, toMs: Long): ProgramEntity?
 
 }

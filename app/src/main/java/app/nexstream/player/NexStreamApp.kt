@@ -12,8 +12,12 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import androidx.hilt.work.HiltWorkerFactory
+import app.nexstream.player.data.local.dao.ProfileDao
 import app.nexstream.player.data.profile.ProfileManager
+import app.nexstream.player.data.sync.ChannelGroupSyncManager
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.data.sync.SettingsSyncManager
+import app.nexstream.player.data.sync.WatchlistSyncManager
 import coil.Coil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,9 +26,13 @@ import kotlinx.coroutines.launch
 @HiltAndroidApp
 class NexStreamApp : Application(), ImageLoaderFactory, Configuration.Provider {
     @Inject lateinit var profileManager: ProfileManager
+    @Inject lateinit var profileDao: ProfileDao
 
     @Inject lateinit var imageLoader: ImageLoader
     @Inject lateinit var profileSyncManager: ProfileSyncManager
+    @Inject lateinit var watchlistSyncManager: WatchlistSyncManager
+    @Inject lateinit var channelGroupSyncManager: ChannelGroupSyncManager
+    @Inject lateinit var settingsSyncManager: SettingsSyncManager
     @Inject
     lateinit var themeManager: ThemeManager
     @Inject
@@ -39,7 +47,18 @@ class NexStreamApp : Application(), ImageLoaderFactory, Configuration.Provider {
         profileManager.init()
         profileSyncManager.onSyncComplete = { profileManager.refreshAfterSync() }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            settingsSyncManager.syncFromServer()
+            settingsSyncManager.pushSettings()
             profileSyncManager.syncFromServer()
+            profileSyncManager.pushProfiles()
+            // Re-pull profiles: catches any profiles pushed by other devices between our
+            // initial pull and our push (closing the race window on startup).
+            profileSyncManager.syncFromServer()
+            watchlistSyncManager.pushAllToServer()
+            channelGroupSyncManager.syncFromServer()
+            channelGroupSyncManager.pushGroups()
+            val profiles = profileDao.getAllProfilesOnce()
+            profiles.forEach { profile -> watchlistSyncManager.syncFromServer(profile.id) }
             Coil.setImageLoader(imageLoader)
         }
         // Register FCM token

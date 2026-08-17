@@ -3,7 +3,7 @@ package app.nexstream.player.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-enum class WatchlistType { CHANNEL, MOVIE, SERIES }
+enum class WatchlistType { CHANNEL, MOVIE, SERIES, MUSIC }
 
 @Entity(
     tableName = "watchlist",

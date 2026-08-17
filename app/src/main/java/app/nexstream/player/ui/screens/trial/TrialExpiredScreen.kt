@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import app.nexstream.player.ui.theme.LocalNsBackground
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -38,10 +39,11 @@ fun TrialExpiredScreen(
         if (uiState.isActivated) onLicenceActivated()
     }
 
+    val background = LocalNsBackground.current
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(background),
         contentAlignment = Alignment.Center
     ) {
         Card(

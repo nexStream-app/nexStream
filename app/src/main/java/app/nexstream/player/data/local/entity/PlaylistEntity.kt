@@ -8,10 +8,11 @@ data class PlaylistEntity(
     @PrimaryKey val id: String,
     val name: String,
     val url: String,
-    val type: String, // "M3U" or "XTREAM"
+    val type: String, // "M3U", "XTREAM", or "JELLYFIN"
     val xtreamHost: String? = null,
     val xtreamUsername: String? = null,
     val xtreamPassword: String? = null,
-    val xtreamExpiry: String? = null, // Add this field
-    val addedDate: Long = System.currentTimeMillis()
+    val xtreamExpiry: String? = null,
+    val addedDate: Long = System.currentTimeMillis(),
+    val sortIndex: Int = 0,
 )

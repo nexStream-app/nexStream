@@ -29,4 +29,25 @@ interface RecentlyWatchedDao {
 
     @Query("DELETE FROM recently_watched WHERE profileId = :profileId")
     suspend fun clearAll(profileId: String)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = :type")
+    suspend fun clearByType(profileId: String, type: app.nexstream.player.data.local.entity.RecentlyWatchedType)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'CHANNEL' AND (SELECT COUNT(*) FROM channels) > 0 AND id NOT IN (SELECT id FROM channels)")
+    suspend fun pruneStaleChannels(profileId: String)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'MOVIE' AND (SELECT COUNT(*) FROM movies) > 0 AND id NOT IN (SELECT id FROM movies)")
+    suspend fun pruneStaleMovies(profileId: String)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'EPISODE' AND (SELECT COUNT(*) FROM series) > 0 AND seriesId NOT IN (SELECT id FROM series)")
+    suspend fun pruneStaleEpisodes(profileId: String)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'CHANNEL' AND id IN (SELECT id FROM channels WHERE groupTitle IN (:blockedCategories))")
+    suspend fun pruneBlockedChannels(profileId: String, blockedCategories: List<String>)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'MOVIE' AND id IN (SELECT id FROM movies WHERE certification IN (:blockedCerts))")
+    suspend fun pruneAgeRestrictedMovies(profileId: String, blockedCerts: List<String>)
+
+    @Query("DELETE FROM recently_watched WHERE profileId = :profileId AND type = 'EPISODE' AND seriesId IN (SELECT id FROM series WHERE certification IN (:blockedCerts))")
+    suspend fun pruneAgeRestrictedEpisodes(profileId: String, blockedCerts: List<String>)
 }

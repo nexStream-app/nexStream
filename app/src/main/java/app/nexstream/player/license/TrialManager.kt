@@ -16,6 +16,12 @@ enum class AppAccessState {
     LICENSED
 }
 
+sealed class AssignedLicenceCheck {
+    object None : AssignedLicenceCheck()
+    data class TrialFound(val expiresAt: String?, val daysLeft: Int) : AssignedLicenceCheck()
+    object FullLicenceActivated : AssignedLicenceCheck()
+}
+
 @Singleton
 class TrialManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -46,47 +52,82 @@ class TrialManager @Inject constructor(
                     URL("https://nexstream.uk/api/check_licence.php?device_id=$deviceId")
                         .readText()
                 )
-                if (!json.optBoolean("found", false)) return@withContext false
+                val found = json.optBoolean("found", false)
+                android.util.Log.i("TrialManager", "checkAndActivateAssignedLicence: found=$found")
+                if (!found) return@withContext false
 
                 val key = json.optJSONObject("licence")?.optString("key") ?: return@withContext false
                 if (key.isEmpty()) return@withContext false
 
-                android.util.Log.d("TrialManager", "Found assigned licence: $key")
-                val result = licenceManager.activate(key)
+                android.util.Log.i("TrialManager", "checkAndActivateAssignedLicence: activating key=${key.take(6)}…")
+                val result = licenceManager.activate(key, isResellerAssigned = false)
+                android.util.Log.i("TrialManager", "checkAndActivateAssignedLicence: activate result=${result::class.simpleName}")
                 result is LicenceResult.Success
             } catch (e: Exception) {
-                android.util.Log.e("TrialManager", "Licence check failed: ${e.message}")
+                android.util.Log.i("TrialManager", "checkAndActivateAssignedLicence: exception: ${e.message}")
                 false
             }
         }
 
-    suspend fun checkAccessState(deviceId: String): AppAccessState = withContext(Dispatchers.IO) {
-        android.util.Log.d("TrialManager", "Checking access for device: $deviceId")
+    // Called once after first playlist is added to create the trial on the backend.
+    // Idempotent — safe to call on every import; returns existing trial for known devices.
+    suspend fun initTrial(deviceId: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.checkTrial(TrialRequest(deviceId))
+                if (!response.isSuccessful) return@withContext
+                val body = response.body() ?: return@withContext
+                if (body.success != true) return@withContext
+                body.expires_at?.let { saveTrialExpiry(it) }
+                body.sync_key?.let { licencePreferences.saveTrialSyncKey(it) }
+            } catch (e: Exception) {
+                android.util.Log.e("TrialManager", "initTrial failed: ${e.message}")
+            }
+        }
+    }
 
-        if (licencePreferences.hasLicence()) return@withContext AppAccessState.LICENSED
+    suspend fun checkAccessState(deviceId: String): AppAccessState = withContext(Dispatchers.IO) {
+        android.util.Log.i("TrialManager", "checkAccessState: deviceId=$deviceId hasLicence=${licencePreferences.hasLicence()}")
+
+        if (licencePreferences.hasLicence()) {
+            android.util.Log.i("TrialManager", "checkAccessState: licence key present → LICENSED")
+            return@withContext AppAccessState.LICENSED
+        }
 
         // Check if a licence has been assigned to this device on the server
+        android.util.Log.i("TrialManager", "checkAccessState: no local key, checking server for assigned licence")
         val activated = checkAndActivateAssignedLicence(deviceId)
-        if (activated) return@withContext AppAccessState.LICENSED
+        if (activated) {
+            android.util.Log.i("TrialManager", "checkAccessState: server assigned licence activated → LICENSED")
+            return@withContext AppAccessState.LICENSED
+        }
 
+        android.util.Log.i("TrialManager", "checkAccessState: no assigned licence, calling trial API")
         return@withContext try {
             val response = api.checkTrial(TrialRequest(deviceId))
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body?.success == true) {
                     body.expires_at?.let { saveTrialExpiry(it) }
-                    if (body.is_expired == true) AppAccessState.TRIAL_EXPIRED
-                    else AppAccessState.TRIAL_ACTIVE
+                    body.sync_key?.let { licencePreferences.saveTrialSyncKey(it) }
+                    val result = if (body.is_expired == true) AppAccessState.TRIAL_EXPIRED else AppAccessState.TRIAL_ACTIVE
+                    android.util.Log.i("TrialManager", "checkAccessState: trial API → $result (expired=${body.is_expired} expires=${body.expires_at})")
+                    result
                 } else {
+                    android.util.Log.i("TrialManager", "checkAccessState: trial API body.success=false → fallbackToLocal")
                     fallbackToLocal()
                 }
             } else {
+                android.util.Log.i("TrialManager", "checkAccessState: trial API HTTP ${response.code()} → fallbackToLocal")
                 fallbackToLocal()
             }
         } catch (e: Exception) {
+            android.util.Log.i("TrialManager", "checkAccessState: trial API exception: ${e.message} → fallbackToLocal")
             fallbackToLocal()
         }
     }
+
+    fun getLocalAccessState(): AppAccessState = fallbackToLocal()
 
     private fun fallbackToLocal(): AppAccessState {
         if (licencePreferences.hasLicence()) return AppAccessState.LICENSED
@@ -98,6 +139,8 @@ class TrialManager @Inject constructor(
         }
     }
 
+    fun getTrialExpiresAt(): String? = getTrialExpiry()
+
     fun getDaysLeft(): Int {
         val expiry = getTrialExpiry() ?: return 7
         return try {
@@ -108,4 +151,37 @@ class TrialManager @Inject constructor(
     }
 
     fun getDeviceId(): String = licenceManager.getDeviceId()
+
+    // Used by the "Check for Assigned Licence" button — checks type first, only activates if non-trial.
+    suspend fun checkAssignedLicenceForDisplay(deviceId: String): AssignedLicenceCheck =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                val json = JSONObject(
+                    URL("https://nexstream.uk/api/check_licence.php?device_id=$deviceId").readText()
+                )
+                if (!json.optBoolean("found", false)) return@withContext AssignedLicenceCheck.None
+
+                val licenceObj = json.optJSONObject("licence") ?: return@withContext AssignedLicenceCheck.None
+                val key  = licenceObj.optString("key", "")
+                val type = licenceObj.optString("type", "")
+                if (key.isEmpty()) return@withContext AssignedLicenceCheck.None
+
+                if (type == "trial") {
+                    val expiresAt = licenceObj.optString("expires_at", null)
+                        .takeIf { !it.isNullOrEmpty() }
+                    expiresAt?.let { saveTrialExpiry(it) }
+                    AssignedLicenceCheck.TrialFound(
+                        expiresAt = expiresAt ?: getTrialExpiry(),
+                        daysLeft  = getDaysLeft()
+                    )
+                } else {
+                    val result = licenceManager.activate(key, isResellerAssigned = false)
+                    if (result is LicenceResult.Success) AssignedLicenceCheck.FullLicenceActivated
+                    else AssignedLicenceCheck.None
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("TrialManager", "checkAssignedLicenceForDisplay: ${e.message}")
+                AssignedLicenceCheck.None
+            }
+        }
 }

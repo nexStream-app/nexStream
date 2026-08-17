@@ -2,23 +2,21 @@ package app.nexstream.player.ui.screens.movies
 
 import android.os.Environment
 import android.os.StatFs
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,9 +32,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nexstream.player.data.local.entity.MovieEntity
+import app.nexstream.player.ui.theme.LocalNsAccent
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -104,10 +104,12 @@ fun MovieDetailsDialog(
     movie: MovieEntity,
     resumePosition: Long = 0L,
     isBookmarked: Boolean = false,
+    playlistName: String? = null,
     onDismiss: () -> Unit,
     onPlay: (startPosition: Long) -> Unit,
     onToggleWatchlist: () -> Unit = {},
-    onDownload: () -> Unit = {}
+    onDownload: () -> Unit = {},
+    onGoToMovies: (() -> Unit)? = null
 ) {
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
@@ -116,7 +118,8 @@ fun MovieDetailsDialog(
     val posterWidth = (posterHeight * 0.67f).coerceAtMost(100.dp)
 
     val hasProgress = resumePosition > 0L
-    val buttonCount = if (hasProgress) 5 else 4
+    val hasGoToMovies = onGoToMovies != null
+    val buttonCount = (if (hasProgress) 5 else 4) + (if (hasGoToMovies) 1 else 0)
     var selectedButton by remember { mutableStateOf(if (hasProgress) 4 else 3) }
     val dialogFocus = remember { FocusRequester() }
 
@@ -294,7 +297,7 @@ fun MovieDetailsDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .focusRequester(dialogFocus)
@@ -304,37 +307,76 @@ fun MovieDetailsDialog(
                             when (keyEvent.key) {
                                 Key.DirectionLeft  -> { selectedButton = (selectedButton - 1 + buttonCount) % buttonCount; true }
                                 Key.DirectionRight -> { selectedButton = (selectedButton + 1) % buttonCount; true }
-                                Key.Enter, Key.DirectionCenter -> {
+                                Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
                                     when (selectedButton) {
                                         0 -> onDismiss()
                                         1 -> onToggleWatchlist()
                                         2 -> { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }
-                                        3 -> if (hasProgress) onPlay(0) else onPlay(0) // StartOver or Play
-                                        4 -> onPlay(resumePosition) // Resume
+                                        3 -> onPlay(0)
+                                        4 -> if (hasProgress) onPlay(resumePosition) else onGoToMovies?.invoke()
+                                        5 -> onGoToMovies?.invoke()
                                     }
                                     true
                                 }
+                                Key.Back -> { onDismiss(); true }
                                 else -> false
                             }
                         } else false
                     }
             ) {
-                // ── Top section ───────────────────────────────────────────────
-                Box(modifier = Modifier.fillMaxWidth().height(topSectionHeight)) {
-                    AnimatedContent(
-                        targetState = movie.backdropUrl ?: movie.posterUrl,
-                        transitionSpec = { fadeIn(tween(2500)) togetherWith fadeOut(tween(2500)) },
-                        label = "backdrop"
-                    ) { url ->
-                        AsyncImage(model = url, contentDescription = null,
-                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                // ── Backdrop fills entire dialog ───────────────────────────────
+                AsyncImage(
+                    model = movie.backdropUrl ?: movie.posterUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter
+                )
+                Box(modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f  to Color.Transparent,
+                            0.40f to Color.Black.copy(alpha = 0.50f),
+                            0.75f to Color.Black.copy(alpha = 0.88f),
+                            1.0f  to Color.Black.copy(alpha = 0.97f),
+                        )
+                    )
+                ))
+
+                // ── Close — top-right (index 0) ───────────────────────────────
+                Box(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selectedButton == 0) MaterialTheme.colorScheme.primary
+                                else Color.Black.copy(alpha = 0.55f),
+                        modifier = Modifier.clickable(onClick = onDismiss)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Close, null, Modifier.size(14.dp), tint = Color.White)
+                            Text("Close", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                        }
                     }
-                    Box(modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)))))
-                    Row(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AsyncImage(model = movie.posterUrl, contentDescription = movie.name,
-                            modifier = Modifier.width(posterWidth).height(posterHeight).clip(RoundedCornerShape(8.dp)))
+                }
+
+                // ── Content at bottom ─────────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Poster + metadata row
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        AsyncImage(
+                            model = movie.posterUrl, contentDescription = movie.name,
+                            modifier = Modifier.width(posterWidth).height(posterHeight).clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(movie.name, style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2)
@@ -345,70 +387,88 @@ fun MovieDetailsDialog(
                                         Text(movie.rating!!, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White)
                                     }
                                 }
+                                if (!movie.certification.isNullOrEmpty()) {
+                                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f)) {
+                                        Text(movie.certification!!, style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onTertiary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                }
                                 if (!movie.releaseDate.isNullOrEmpty()) Text(movie.releaseDate!!, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                                 if (!movie.duration.isNullOrEmpty()) Text(movie.duration!!, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                             }
                             if (!movie.genre.isNullOrEmpty()) Text(movie.genre!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            if (!playlistName.isNullOrEmpty()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.PlaylistPlay, null, modifier = Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.5f))
+                                    Text(playlistName, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), maxLines = 1)
+                                }
+                            }
+                            if (!movie.plot.isNullOrEmpty()) Text(movie.plot!!, style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.75f), maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                }
-
-                // ── Scrollable body ───────────────────────────────────────────
-                Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (!movie.plot.isNullOrEmpty()) Text(movie.plot!!, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!movie.cast.isNullOrEmpty()) InfoSection("Cast", movie.cast!!)
-                    if (!movie.director.isNullOrEmpty()) InfoSection("Director", movie.director!!)
-                }
-
-                // ── Action bar: all right-aligned, Close leftmost ─────────
-                // No progress: Spacer | Close | MyList | Download | Play
-                // Has progress: Spacer | Close | MyList | Download | StartOver | Resume(default)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    // 0 = Close
-                    if (selectedButton == 0) Button(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Close")
-                    } else OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Close")
-                    }
-                    // 1 = My List
-                    if (selectedButton == 1) Button(onClick = onToggleWatchlist, shape = RoundedCornerShape(8.dp)) {
-                        Icon(if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp)); Text(if (isBookmarked) "Remove from My List" else "Add to My List")
-                    } else OutlinedButton(onClick = onToggleWatchlist, shape = RoundedCornerShape(8.dp)) {
-                        Icon(if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp)); Text(if (isBookmarked) "Remove from My List" else "Add to My List")
-                    }
-                    // 2 = Download
-                    if (selectedButton == 2) Button(onClick = { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Download, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Download")
-                    } else OutlinedButton(onClick = { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Download, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Download")
-                    }
-                    if (hasProgress) {
-                        // 3 = Start Over
-                        if (selectedButton == 3) Button(onClick = { onPlay(0) }, shape = RoundedCornerShape(8.dp)) {
-                            Text("Start Over")
-                        } else OutlinedButton(onClick = { onPlay(0) }, shape = RoundedCornerShape(8.dp)) {
-                            Text("Start Over")
+                    Spacer(Modifier.height(4.dp))
+                    // ── Action buttons ────────────────────────────────────────
+                    val accent = LocalNsAccent.current
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1 = My List
+                        MovieActionPill(
+                            icon      = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            label     = if (isBookmarked) "Remove" else "My List",
+                            isSelected = selectedButton == 1,
+                            accent    = accent,
+                            onClick   = onToggleWatchlist
+                        )
+                        // 2 = Download
+                        MovieActionPill(
+                            icon      = Icons.Default.Download,
+                            label     = "Download",
+                            isSelected = selectedButton == 2,
+                            accent    = accent,
+                            onClick   = { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }
+                        )
+                        // Go to Movies (index 4 or 5)
+                        if (hasGoToMovies) {
+                            val goToIdx = if (hasProgress) 5 else 4
+                            MovieActionPill(
+                                icon      = Icons.Default.PlaylistPlay,
+                                label     = "Go to Movies",
+                                isSelected = selectedButton == goToIdx,
+                                accent    = accent,
+                                onClick   = { onGoToMovies?.invoke() }
+                            )
                         }
-                        // 4 = Resume (rightmost, default)
-                        if (selectedButton == 4) Button(onClick = { onPlay(resumePosition) }, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Resume")
-                        } else OutlinedButton(onClick = { onPlay(resumePosition) }, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Resume")
-                        }
-                    } else {
-                        // 3 = Play (rightmost, default)
-                        if (selectedButton == 3) Button(onClick = { onPlay(0) }, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Play Movie")
-                        } else OutlinedButton(onClick = { onPlay(0) }, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Play Movie")
+                        Spacer(Modifier.weight(1f))
+                        if (hasProgress) {
+                            // 3 = Start Over
+                            MovieActionPill(
+                                icon      = Icons.Default.PlayArrow,
+                                label     = "Start Over",
+                                isSelected = selectedButton == 3,
+                                accent    = accent,
+                                onClick   = { onPlay(0) }
+                            )
+                            // 4 = Resume (default)
+                            MovieActionPill(
+                                icon      = Icons.Default.PlayArrow,
+                                label     = "Resume",
+                                isSelected = selectedButton == 4,
+                                accent    = accent,
+                                onClick   = { onPlay(resumePosition) }
+                            )
+                        } else {
+                            // 3 = Play Movie (default)
+                            MovieActionPill(
+                                icon      = Icons.Default.PlayArrow,
+                                label     = "Play Movie",
+                                isSelected = selectedButton == 3,
+                                accent    = accent,
+                                onClick   = { onPlay(0) }
+                            )
                         }
                     }
                 }
@@ -422,5 +482,34 @@ private fun InfoSection(title: String, content: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Text(content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun MovieActionPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(if (isSelected) accent else Color.Black.copy(alpha = 0.55f))
+            .border(
+                width = if (isSelected) 0.dp else 1.dp,
+                color = if (isSelected) Color.Transparent else Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(50.dp),
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(icon, null, modifier = Modifier.size(14.dp),
+            tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f))
+        androidx.compose.material3.Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.85f))
     }
 }

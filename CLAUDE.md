@@ -16,7 +16,7 @@ Solo project by a single developer. Priced at £3.99/device.
 - **UI:** Jetpack Compose (Android TV / Leanback-compatible) + hybrid RecyclerView for grids
 - **Player:** ExoPlayer (Media3) with FFmpeg decoder extension
 - **DI:** Hilt (KSP-based, not kapt)
-- **Local DB:** Room (current schema version: **21**)
+- **Local DB:** Room (current schema version: **22**)
 - **Networking:** Retrofit / OkHttp
 - **Image loading:** Coil with custom `ImageLoader` (20% memory, 50 MB disk, 4 concurrent fetches)
 - **Background work:** WorkManager (EpgRefreshWorker, ReminderWorker)
@@ -46,23 +46,29 @@ Solo project by a single developer. Priced at £3.99/device.
 Top-level routing uses a sealed `Screen` class (`Loading`, `Main`, `AddPlaylist`, `player/{channelUrl}`) in `NexStreamNavGraph`. Inside `MainScreen`, sub-navigation uses the sealed interface `AppRoute` (`Guide`, `Movies`, `Series`, `CatchUp`, `Search`, `MyList`, `Downloads`, `Settings/*`). `AppRoute` extensions (`rootSection()`, `hasCategoryPanel`, `isSettings`) drive sidebar and panel behaviour.
 
 ### Three-pane layout & focus model
-All screens use `ThreePaneLayout` (`ui/components/ThreePaneLayout.kt`). Navigation state lives entirely in `NavigationViewModel` (`ui/navigation/NavigationViewModel.kt`) — a Hilt singleton shared across all screens.
+Navigation state lives in `MainScreen.kt` (zone, panelFocusTick, sidebarRefocusTick, etc.) and is driven by Sidebar callbacks.
 
-**Layout:** `[Rail 80dp always visible] [Panel 0↔280dp animated] [Content fills rest]`
+**Layout — Rail and Panel are mutually exclusive:**
+- **Rail visible (panel closed):** Rail = 168dp, Panel = 0dp
+- **Panel visible (rail hidden):** Rail = 0dp (slides left), Panel = 180dp (slides right)
+
+The rail animates to 0dp and is made non-focusable (`focusProperties { canFocus = false }`) when the panel is open. The panel animates to 0dp when closed. This is driven by a single `Animatable<Float>` (`panelProgress` 0→1) in `Sidebar.kt`.
 
 All rail items have a panel — `hasPanel` does not exist anywhere in the codebase.
 
 | Zone | Input | Result |
 |------|-------|--------|
-| Rail | Center/OK | Selects rail item, expands panel — focus stays on rail |
-| Rail | DPad Right | Expands panel, moves focus to panel (last selected → "All" → first) |
+| Rail | Center/OK or DPad Right | Rail collapses to 0, panel expands, focus → panel (previously selected → "All" → first) |
 | Panel | Center/OK | Selects panel item, updates content — focus stays on panel |
 | Panel | DPad Right | Selects panel item, moves focus to content |
-| Panel | DPad Left / Back | Hides panel (width→0), returns focus to rail |
-| Content | Back | Returns focus to panel (panel stays visible) |
+| Panel | DPad Left / Back | Panel collapses to 0, rail expands, focus → rail |
+| Content | Back | Returns focus to panel (panel stays visible, rail stays hidden) |
 | Content | DPad Left | Blocked — no DPad back-path from content to panel |
 
-Last selected panel item is persisted per rail item in `NavigationState.lastSelectedPanelItemPerRail: Map<String, String>`.
+**Focus flow implementation:**
+- `LaunchedEffect(currentRoute)` in `MainScreen.kt` — when `currentRoute.hasCategoryPanel` and NOT first load and NOT a settings sub-route switch, sets `zone = Zone.PANEL`, then waits 160ms (panel animation is 140ms) before incrementing `panelFocusTick`.
+- `isSettingsSubRoute` is true only when switching between settings items where `previousRoute.isSettings == true` — this suppresses the zone reset so Center/OK on a panel item doesn't steal focus back from the content.
+- `previousRoute` is tracked in `MainScreen.kt` to distinguish first-time settings entry (focus → panel) from intra-settings navigation (zone unchanged).
 
 **Key event pattern (do not deviate):**
 ```kotlin
@@ -85,9 +91,11 @@ Box(
 **Hard rules for navigation:**
 - Never send focus to content when Center/OK is pressed on a panel item
 - Never use `Modifier.clickable` alone on TV — always pair with `onFocusChanged` + `onKeyEvent`
-- Never duplicate navigation logic in screen-level composables — all state lives in `NavigationViewModel`
+- Never duplicate navigation logic in screen-level composables — all state lives in `MainScreen.kt`
 - Never add a `hasPanel` parameter — all rail items have a panel
-- Back behaviour is handled by `BackHandler` in `ThreePaneLayout`, not in individual screens
+- Back behaviour is handled by `BackHandler` in `MainScreen.kt`, not in individual screens
+- Rail and panel are mutually exclusive — never show both at the same time
+- Never set rail width to a fixed non-zero value when the panel is expanded
 
 ### Theming system
 `ThemeManager` loads JSON themes from the nexstream.uk API (keyed by licence token) and caches them to `filesDir/themes/`. It falls back to bundled asset defaults (`assets/themes/theme-{dark,light}-default.json`). Themes can include custom font download URLs. `NexStreamThemeProvider` exposes the active theme as a `CompositionLocal`.
@@ -166,7 +174,7 @@ app/src/main/java/app/nexstream/player/
 - All API responses return JSON
 - Auth uses token-based auth (not session cookies)
 - Stripe webhook handlers must validate signatures before processing
-- Reseller invite system: invites generated server-side, consumed on registration
+- Reseller invite system: invites generaion
 
 ---
 
@@ -202,11 +210,24 @@ On Windows use `.\gradlew`; on Mac/Linux use `./gradlew`.
 - PHP files are uploaded directly; no build step required
 - Database migrations are run manually via phpMyAdmin or inline PHP scripts
 
+## Backend Architecture (PHP)
+
+**Location:** `backend/` — read and reason about this alongside the Android code.  
+**Deployed to:** nexstream.uk (IONOS shared hosting). This folder is NOT built or compiled  
+locally — files are uploaded via IONOS file manager. Never suggest running PHP locally  
+or any SSH/CLI deploy steps.
+
+### API contract (Android ↔ PHP)
+- All responses are JSON
+- Auth: Bearer token = licence key (SHA-256 of ANDROID_ID)
+- Base URL from Android: `https://nexstream.uk/api/`
+- AES-256-CBC encryption used for [specific fields e.g. passwords, playlist credentials]
+
 ---
 
 ## Room Database
 
-Current schema version: **21** (`NexStreamDatabase.kt`)
+Current schema version: **22** (`NexStreamDatabase.kt`)
 
 Entities: `PlaylistEntity`, `ChannelEntity`, `ProgramEntity`, `MovieEntity`, `SeriesEntity`, `EpisodeEntity`, `WatchlistEntity`, `RecentlyWatchedEntity`, `ReminderEntity`, `ProfileEntity`, `ProfileCategoryFilter`, `WatchProgressEntity`, `TmdbPosterEntity`
 
@@ -259,7 +280,7 @@ Entities: `PlaylistEntity`, `ChannelEntity`, `ProgramEntity`, `MovieEntity`, `Se
 
 - **CatchUp** — replay of previously broadcast content, up to 8 days back
 - **EPG** — Electronic Programme Guide; the TV schedule grid
-- **Reseller** — a white-label partner who can provision NexStream accounts under their own branding
+- **Reseller** — a white-label partner who can provision nexStream accounts under their own branding
 - **Profile** — a per-user viewing profile within a single account, with optional parental restrictions
 - **Playlist** — an M3U or Xtream Codes source defining channels available to a user
 - **Allwinner box** — a physical Android TV device used for testing (in addition to Fire TV)

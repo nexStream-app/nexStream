@@ -1,6 +1,7 @@
 package app.nexstream.player.ui.components
 
 import androidx.compose.foundation.background
+import app.nexstream.player.data.local.entity.ChannelGroupEntity
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.screens.main.hasCategoryPanel
 import app.nexstream.player.ui.screens.main.isSettings
@@ -123,6 +124,7 @@ fun Sidebar(
     selectedMusicCategory: String? = null,
     onMusicCategorySelected: (String?) -> Unit = {},
     showSyncSettings: Boolean = true,
+    channelGroups: List<ChannelGroupEntity> = emptyList(),
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
@@ -321,7 +323,8 @@ fun Sidebar(
                         },
                         isAndroidTV           = isAndroidTV,
                         onBackPressed         = onExitPanelToRail,
-                        modifier              = Modifier.width(panelDp)
+                        modifier              = Modifier.width(panelDp),
+                        channelGroups         = if (expandedRoute == AppRoute.Guide) channelGroups else emptyList()
                     )
                 }
                 } // end Box weight(1f)
@@ -745,7 +748,8 @@ private fun CategoryPanel(
     isAndroidTV: Boolean = false,
     onBackPressed: () -> Unit = {},
     supportsKeyboardSearch: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    channelGroups: List<ChannelGroupEntity> = emptyList()
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
@@ -761,16 +765,21 @@ private fun CategoryPanel(
 
     // Stable index constants so focusTick can scroll to the target before requesting focus
     val favouritesIndex = if (showSearch) 1 else 0
-    val allIndex        = (if (showSearch) 1 else 0) + (if (showFavourites) 1 else 0)
+    val groupsOffset    = if (showFavourites) channelGroups.size else 0
+    val allIndex        = (if (showSearch) 1 else 0) + (if (showFavourites) 1 else 0) + groupsOffset
     val fixedCount      = allIndex + 1
 
     LaunchedEffect(focusTick) {
         if (focusTick == 0) return@LaunchedEffect
-        val targetIndex = when (selectedCategory) {
-            "__search__"     -> 0
-            "__favourites__" -> favouritesIndex
-            null             -> allIndex
-            else             -> {
+        val targetIndex = when {
+            selectedCategory == "__search__"     -> 0
+            selectedCategory == "__favourites__" -> favouritesIndex
+            selectedCategory?.startsWith("__grp_") == true -> {
+                val grpIdx = channelGroups.indexOfFirst { "__grp_${it.id}" == selectedCategory }
+                if (grpIdx >= 0) favouritesIndex + 1 + grpIdx else allIndex
+            }
+            selectedCategory == null -> allIndex
+            else -> {
                 val catIdx = categories.indexOf(selectedCategory)
                 if (catIdx >= 0) fixedCount + catIdx else allIndex
             }
@@ -856,6 +865,21 @@ private fun CategoryPanel(
                         onClick               = { onFavouritesSelected() }
                     )
                 }
+                // Channel groups — shown as sub-items under Favourites
+                items(channelGroups, key = { "__grp_${it.id}" }) { group ->
+                    val grpKey = "__grp_${group.id}"
+                    val fr = remember { FocusRequester() }
+                    SideEffect { categoryFocusMap[grpKey] = fr }
+                    PanelItem(
+                        text                  = group.name,
+                        isSelected            = selectedCategory == grpKey,
+                        focusRequester        = fr,
+                        onRequestContentFocus = onRequestContentFocus,
+                        onRequestRailFocus    = onRequestRailFocus,
+                        onFocused             = { onPanelFocusChanged(true) },
+                        onClick               = { onCategorySelected(grpKey) }
+                    )
+                }
             }
             item(key = "__all__") {
                 PanelItem(
@@ -921,6 +945,7 @@ private fun CategoryPanel(
                             else -> false
                         }
                     }
+                    .clickable { onClearAll() }
                     .focusable()
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1068,7 +1093,8 @@ private fun PanelItem(
                 interactionSource = interaction,
                 indication        = null,
                 onClick           = onClick,
-                onLongClick       = onLongClick
+                onLongClick       = onLongClick,
+                onDoubleClick     = onDoubleClick
             ),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -1223,21 +1249,23 @@ private fun SettingsPanel(
 
     val playlistsFR   = remember { FocusRequester() }
     val sportsFR      = remember { FocusRequester() }
-    val appearanceFR  = remember { FocusRequester() }
-    val playerFR      = remember { FocusRequester() }
-    val syncFR        = remember { FocusRequester() }
-    val licenceFR     = remember { FocusRequester() }
-    val accountFR     = remember { FocusRequester() }
-    val profilesFR    = remember { FocusRequester() }
-    val navigationFR  = remember { FocusRequester() }
-    val aboutFR       = remember { FocusRequester() }
+    val appearanceFR    = remember { FocusRequester() }
+    val playerFR        = remember { FocusRequester() }
+    val syncFR          = remember { FocusRequester() }
+    val licenceFR       = remember { FocusRequester() }
+    val accountFR       = remember { FocusRequester() }
+    val profilesFR      = remember { FocusRequester() }
+    val navigationFR    = remember { FocusRequester() }
+    val aboutFR         = remember { FocusRequester() }
+    val channelGroupsFR = remember { FocusRequester() }
 
     val entries = remember(showSyncSettings) {
         buildList {
-            add(SettingsEntry("Playlists",    AppRoute.SettingsPlaylists,  playlistsFR))
-            add(SettingsEntry("Sports Guide", AppRoute.SettingsSports,     sportsFR))
-            add(SettingsEntry("Appearance",   AppRoute.SettingsAppearance, appearanceFR))
-            add(SettingsEntry("Player",       AppRoute.SettingsPlayer,     playerFR))
+            add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,    playlistsFR))
+            add(SettingsEntry("Sports Guide",   AppRoute.SettingsSports,       sportsFR))
+            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,   appearanceFR))
+            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups, channelGroupsFR))
+            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,       playerFR))
             if (showSyncSettings) add(SettingsEntry("Sync", AppRoute.SettingsSyncSettings, syncFR))
             add(SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR))
             add(SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR))

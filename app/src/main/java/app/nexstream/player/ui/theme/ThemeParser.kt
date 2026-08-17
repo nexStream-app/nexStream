@@ -80,11 +80,10 @@ object ThemeParser {
     private fun bundledFontFamily(key: String, context: Context): FontFamily {
         return when (key.lowercase()) {
             "exo2" -> try {
-                // R.font.exo2 is a font XML that defines all weights —
-                // reference it once for Normal; Bold is handled by the font XML itself
                 FontFamily(
-                    androidx.compose.ui.text.font.Font(R.font.exo2, FontWeight.Normal),
-                    androidx.compose.ui.text.font.Font(R.font.exo2, FontWeight.Bold),
+                    androidx.compose.ui.text.font.Font(R.font.exo2_regular,  FontWeight.Normal),
+                    androidx.compose.ui.text.font.Font(R.font.exo2_semibold, FontWeight.SemiBold),
+                    androidx.compose.ui.text.font.Font(R.font.exo2_bold,     FontWeight.Bold),
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load exo2 font resource", e)
@@ -184,9 +183,10 @@ object ThemeParser {
 
     private fun parseTypography(obj: JSONObject?): NexStreamTypography {
         if (obj == null) return NexStreamTypography()
+        val w = obj.optString("weight", "normal").lowercase()
         return NexStreamTypography(
-            scale = obj.optDouble("scale", 1.0).toFloat().coerceIn(0.5f, 2.0f),
-            bold  = obj.optString("weight", "normal").lowercase() == "bold",
+            scale  = obj.optDouble("scale", 1.0).toFloat().coerceIn(0.5f, 2.0f),
+            weight = when (w) { "bold", "semibold" -> w else -> "normal" },
         )
     }
 

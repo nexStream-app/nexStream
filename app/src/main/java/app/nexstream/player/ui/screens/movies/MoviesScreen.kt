@@ -1,5 +1,6 @@
 package app.nexstream.player.ui.screens.movies
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -58,8 +60,13 @@ import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
+import app.nexstream.player.subtitle.WhisperSubtitleManager
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LocalUiStyle
+import app.nexstream.player.ui.theme.UiStyle
+import app.nexstream.player.ui.theme.getMovieSortOrderFlow
+import app.nexstream.player.ui.theme.saveMovieSortOrder
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -69,6 +76,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
+
+private enum class MovieSortOrder(val label: String) {
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), AGE_RATING("Age Rating")
+}
+
+private val AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
+private fun movieCertOrder(cert: String?): Int =
+    if (cert == null || cert == "NR") Int.MAX_VALUE else AGE_CERT_ORDER[cert] ?: Int.MAX_VALUE
+
+private fun parseReleaseDateSortKey(date: String?): Long {
+    if (date.isNullOrBlank()) return 0L
+    val parts = date.trim().split("-")
+    val year  = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val month = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val day   = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    return year.toLong() * 10000L + month * 100L + day
+}
 
 @Composable
 fun MoviesScreen(
@@ -84,13 +108,20 @@ fun MoviesScreen(
     onGridViewReady: (app.nexstream.player.ui.components.PosterGridView?) -> Unit = {},
     onContentFocused: () -> Unit = {},
     onDialogOpen: (Boolean) -> Unit = {},
+    showSearch: Boolean = false,
+    autoSearchQuery: String? = null,
+    onAutoSearchConsumed: () -> Unit = {},
+    silentFilterQuery: String? = null,
+    onSilentFilterConsumed: () -> Unit = {},
+    onKeyboardDismissed: (() -> Unit)? = null,
+    onKeyboardDismissedEmpty: (() -> Unit)? = null,
+    onCategorySelect: (String?) -> Unit = {},
     viewModel: MoviesViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
-    val _allMovies by viewModel.getMoviesByCategory(
-        if (selectedCategory == "__favourites__" || selectedCategory == "__search__") null
-        else selectedCategory
-    ).collectAsState(initial = emptyList())
+    val categoryForFlow = if (selectedCategory == "__favourites__") null else selectedCategory
+    val _allMovies by remember(categoryForFlow) { viewModel.getMoviesByCategory(categoryForFlow) }
+        .collectAsState(initial = emptyList())
     val playlists by viewModel.playlists.collectAsState()
     // Avoid flashing "No playlists" before Room emits first value
     var isInitialising by remember { mutableStateOf(true) }
@@ -110,20 +141,86 @@ fun MoviesScreen(
     val progressItemIds by viewModel.getProgressItemIds(profileId).collectAsState(emptySet())
     var searchQuery by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
-    LaunchedEffect(selectedCategory) { if (selectedCategory != "__search__") { searchQuery = ""; debouncedQuery = "" } }
+    var showKeyboard by remember { mutableStateOf(false) }
+    LaunchedEffect(showSearch) {
+        if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
+        else { showKeyboard = false }
+    }
+    // Pre-fill query and open keyboard when navigated from Picks
+    LaunchedEffect(autoSearchQuery) {
+        if (autoSearchQuery != null) {
+            searchQuery = autoSearchQuery
+            showKeyboard = true
+            onAutoSearchConsumed()
+        }
+    }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) { debouncedQuery = ""; return@LaunchedEffect }
-        kotlinx.coroutines.delay(300)
-        debouncedQuery = searchQuery
+        // Don't search while keyboard is visible — apply when it closes
     }
-    var allMovies by remember { mutableStateOf<List<MovieGridItem>>(emptyList()) }
-    LaunchedEffect(_allMovies, watchlistIds, selectedCategory, debouncedQuery) {
-        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            val base = if (selectedCategory == "__favourites__") _allMovies.filter { it.id in watchlistIds } else _allMovies
-            if (selectedCategory == "__search__" && debouncedQuery.isNotBlank()) base.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
-            else base
+    var wasShowingKeyboard by remember { mutableStateOf(false) }
+    LaunchedEffect(showKeyboard) {
+        if (!showKeyboard && wasShowingKeyboard) {
+            if (searchQuery.isNotBlank()) {
+                debouncedQuery = searchQuery
+                kotlinx.coroutines.delay(200)
+                onKeyboardDismissed?.invoke()
+            } else {
+                kotlinx.coroutines.delay(200)
+                onKeyboardDismissedEmpty?.invoke()
+            }
+        }
+        wasShowingKeyboard = showKeyboard
+    }
+    val sortOrderName by LocalContext.current.applicationContext.getMovieSortOrderFlow().collectAsState(initial = MovieSortOrder.A_Z.name)
+    val sortOrder = MovieSortOrder.entries.firstOrNull { it.name == sortOrderName } ?: MovieSortOrder.A_Z
+    var showSortDialog by remember { mutableStateOf(false) }
+    val sortButtonFR = remember { FocusRequester() }
+    val maxAgeRating = activeProfile?.maxAgeRating
+    val allowNr      = activeProfile?.allowNr ?: true
+    var allMovies  by remember { mutableStateOf<List<MovieGridItem>>(emptyList()) }
+    var posterItems by remember { mutableStateOf<List<PosterItem>>(emptyList()) }
+    val openDialogMovieId = movieWithDetails?.id
+    val needsFavoritesFilter = selectedCategory == "__favourites__"
+    var isSorting by remember { mutableStateOf(false) }
+    LaunchedEffect(System.identityHashCode(_allMovies), System.identityHashCode(watchlistIds), needsFavoritesFilter, debouncedQuery, maxAgeRating, allowNr, openDialogMovieId, silentFilterQuery, sortOrder) {
+        isSorting = true
+        val result = withContext(Dispatchers.Default) {
+            val base = if (needsFavoritesFilter) _allMovies.filter { it.id in watchlistIds } else _allMovies
+            val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogMovieId } else base
+            val filtered = when {
+                silentFilterQuery != null -> ageFiltered.filter { it.name.contains(silentFilterQuery, ignoreCase = true) }
+                showSearch && debouncedQuery.isNotBlank() -> ageFiltered.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
+                else -> ageFiltered
+            }
+            when (sortOrder) {
+                MovieSortOrder.A_Z             -> filtered.sortedBy { it.name.lowercase() }
+                MovieSortOrder.Z_A             -> filtered.sortedByDescending { it.name.lowercase() }
+                MovieSortOrder.RATING          -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
+                MovieSortOrder.RECENTLY_ADDED  -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
+                MovieSortOrder.AGE_RATING      -> filtered.sortedBy { movieCertOrder(it.certification) }
+            }
+        }
+        if (result.isEmpty() && allMovies.isNotEmpty() && _allMovies.isEmpty()) {
+            kotlinx.coroutines.delay(150)
         }
         allMovies = result
+        isSorting = false
+    }
+    LaunchedEffect(System.identityHashCode(allMovies), System.identityHashCode(watchlistIds), System.identityHashCode(progressItemIds)) {
+        posterItems = withContext(Dispatchers.Default) {
+            allMovies.map { m ->
+                PosterItem(
+                    id                = m.id,
+                    name              = m.name,
+                    posterUrl         = m.posterUrl,
+                    isBookmarked      = m.id in watchlistIds,
+                    showProgressBadge = m.id in progressItemIds,
+                    certification     = m.certification,
+                    rating            = m.rating?.toDoubleOrNull()?.let { "%.1f".format(it) } ?: m.rating
+                )
+            }
+        }
     }
     val context = LocalContext.current
 
@@ -132,9 +229,83 @@ fun MoviesScreen(
     var gridViewRef by remember { mutableStateOf<PosterGridView?>(null) }
     // Always-current ref for use inside factory lambdas (avoids stale closure capture)
     val currentMovies = remember { mutableStateOf<List<MovieGridItem>>(emptyList()) }
-    LaunchedEffect(allMovies) { currentMovies.value = allMovies }
+    LaunchedEffect(System.identityHashCode(allMovies)) { currentMovies.value = allMovies }
+    // When navigated from My List / Recent / Search "Go to": locate item in filtered grid and focus it.
+    // posterItems.size is included as a key because posterItems is computed asynchronously after
+    // allMovies changes — the first fire (when allMovies.size changes) may see posterItems still
+    // empty, so we guard and let the effect re-fire once posterItems is populated.
+    // handledSilentQuery is set AFTER the focus attempt so that a cancellation/re-fire due to a
+    // key change still retries rather than returning early.
+    var handledSilentQuery by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(silentFilterQuery, allMovies.size, posterItems.size, gridViewRef) {
+        val query = silentFilterQuery ?: run { handledSilentQuery = null; return@LaunchedEffect }
+        if (query == handledSilentQuery) return@LaunchedEffect
+        if (allMovies.isEmpty()) return@LaunchedEffect
+        if (posterItems.isEmpty()) return@LaunchedEffect   // wait for posterItems to be computed
+        val view = gridViewRef ?: return@LaunchedEffect
+        // Filter is active — item is at index 0; scroll and focus it
+        onItemFocused(0)
+        view.scrollToIndexTop(0)
+        // Wait for submitList diff to complete and ViewHolder to be bound
+        kotlinx.coroutines.delay(100)
+        var attempt = 0
+        while (attempt < 20) {
+            view.scrollToIndexTop(0)
+            if (view.requestItemFocusNow(0)) break
+            kotlinx.coroutines.delay(50)
+            attempt++
+        }
+        handledSilentQuery = query   // mark handled only after focus attempt finishes
+        onContentFocused()
+    }
+    var isReloadingAll by remember { mutableStateOf(false) }
+    val prevSilentFilter = remember { mutableStateOf<String?>(null) }
+    // Single effect with both keys — set and clear run in the same coroutine, no race condition
+    LaunchedEffect(silentFilterQuery, allMovies.size) {
+        val wasFiltered = prevSilentFilter.value != null
+        prevSilentFilter.value = silentFilterQuery
+        if (wasFiltered && silentFilterQuery == null) isReloadingAll = true
+        if (isReloadingAll && allMovies.size > 1) isReloadingAll = false
+    }
 
 
+
+    if (showSortDialog) {
+        AlertDialog(
+            onDismissRequest = { showSortDialog = false },
+            title = { Text("Sort by") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MovieSortOrder.entries.forEach { option ->
+                        val selected = option == sortOrder
+                        Surface(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                .clickable { scope.launch { context.applicationContext.saveMovieSortOrder(option.name) }; showSortDialog = false },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surface,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(option.label, style = MaterialTheme.typography.bodyMedium,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurface)
+                                if (selected) Icon(Icons.Default.Check, null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Cancel") } }
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -152,87 +323,147 @@ fun MoviesScreen(
                 }
             }
             else -> {
+                val uiStyle = LocalUiStyle.current
+                // When navigated from Search/My List with a silent filter but raw data hasn't
+                // arrived from the DB yet, show a spinner rather than "No movies found".
+                if (silentFilterQuery != null && movies.isEmpty() && _allMovies.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else if (uiStyle == UiStyle.MODERN) {
+                    ModernMoviesContent(
+                        movies           = movies,
+                        progressItemIds  = progressItemIds,
+                        selectedCategory = selectedCategory,
+                        onMovieClick     = { streamUrl, movieId, name ->
+                            isLoadingDetails = true
+                            scope.launch {
+                                val base = viewModel.repository.getMovieById(movieId)
+                                movieWithDetails = base
+                                val detailed = base?.let {
+                                    viewModel.repository.getMovieDetails(
+                                        playlistId = it.playlistId,
+                                        vodId      = it.id.removePrefix("${it.playlistId}-")
+                                    )
+                                }
+                                if (detailed != null) movieWithDetails = detailed
+                                isLoadingDetails = false
+                            }
+                        },
+                        onMovieLongPress = { movie ->
+                            watchlistViewModel.toggleWatchlist(
+                                WatchlistEntity(
+                                    id        = movie.id,
+                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                    type      = WatchlistType.MOVIE,
+                                    name      = movie.name,
+                                    posterUrl = movie.posterUrl,
+                                    streamUrl = movie.streamUrl
+                                ),
+                                movie.id in watchlistIds
+                            )
+                        }
+                    )
+                } else {
+
                 val nsTheme = LocalNexStreamTheme.current
                 val sTheme = nsTheme.sidebar
                 val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
                 Column(modifier = Modifier.fillMaxSize()
                 ) {
-                    // Header — search bar when in search mode, category name otherwise
-                    if (selectedCategory == "__search__") {
-                        val searchFR = remember { FocusRequester() }
-                        var showKeyboard by remember { mutableStateOf(false) }
-                        LaunchedEffect(Unit) {
-                            kotlinx.coroutines.delay(100)
-                            showKeyboard = true
-                        }
-                        Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth()
-                                    .focusRequester(searchFR).focusable()
-                                    .clickable { showKeyboard = true },
-                                shape = RoundedCornerShape(12.dp),
-                                color = sTheme.categorySelectedBg,
-                                tonalElevation = 2.dp
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (silentFilterQuery != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Icon(Icons.Default.Search, null,
-                                        tint = sTheme.railIconActive, modifier = Modifier.size(20.dp))
-                                    Text(
-                                        text = searchQuery.ifEmpty { "Search movies..." },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (searchQuery.isEmpty()) sTheme.categoryText.copy(alpha = 0.5f) else sTheme.categoryText,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (searchQuery.isNotEmpty()) {
-                                        Icon(Icons.Default.Close, "Clear",
-                                            tint = sTheme.categoryText.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(18.dp).clickable { searchQuery = "" })
-                                    }
+                                Text(
+                                    text = "\"$silentFilterQuery\"",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = sTheme.categoryText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { onSilentFilterConsumed() }) {
+                                    Text("Back to All", color = sTheme.categoryText.copy(alpha = 0.7f))
                                 }
                             }
-                        }
-                        app.nexstream.player.ui.components.TvKeyboardSheet(
-                            visible       = showKeyboard,
-                            value         = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            onDone        = { showKeyboard = false },
-                            onDismiss     = { showKeyboard = false },
-                            hint          = "Search movies…",
-                            modifier      = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = when (selectedCategory) {
-                                    "__favourites__" -> "Favourites"
-                                    null             -> "All"
-                                    else             -> selectedCategory
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                                color = sTheme.categoryText
-                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = when (selectedCategory) {
+                                            "__favourites__" -> "Favourites"
+                                            null             -> "All"
+                                            else             -> selectedCategory
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = sTheme.categoryText
+                                    )
+                                    if (isSorting) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text  = "(Sorting...)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = sTheme.categoryText.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    onClick = { showSortDialog = true },
+                                    modifier = Modifier
+                                        .focusRequester(sortButtonFR)
+                                        .onKeyEvent { e ->
+                                            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                            when (e.key) {
+                                                Key.DirectionDown -> { gridViewRef?.requestItemFocus(0); true }
+                                                else -> false
+                                            }
+                                        }
+                                ) {
+                                    Icon(Icons.Default.SwapVert, contentDescription = "Sort",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = sTheme.categoryText.copy(alpha = 0.7f))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(sortOrder.label, style = MaterialTheme.typography.bodySmall,
+                                        color = sTheme.categoryText.copy(alpha = 0.7f))
+                                }
+                            }
                         }
                     }
                     HorizontalDivider(color = sTheme.divider)
 
                     when {
+                        isReloadingAll -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                                    Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
                         (isLoadingVod || (vodTotal > 0 && vodLoaded < vodTotal) ||
                                 (playlists.isNotEmpty() && movies.isEmpty())) &&
-                                selectedCategory != "__favourites__" && selectedCategory != "__search__" -> {
+                                selectedCategory != "__favourites__" && !showSearch &&
+                                silentFilterQuery == null -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         }
                         movies.isEmpty() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(when (selectedCategory) {
-                                    "__favourites__" -> "No movies in your favourites yet"
-                                    "__search__" -> "No results found"
+                                Text(when {
+                                    selectedCategory == "__favourites__" -> "No movies in your favourites yet"
+                                    silentFilterQuery != null -> "No movies found"
+                                    showSearch -> "No results found"
                                     else -> "No movies in this category"
                                 },
                                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -246,17 +477,6 @@ fun MoviesScreen(
                             val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
                             val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
                             val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
-                            val posterItems = remember(movies, watchlistIds, progressItemIds) {
-                                movies.map { m ->
-                                    PosterItem(
-                                        id = m.id,
-                                        name = m.name,
-                                        posterUrl = m.posterUrl,
-                                        isBookmarked = m.id in watchlistIds,
-                                        showProgressBadge = m.id in progressItemIds
-                                    )
-                                }
-                            }
                             AndroidView(
                                 factory = { ctx ->
                                     PosterGridView(ctx).also { gridViewRef = it; onGridViewReady(it) }.apply {
@@ -294,8 +514,8 @@ fun MoviesScreen(
                                                 )}
                                             }
                                             override fun onItemFocused(index: Int) { onItemFocused(index) }
-                                            override fun onLeftEdge() { /* left key does nothing — use back button */ }
-                                            override fun onTopEdge() { /* already at top */ }
+                                            override fun onLeftEdge() { onRequestSidebarFocus() }
+                                            override fun onTopEdge() { runCatching { sortButtonFR.requestFocus() } }
                                         }
                                     }
                                 },
@@ -309,10 +529,8 @@ fun MoviesScreen(
                                     view.onSurfaceColor = onSurfaceColor
                                     val prevSize = view.itemCount
                                     view.setItems(posterItems)
-                                    // Scroll to top and restore focus when category changes
-                                    if (prevSize != posterItems.size) {
+                                    if (prevSize > 0 && prevSize != posterItems.size && silentFilterQuery == null) {
                                         view.scrollToIndex(0)
-                                        view.requestItemFocus(0)
                                     }
                                 },
                                 modifier = Modifier
@@ -325,14 +543,26 @@ fun MoviesScreen(
                         }
                     }
                 }
+                } // end else (Classic UI)
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
+        app.nexstream.player.ui.components.TvKeyboardSheet(
+            visible       = showKeyboard,
+            value         = searchQuery,
+            onValueChange = { searchQuery = it },
+            onDone        = { showKeyboard = false },
+            onDismiss     = { showKeyboard = false },
+            hint          = "Search movies…",
+            modifier      = Modifier.fillMaxSize()
+        )
     }
+
+    BackHandler(enabled = showKeyboard) { showKeyboard = false }
 
     LaunchedEffect(movieWithDetails) { onDialogOpen(movieWithDetails != null) }
 
-    movieWithDetails?.let { movie ->
+    movieWithDetails?.takeIf { !isLoadingDetails }?.let { movie ->
         val isBookmarked = movie.id in watchlistIds
         val resumePositionState by produceState<Long?>(null, movie.id, profileId) {
             value = viewModel.progressRepository.getMoviePosition(profileId, movie.id)
@@ -340,15 +570,34 @@ fun MoviesScreen(
         // Wait until position is known before showing dialog - prevents button flicker
         if (resumePositionState == null) return@let
         val resumePosition = resumePositionState!!
-        MovieDetailsDialog(movie = movie, isBookmarked = isBookmarked,
-            resumePosition = resumePosition,
-            onDismiss = { movieWithDetails = null; isLoadingDetails = false },
-            onToggleWatchlist = {
+        val isContentRestricted = run {
+            val cert       = movie.certification
+            val maxAge     = activeProfile?.maxAgeRating
+            val allowNrVal = activeProfile?.allowNr ?: true
+            when {
+                cert == "NR" || cert == null -> !allowNrVal
+                maxAge == null               -> false
+                else                         -> !isAllowedByAgeRating(cert, maxAge, allowNrVal)
+            }
+        }
+        ModernMovieDetailsDialog(
+            movie               = movie,
+            isBookmarked        = isBookmarked,
+            resumePosition      = resumePosition,
+            isContentRestricted = isContentRestricted,
+            maxAgeRating        = activeProfile?.maxAgeRating,
+            allowNr             = activeProfile?.allowNr ?: true,
+            playlistName        = playlists.find { it.id == movie.playlistId }?.let { p ->
+                val label = when (p.type) { "XTREAM" -> "Xtream Codes"; "JELLYFIN" -> "Jellyfin"; else -> p.type }
+                "$label · ${p.name}"
+            },
+            onDismiss           = { movieWithDetails = null; isLoadingDetails = false },
+            onToggleWatchlist   = {
                 watchlistViewModel.toggleWatchlist(WatchlistEntity(id = movie.id,
                     profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
                     type = WatchlistType.MOVIE, name = movie.name, posterUrl = movie.posterUrl, streamUrl = movie.streamUrl), isBookmarked)
             },
-            onDownload = {
+            onDownload          = {
                 app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(
                     context = context,
                     streamUrl = movie.streamUrl,
@@ -358,7 +607,12 @@ fun MoviesScreen(
                 movieWithDetails = null
                 isLoadingDetails = false
             },
-            onPlay = { startPosition -> movieWithDetails = null; isLoadingDetails = false; onMovieClick(movie.streamUrl, movie.id, startPosition, movie.name) }
+            onPlay              = { startPosition -> movieWithDetails = null; isLoadingDetails = false; onMovieClick(movie.streamUrl, movie.id, startPosition, movie.name) },
+            onFetchCertification = { viewModel.fetchCertificationIfMissing(movie.id, movie.name) },
+            onFetchOriginalLanguage = { viewModel.fetchOriginalLanguageIfMissing(movie.id, movie.name) },
+            whisperManager = viewModel.whisperSubtitleManager,
+            onFetchRtData       = { viewModel.fetchRtDataIfMissing(movie.id, movie.name) },
+            onFetchTrailerUrl   = { viewModel.fetchTrailerUrl(movie) },
         )
     }
 }
@@ -441,25 +695,31 @@ fun MovieCard(
                     contentScale = ContentScale.Crop
                 )
                 if (isFocused) Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
-                // Continue badge — top left (lastPlayedPosition kept for backward compat)
+                // Continue badge — top left (play icon only)
                 if (movie.lastPlayedPosition > 0L) {
                     Surface(
                         modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(Icons.Default.PlayCircle, null,
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(10.dp))
-                            Text("Continue",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        Icon(Icons.Default.PlayCircle, null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp).size(10.dp))
+                    }
+                }
+                // Certification badge — top right
+                if (movie.certification != null) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
+                        Text(
+                            movie.certification,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
+                        )
                     }
                 }
                 // Title gradient + My List icon
@@ -483,12 +743,23 @@ fun MovieCard(
     } // outer Box
 }
 
+private fun isAllowedByAgeRating(certification: String?, maxAgeRating: String?, allowNr: Boolean = true): Boolean {
+    if (certification == "NR") return allowNr
+    if (maxAgeRating == null) return true
+    if (certification == null) return true
+    val order = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
+    val certOrder = order[certification] ?: return true
+    val maxOrder  = order[maxAgeRating]  ?: return true
+    return certOrder <= maxOrder
+}
+
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
 @HiltViewModel
 class MoviesViewModel @Inject constructor(
     val repository: PlaylistRepository,
-    val progressRepository: WatchProgressRepository
+    val progressRepository: WatchProgressRepository,
+    val whisperSubtitleManager: WhisperSubtitleManager
 ) : ViewModel() {
     @Inject lateinit var profileManager: ProfileManager
     val playlists: StateFlow<List<PlaylistEntity>> = repository.getAllPlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -499,7 +770,7 @@ class MoviesViewModel @Inject constructor(
     private val allMovies: StateFlow<List<MovieGridItem>> = playlists.flatMapLatest { list ->
         if (list.isEmpty()) flowOf(emptyList())
         else combine(list.map { repository.getMovieGridItems(it.id) }) { arrays -> arrays.flatMap { it } }
-            .debounce(300) // Prevent recomposition on every batch insert during fetch
+            .debounce(150) // Coalesce rapid batch inserts during fetch
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -518,7 +789,9 @@ class MoviesViewModel @Inject constructor(
             if (list.isEmpty()) flowOf(emptyList())
             else combine(list.map { repository.getMovieGridItemsByCategory(it.id, category) }) { arrays ->
                 arrays.flatMap { it }
-            }.debounce(300)
+            }
+            // No debounce: data is already in DB at category-switch time; combine waits for all
+            // playlist flows before emitting, so no rapid-fire updates occur
         }
     fun getProgressItemIds(profileId: String) = progressRepository.getProgressItemIds(profileId)
 
@@ -527,4 +800,19 @@ class MoviesViewModel @Inject constructor(
         val blocked = profileManager.getBlockedCategoriesCached(activeProfile.id, type)
         return allCategories.filter { it !in blocked }
     }
+
+    suspend fun fetchRtDataIfMissing(movieId: String, movieName: String) =
+        repository.fetchRtDataForMovieSingle(movieId, movieName)
+
+    suspend fun fetchCertificationIfMissing(movieId: String, movieName: String): String? =
+        repository.fetchCertificationForMovieSingle(movieId, movieName)
+
+    suspend fun fetchOriginalLanguageIfMissing(movieId: String, movieName: String): String? =
+        repository.fetchOriginalLanguageForMovieSingle(movieId, movieName)
+
+    suspend fun fetchTrailerUrl(movie: app.nexstream.player.data.local.entity.MovieEntity): String? {
+        if (!movie.trailerUrl.isNullOrBlank()) return movie.trailerUrl
+        return repository.fetchTrailerUrlForMovie(movie.name)
+    }
+
 }

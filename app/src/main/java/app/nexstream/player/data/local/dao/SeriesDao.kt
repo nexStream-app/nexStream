@@ -63,6 +63,19 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY name ASC LIMIT 50")
     fun searchSeries(query: String): Flow<List<SeriesEntity>>
 
+    @Query("SELECT * FROM series WHERE `cast` LIKE :pattern OR director LIKE :pattern ORDER BY name ASC LIMIT 100")
+    fun searchSeriesByPeople(pattern: String): Flow<List<SeriesEntity>>
+
+    @Query("""
+        SELECT * FROM series WHERE
+            LOWER(name) = LOWER(:title) OR
+            name LIKE :title || ' (%' OR
+            name LIKE :title || ' [%'
+        ORDER BY CASE WHEN LOWER(name) = LOWER(:title) THEN 0 ELSE 1 END ASC, name ASC
+        LIMIT 3
+    """)
+    suspend fun findSeriesByTitle(title: String): List<SeriesEntity>
+
     @Query("SELECT * FROM series WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): SeriesEntity?
 
@@ -74,15 +87,40 @@ interface SeriesDao {
 
     data class WatchedCountRow(val seriesId: String, val count: Int)
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
     fun getSeriesGridItems(playlistId: String): Flow<List<SeriesGridItem>>
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
     fun getSeriesGridItemsByCategory(playlistId: String, category: String): Flow<List<SeriesGridItem>>
+
+    @Query("UPDATE series SET certification = :certification WHERE id = :id")
+    suspend fun updateCertification(id: String, certification: String?)
+
+    @Query("UPDATE series SET originalLanguage = :lang WHERE id = :id")
+    suspend fun updateOriginalLanguage(id: String, lang: String)
+
+    @Query("UPDATE series SET `cast` = :cast, director = :director WHERE id = :id")
+    suspend fun updateCastAndDirector(id: String, cast: String?, director: String?)
+
+    @Query("SELECT id, name FROM series WHERE `cast` IS NULL ORDER BY name ASC")
+    suspend fun getSeriesWithoutCast(): List<SeriesNameRow>
+
+    data class SeriesNameRow(val id: String, val name: String)
+
+    @Query("SELECT id, certification FROM series WHERE playlistId = :playlistId AND certification IS NOT NULL")
+    suspend fun getExistingCertifications(playlistId: String): List<SeriesCertRow>
+
+    data class SeriesCertRow(val id: String, val certification: String?)
 
     // Slim projection — only fields needed for progress migration
     @Query("SELECT id, seriesId, lastPlayedPosition FROM episodes WHERE lastPlayedPosition > 0")
     suspend fun getAllEpisodesWithProgress(): List<EpisodeProgressItem>
 
     data class EpisodeProgressItem(val id: String, val seriesId: String, val lastPlayedPosition: Long)
+
+    @Query("SELECT name FROM series")
+    suspend fun getAllSeriesNames(): List<String>
+
+    @Query("SELECT * FROM series WHERE LOWER(name) IN (:lowerTitles)")
+    suspend fun findSeriesByTitlesBatch(lowerTitles: List<String>): List<SeriesEntity>
 }

@@ -44,6 +44,8 @@ interface EPGGridCallbacks {
     fun onBack()
     fun onReady()
     fun onVisibleChannelIdsChanged(ids: List<String>)
+    fun onFocusUp() {}
+    fun onFocusedProgramChanged(channel: ChannelEntity, program: ProgramEntity?) {}
 }
 
 class EPGGridView @JvmOverloads constructor(
@@ -53,10 +55,11 @@ class EPGGridView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     var nexTheme: NexStreamEpgColors? = null
-        set(value) { field = value; buildPaints(); invalidate() }
+        set(value) { if (value === field) return; field = value; buildPaints(); invalidate() }
 
     var textScale: Float = 1.0f
         set(value) {
+            if (value == field) return
             field = value
             buildPaints()
             // Recompute scroll bounds since row/column sizes are scale-dependent
@@ -67,10 +70,13 @@ class EPGGridView @JvmOverloads constructor(
         }
 
     var textBold: Boolean = false
-        set(value) { field = value; buildPaints(); invalidate() }
+        set(value) { if (value == field) return; field = value; buildPaints(); invalidate() }
+
+    var isTV: Boolean = false
 
     var channels: List<ChannelEntity> = emptyList()
         set(value) {
+            if (value === field) return
             val idsChanged = value.map { it.id } != field.map { it.id }
             field = value
             if (idsChanged) {
@@ -80,19 +86,31 @@ class EPGGridView @JvmOverloads constructor(
                 maxScrollY = (field.size * rowHeightPx - (height - headerHeightPx)).coerceAtLeast(0f)
                 scrollY = scrollY.coerceIn(0f, maxScrollY)
                 focusedRowIndex = focusedRowIndex.coerceAtMost((field.size - 1).coerceAtLeast(0))
+                lastReportedIds = emptyList()
             }
             invalidate()
         }
 
     var programsMap: Map<String, List<EPGProgram>> = emptyMap()
-        set(value) { field = value; invalidate() }
+        set(value) { if (value === field) return; field = value; invalidate() }
 
     var reminderIds: Set<String> = emptySet()
-        set(value) { field = value; invalidate() }
+        set(value) { if (value === field) return; field = value; invalidate() }
 
     var callbacks: EPGGridCallbacks? = null
 
     var playerVisible: Boolean = false
+
+    var recordingChannelUrls: Set<String> = emptySet()
+        set(value) {
+            val changed = value != field
+            field = value
+            if (changed) {
+                mainHandler.removeCallbacks(recFlashRunnable)
+                if (value.isNotEmpty()) mainHandler.postDelayed(recFlashRunnable, 500L)
+                invalidate()
+            }
+        }
 
     private val dp = context.resources.displayMetrics.density
 
@@ -148,6 +166,15 @@ class EPGGridView @JvmOverloads constructor(
     private var focusedRowIndex     = 0
     private var focusedProgramIndex = -1
 
+    private val recFlashRunnable = object : Runnable {
+        override fun run() {
+            if (recordingChannelUrls.isNotEmpty()) {
+                invalidate()
+                mainHandler.postDelayed(this, 500L)
+            }
+        }
+    }
+
     private val paintBg              = Paint()
     private val paintSurface         = Paint()
     private val paintSurfaceVar      = Paint()
@@ -162,6 +189,7 @@ class EPGGridView @JvmOverloads constructor(
     private val paintTextHeader      = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintTextChannel     = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintTextProgram     = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val paintTextNow         = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintTextPlaceholder = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintTextOnPrimary   = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintStroke          = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -174,6 +202,7 @@ class EPGGridView @JvmOverloads constructor(
     private val paintCatchupText  = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintReminderBg   = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paintReminderText = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val paintRecDot       = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.RED; style = Paint.Style.FILL }
 
     private val rectF    = RectF()
     private val clipRect = Rect()
@@ -215,6 +244,10 @@ class EPGGridView @JvmOverloads constructor(
         paintTextProgram.color    = c.programText.toArgb()
         paintTextProgram.textSize = 13f * dp * s
         paintTextProgram.typeface = regularTypeface
+
+        paintTextNow.color    = c.programTextNow.toArgb()
+        paintTextNow.textSize = 13f * dp * s
+        paintTextNow.typeface = regularTypeface
 
         paintTextPlaceholder.color    = c.programTextPlaceholder.toArgb()
         paintTextPlaceholder.textSize = 13f * dp * s
@@ -284,7 +317,13 @@ class EPGGridView @JvmOverloads constructor(
         }
     }
 
-    private val initialsBitmapCache = HashMap<String, Bitmap>()
+    private val initialsBitmapCache = object : LinkedHashMap<String, Bitmap>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?): Boolean {
+            val remove = size > MAX_LOGO_CACHE
+            if (remove) eldest?.value?.recycle()
+            return remove
+        }
+    }
 
     private fun getInitialsBitmap(channel: ChannelEntity): Bitmap {
         return initialsBitmapCache.getOrPut(channel.id) {
@@ -464,12 +503,14 @@ class EPGGridView @JvmOverloads constructor(
     private fun drawProgramRows(canvas: Canvas, w: Float, h: Float, now: Long) {
         val firstRow = (scrollY / rowHeightPx).toInt().coerceAtLeast(0)
         val lastRow  = ((scrollY + h - headerHeightPx) / rowHeightPx).toInt().coerceAtMost(channels.size - 1)
+        val flashOn  = (now / 500) % 2 == 0L
 
         for (rowIdx in firstRow..lastRow) {
             val ch           = channels[rowIdx]
             val rowTop       = headerHeightPx + rowIdx * rowHeightPx - scrollY
             val rowBot       = rowTop + rowHeightPx
             val isFocusedRow = rowIdx == focusedRowIndex
+            val isRecording  = ch.streamUrl.isNotEmpty() && ch.streamUrl in recordingChannelUrls
 
             if (isFocusedRow) canvas.drawRect(channelColPx, rowTop, w, rowBot, paintRowTint)
 
@@ -489,8 +530,9 @@ class EPGGridView @JvmOverloads constructor(
 
                 if (cellRight - cellLeft < 1f) continue
 
-                val isFocused = isFocusedRow && progIdx == resolvedFocusedProgramIndex(rowIdx, programs)
-                val isNow     = now in pStart..pEnd
+                val resolvedIdx = resolvedFocusedProgramIndex(rowIdx, programs)
+                val isFocused   = isFocusedRow && progIdx == resolvedIdx
+                val isNow       = now in pStart..pEnd
 
                 val bgPaint = when {
                     isFocused          -> paintPrimaryCont
@@ -506,13 +548,17 @@ class EPGGridView @JvmOverloads constructor(
                 val textPaint = when {
                     isFocused          -> paintTextOnPrimary
                     prog.isPlaceholder -> paintTextPlaceholder
+                    isNow              -> paintTextNow
                     else               -> paintTextProgram
                 }
-                val textMaxW = (cellRight - cellLeft - 12 * dp).coerceAtLeast(0f)
+                // Clamp to visible area — cells that started before the scroll position
+                // would otherwise draw their text off-screen to the left.
+                val visibleCellLeft = maxOf(cellLeft, channelColPx)
+                val textMaxW = (cellRight - visibleCellLeft - 12 * dp).coerceAtLeast(0f)
                 if (textMaxW > 20 * dp) {
+                    val midY = (cellTop + cellBottom) / 2f
                     val line1 = ellipsize(prog.entity.title, textPaint, textMaxW)
-                    val midY  = (cellTop + cellBottom) / 2f
-                    canvas.drawText(line1, cellLeft + 6 * dp, midY + textPaint.textSize / 3f, textPaint)
+                    canvas.drawText(line1, visibleCellLeft + 6 * dp, midY + textPaint.textSize / 3f, textPaint)
                 }
 
                 val remId = "${ch.id}_${prog.entity.startTime}"
@@ -522,6 +568,14 @@ class EPGGridView @JvmOverloads constructor(
 
                 if (!prog.isPlaceholder && pEnd < now && ch.tvArchive != 0) {
                     drawCatchupBadge(canvas, cellRight, cellBottom)
+                }
+
+                // Flashing red dot for channels currently being recorded
+                if (isRecording && isNow && !prog.isPlaceholder && flashOn) {
+                    val dotR  = 5f * dp
+                    val dotX  = (cellRight - dotR - 4 * dp).coerceAtMost(w - dotR - 2 * dp)
+                    val dotY  = cellTop + dotR + 4 * dp
+                    if (dotX > channelColPx) canvas.drawCircle(dotX, dotY, dotR, paintRecDot)
                 }
             }
 
@@ -624,6 +678,19 @@ class EPGGridView @JvmOverloads constructor(
         return getFilledPrograms(ch)
     }
 
+    private fun notifyFocusedProgramChanged() {
+        val ch = channels.getOrNull(focusedRowIndex) ?: return
+        val programs = focusedPrograms()
+        val pIdx = programs?.let { resolvedFocusedProgramIndex(focusedRowIndex, it) } ?: -1
+        val prog = programs?.getOrNull(pIdx)?.entity
+        callbacks?.onFocusedProgramChanged(ch, prog)
+    }
+
+    fun notifyInitialFocus() {
+        if (channels.isEmpty()) return
+        notifyFocusedProgramChanged()
+    }
+
     private fun scrollToCenterProgram(progIdx: Int, programs: List<EPGProgram>) {
         val prog = programs.getOrNull(progIdx) ?: return
         val mid = (prog.entity.startTime + prog.entity.endTime) / 2f
@@ -657,26 +724,28 @@ class EPGGridView @JvmOverloads constructor(
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 val next = programs.indexOfFirst { it.entity.startTime >= programs[curPIdx].entity.endTime }
-                if (next >= 0) { focusedProgramIndex = next; scrollToCenterProgram(next, programs); invalidate(); true }
+                if (next >= 0) { focusedProgramIndex = next; scrollToCenterProgram(next, programs); invalidate(); notifyFocusedProgramChanged(); true }
                 else false
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 val cur  = programs[curPIdx]
                 val prev = programs.indexOfLast { it.entity.endTime <= cur.entity.startTime }
-                if (prev >= 0) { focusedProgramIndex = prev; scrollToCenterProgram(prev, programs); invalidate(); true }
+                if (prev >= 0) { focusedProgramIndex = prev; scrollToCenterProgram(prev, programs); invalidate(); notifyFocusedProgramChanged(); true }
                 else { callbacks?.onBack(); true }
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (focusedRowIndex < channels.size - 1) {
                     focusedRowIndex++; focusedProgramIndex = -1
-                    ensureRowVisible(focusedRowIndex); clampScroll(); invalidate(); true
+                    ensureRowVisible(focusedRowIndex); clampScroll(); invalidate(); notifyFocusedProgramChanged(); true
                 } else false
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
                 if (focusedRowIndex > 0) {
                     focusedRowIndex--; focusedProgramIndex = -1
-                    ensureRowVisible(focusedRowIndex); clampScroll(); invalidate(); true
-                } else false
+                    ensureRowVisible(focusedRowIndex); clampScroll(); invalidate(); notifyFocusedProgramChanged(); true
+                } else {
+                    callbacks?.onFocusUp(); true
+                }
             }
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_DPAD_CENTER -> {
@@ -726,15 +795,20 @@ class EPGGridView @JvmOverloads constructor(
     private fun handleTap(x: Float, y: Float) {
         val rowIdx = ((y - headerHeightPx + scrollY) / rowHeightPx).toInt().coerceIn(0, channels.size - 1)
         val ch = channels.getOrNull(rowIdx) ?: return
-        if (x < channelColPx) { callbacks?.onChannelClicked(ch); return }
+        if (x < channelColPx) {
+            callbacks?.onChannelClicked(ch)
+            return
+        }
         val timeMs = startOfWindow + ((x - channelColPx + scrollX) / dpPerMinutePx * 60_000f).toLong()
         val programs = getFilledPrograms(ch)
         val prog = programs.firstOrNull { timeMs in it.entity.startTime..it.entity.endTime }
             ?: programs.firstOrNull { System.currentTimeMillis() in it.entity.startTime..it.entity.endTime }
             ?: programs.firstOrNull() ?: return
+        val progIdx = programs.indexOf(prog)
         focusedRowIndex = rowIdx
-        focusedProgramIndex = programs.indexOf(prog)
+        focusedProgramIndex = progIdx
         invalidate()
+        notifyFocusedProgramChanged()
         callbacks?.onProgramSelected(ch, prog.entity, prog.isPlaceholder)
     }
 
@@ -758,6 +832,28 @@ class EPGGridView @JvmOverloads constructor(
     fun jumpToNow()             { scrollToNow(); focusedProgramIndex = -1; invalidate() }
     fun scrollToTop()           { scrollY = 0f; focusedRowIndex = 0; focusedProgramIndex = -1; invalidate() }
     fun invalidateFilledCache() { filledCache.clear(); invalidate() }
+
+    fun scrollToChannelByName(name: String) {
+        val rowIdx = channels.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+        if (rowIdx < 0) return
+        focusedRowIndex = rowIdx
+        focusedProgramIndex = -1
+        scrollToNow()
+        val rowTop = rowIdx * rowHeightPx
+        val viewH  = (height - headerHeightPx).coerceAtLeast(1f)
+        scrollY = (rowTop - viewH / 2f + rowHeightPx / 2f).coerceIn(0f, maxScrollY.coerceAtLeast(0f))
+        invalidate()
+    }
+
+    fun syncFocusedChannelByUrl(streamUrl: String) {
+        val rowIdx = channels.indexOfFirst { it.streamUrl == streamUrl }
+        if (rowIdx < 0) return
+        focusedRowIndex = rowIdx
+        focusedProgramIndex = -1
+        ensureRowVisible(focusedRowIndex)
+        clampScroll()
+        invalidate()
+    }
     fun requestGridFocus() {
         android.util.Log.d("FocusRestore", "requestGridFocus called, isFocusable=$isFocusable, windowFocused=${hasWindowFocus()}")
         mainHandler.post {
@@ -769,6 +865,7 @@ class EPGGridView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         mainHandler.removeCallbacks(nowLineRunnable)
+        mainHandler.removeCallbacks(recFlashRunnable)
     }
 
     override fun onAttachedToWindow() {

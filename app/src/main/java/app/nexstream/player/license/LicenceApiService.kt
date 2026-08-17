@@ -17,7 +17,8 @@ data class ValidateResponse(
     val device_limit: Int?,
     val email: String?,
     val expired: Boolean?,
-    val limit_reached: Boolean?
+    val limit_reached: Boolean?,
+    val reseller_id: Int?
 )
 
 data class DeviceInfo(
@@ -34,7 +35,8 @@ data class DevicesResponse(
     val device_count: Int?
 )
 
-data class HeartbeatRequest(val device_id: String)
+data class HeartbeatRequest(val device_id: String, val device_name: String = "")
+data class HeartbeatResponse(val success: Boolean)
 data class RemoveDeviceRequest(val device_id: String)
 
 interface LicenceApiService {
@@ -52,11 +54,11 @@ interface LicenceApiService {
     suspend fun heartbeat(
         @Header("Authorization") auth: String,
         @Body body: HeartbeatRequest
-    ): Response<Unit>
+    ): Response<HeartbeatResponse>
 
     @HTTP(method = "DELETE", path = "devices.php", hasBody = true)
     suspend fun removeDevice(
         @Header("Authorization") auth: String,
         @Body body: RemoveDeviceRequest
-    ): Response<Unit>
+    ): Response<HeartbeatResponse>
 }

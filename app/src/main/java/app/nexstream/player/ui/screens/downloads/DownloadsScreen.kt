@@ -32,6 +32,13 @@ import app.nexstream.player.downloads.DownloadItem
 import app.nexstream.player.downloads.DownloadStatus
 import app.nexstream.player.downloads.NexStreamDownloadManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LocalUiStyle
+import app.nexstream.player.ui.theme.UiStyle
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
@@ -39,7 +46,9 @@ import coil.request.ImageRequest
 fun DownloadsScreen(
     firstItemFocusRequester: FocusRequester? = null,
     selectedType: String? = null,
+    profileId: String = "default",
     onBack: () -> Unit = {},
+    onRequestSidebarFocus: () -> Unit = {},
     onPlayFile: (filePath: String, title: String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
@@ -47,15 +56,17 @@ fun DownloadsScreen(
     val sTheme = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
-    val allDownloads by NexStreamDownloadManager.observeDownloads(context)
+    val allDownloads by NexStreamDownloadManager.observeDownloads(context, profileId)
         .collectAsState(initial = emptyList())
 
     val downloads = remember(allDownloads, selectedType) {
+        // Exclude items that are tagged as recordings in the old DownloadManager-based system
+        val nonRecordings = allDownloads.filter { !NexStreamDownloadManager.isRecording(context, it.downloadId) }
         when (selectedType) {
-            "Active"    -> allDownloads.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.PENDING || it.status == DownloadStatus.PAUSED }
-            "Completed" -> allDownloads.filter { it.status == DownloadStatus.COMPLETED }
-            "Failed"    -> allDownloads.filter { it.status == DownloadStatus.FAILED }
-            else        -> allDownloads
+            "Active"    -> nonRecordings.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.PENDING || it.status == DownloadStatus.PAUSED }
+            "Completed" -> nonRecordings.filter { it.status == DownloadStatus.COMPLETED }
+            "Failed"    -> nonRecordings.filter { it.status == DownloadStatus.FAILED }
+            else        -> nonRecordings
         }
     }
 
@@ -63,9 +74,10 @@ fun DownloadsScreen(
     val completed = downloads.filter { it.status == DownloadStatus.COMPLETED }
     val failed    = downloads.filter { it.status == DownloadStatus.FAILED }
 
-    var deleteTarget by remember { mutableStateOf<DownloadItem?>(null) }
+    var deleteTarget       by remember { mutableStateOf<DownloadItem?>(null) }
+    var downloadActionItem by remember { mutableStateOf<DownloadItem?>(null) }
 
-    // Confirm delete dialog
+    // Confirm delete dialog — used by both Classic and Modern
     deleteTarget?.let { item ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -85,13 +97,33 @@ fun DownloadsScreen(
         )
     }
 
+    // Modern card-click action dialog (cinematic style)
+    downloadActionItem?.let { item ->
+        DownloadDetailsDialog(
+            item      = item,
+            onDismiss = { downloadActionItem = null },
+            onPlay    = { onPlayFile(item.filePath, item.title); downloadActionItem = null },
+            onCancel  = { NexStreamDownloadManager.cancelDownload(context, item.downloadId); downloadActionItem = null },
+            onDelete  = { deleteTarget = item; downloadActionItem = null },
+        )
+    }
+
+    val uiStyle = LocalUiStyle.current
+    if (uiStyle == UiStyle.MODERN) {
+        ModernDownloadsContent(
+            downloads               = downloads,
+            firstItemFocusRequester = firstItemFocusRequester,
+            onCardClick             = { downloadActionItem = it },
+            onRequestSidebarFocus   = onRequestSidebarFocus,
+        )
+    } else {
     Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
-                text = selectedType ?: "All",
+                text = selectedType ?: "Downloads",
                 style = MaterialTheme.typography.titleMedium,
                 color = sTheme.categoryText
             )
@@ -161,6 +193,7 @@ fun DownloadsScreen(
             }
         }
     }
+    } // end else (Classic UI)
 }
 
 @Composable
@@ -404,6 +437,145 @@ private fun CardActionButton(
             if (icon != null) Icon(icon, null, modifier = Modifier.size(16.dp), tint = contentColor)
             Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor)
         }
+    }
+}
+
+@Composable
+private fun DownloadDetailsDialog(
+    item: DownloadItem,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val context   = androidx.compose.ui.platform.LocalContext.current
+    val isActive  = item.status == DownloadStatus.RUNNING || item.status == DownloadStatus.PENDING || item.status == DownloadStatus.PAUSED
+    val canPlay   = item.status == DownloadStatus.COMPLETED && item.filePath.isNotBlank()
+    val accent    = app.nexstream.player.ui.theme.LocalNsAccent.current
+
+    val statusText = when (item.status) {
+        DownloadStatus.RUNNING   -> "Downloading ${item.progressPercent}%"
+        DownloadStatus.COMPLETED -> "Downloaded · ${formatBytes(item.totalBytes)}"
+        DownloadStatus.FAILED    -> "Download failed"
+        DownloadStatus.PAUSED    -> "Paused at ${item.progressPercent}%"
+        DownloadStatus.PENDING   -> "Waiting to download…"
+    }
+
+    val buttons = buildList {
+        add("close")
+        if (canPlay)   add("play")
+        if (isActive)  add("cancel")
+        add("delete")
+    }
+    var selectedBtn by remember { mutableStateOf(if (canPlay) 1 else 0) }
+    val dialogFR = remember { FocusRequester() }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); try { dialogFR.requestFocus() } catch (_: Exception) {} }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Surface(
+            modifier       = Modifier.fillMaxWidth(0.82f).fillMaxHeight(0.75f),
+            shape          = RoundedCornerShape(16.dp),
+            color          = Color.Black,
+            tonalElevation = 0.dp,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(dialogFR)
+                    .focusable()
+                    .onKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (e.key) {
+                            Key.DirectionLeft  -> { selectedBtn = (selectedBtn - 1 + buttons.size) % buttons.size; true }
+                            Key.DirectionRight -> { selectedBtn = (selectedBtn + 1) % buttons.size; true }
+                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                                when (buttons.getOrNull(selectedBtn)) {
+                                    "close"  -> onDismiss()
+                                    "play"   -> onPlay()
+                                    "cancel" -> onCancel()
+                                    "delete" -> onDelete()
+                                }; true
+                            }
+                            Key.Back -> { onDismiss(); true }
+                            else     -> false
+                        }
+                    }
+            ) {
+                if (!item.posterUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model              = ImageRequest.Builder(context).data(item.posterUrl).crossfade(true).build(),
+                        contentDescription = null,
+                        modifier           = Modifier.fillMaxSize(),
+                        contentScale       = ContentScale.Crop,
+                        alignment          = Alignment.Center,
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.94f)))
+                    )
+                )
+                // Close pill top-right
+                Box(modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
+                    DlDialogPill(icon = Icons.Default.Close, label = "Close", isSelected = selectedBtn == 0, accent = accent, onClick = onDismiss)
+                }
+                // Bottom content
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(item.title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(statusText, fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        buttons.forEachIndexed { idx, action ->
+                            if (action == "close") return@forEachIndexed
+                            val (icon, label, color) = when (action) {
+                                "play"   -> Triple(Icons.Default.PlayArrow, "Play",   accent)
+                                "cancel" -> Triple(Icons.Default.Close,    "Cancel", Color(0xFFFF7043))
+                                "delete" -> Triple(Icons.Default.Delete,   "Delete", Color(0xFFD32F2F))
+                                else     -> Triple(Icons.Default.Close,    "Close",  accent)
+                            }
+                            DlDialogPill(icon = icon, label = label, isSelected = selectedBtn == idx, accent = color, onClick = {
+                                when (action) { "play" -> onPlay(); "cancel" -> onCancel(); "delete" -> onDelete() }
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DlDialogPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val bg = if (isSelected) accent else Color.White.copy(alpha = 0.15f)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(bg)
+            .border(if (isSelected) 0.dp else 1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(50.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, modifier = Modifier.size(16.dp), tint = Color.White)
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color.White)
     }
 }
 

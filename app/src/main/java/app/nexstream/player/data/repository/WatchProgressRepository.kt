@@ -64,6 +64,27 @@ class WatchProgressRepository @Inject constructor(
     suspend fun getEpisodePosition(profileId: String, episodeId: String): Long =
         dao.getProgress(profileId, episodeId)?.positionMs ?: 0L
 
+    // ── CatchUp progress ──────────────────────────────────────────────────────
+    // Uses the catchup stream URL as itemId with itemType = "catchup"
+
+    suspend fun saveCatchupProgress(profileId: String, url: String, positionMs: Long, durationMs: Long = 0L) {
+        dao.upsert(WatchProgressEntity(
+            profileId  = profileId,
+            itemId     = url,
+            itemType   = "catchup",
+            seriesId   = null,
+            positionMs = positionMs,
+            durationMs = durationMs
+        ))
+    }
+
+    suspend fun clearCatchupProgress(profileId: String, url: String) {
+        dao.clearProgress(profileId, url)
+    }
+
+    suspend fun getCatchupPosition(profileId: String, url: String): Long =
+        dao.getProgress(profileId, url)?.positionMs ?: 0L
+
     // Set of itemIds that have progress > 0 — used for continue badge on grid
     fun getProgressItemIds(profileId: String): Flow<Set<String>> =
         dao.getAllProgressItemIds(profileId).map { it.toSet() }

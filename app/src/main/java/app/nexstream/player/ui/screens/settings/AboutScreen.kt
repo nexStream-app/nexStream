@@ -1,11 +1,10 @@
 package app.nexstream.player.ui.screens.settings
 
-import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,39 +21,27 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import app.nexstream.player.data.profile.ProfileManager
-import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.BuildConfig
+import app.nexstream.player.R
+import app.nexstream.player.license.LicenceManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.UiStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
-import java.security.MessageDigest
 import javax.inject.Inject
 
 @HiltViewModel
 class AboutViewModel @Inject constructor(
-    private val profileSyncManager: ProfileSyncManager,
-    private val profileManager: ProfileManager
+    private val licenceManager: LicenceManager
 ) : ViewModel() {
-    var isSyncing by mutableStateOf(false)
-        private set
-
-    fun syncNow() {
-        viewModelScope.launch {
-            isSyncing = true
-            profileSyncManager.syncFromServer()
-            profileManager.refreshAfterSync()
-            isSyncing = false
-        }
-    }
+    val deviceId: String = licenceManager.getDeviceId()
 }
 
-@SuppressLint("HardwareIds")
 @Composable
 fun AboutScreen(
     firstItemFocusRequester: FocusRequester? = null,
@@ -62,34 +49,27 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    val isSyncing = viewModel.isSyncing
     val nsTheme = LocalNexStreamTheme.current
     val sTheme = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+    val uiStyle = rememberUiStyle()
 
-    val androidId = remember {
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "null"
-    }
-
-    val currentDeviceId = remember {
-        val bytes = MessageDigest.getInstance("SHA-256").digest(androidId.toByteArray())
-        bytes.take(8).joinToString("") { "%02x".format(it) }.uppercase()
-    }
-
-    val androidIdKnownDefault = androidId == "9774d56d682e549c"
+    val currentDeviceId = viewModel.deviceId
 
     var copied by remember { mutableStateOf(false) }
 
     val firstFR = firstItemFocusRequester ?: remember { FocusRequester() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text("About", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+        if (uiStyle != UiStyle.MODERN) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text("About", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+            }
+            HorizontalDivider(color = sTheme.divider)
         }
-        HorizontalDivider(color = sTheme.divider)
 
         Column(
             modifier = Modifier
@@ -98,11 +78,15 @@ fun AboutScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            InfoSection(title = "Device ID", icon = Icons.Default.Fingerprint) {
-                InfoRow("ID", currentDeviceId)
-                if (androidIdKnownDefault) {
-                    InfoRow("Warning", "ANDROID_ID is a known default - ID may not be unique!", warning = true)
-                }
+            // ── App section ───────────────────────────────────────────────────
+            SettingsSectionContainer(title = "App", icon = Icons.Default.Info, uiStyle = uiStyle) {
+                SettingsInfoRow("Version", BuildConfig.VERSION_NAME)
+                SettingsInfoRow("Build",   BuildConfig.BUILD_NUMBER)
+            }
+
+            // ── Device ID section ─────────────────────────────────────────────
+            SettingsSectionContainer(title = "Device ID", icon = Icons.Default.Fingerprint, uiStyle = uiStyle) {
+                SettingsInfoRow("ID", currentDeviceId)
                 Spacer(Modifier.height(8.dp))
                 var copyFocused by remember { mutableStateOf(false) }
                 OutlinedButton(
@@ -113,6 +97,7 @@ fun AboutScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                         .focusRequester(firstFR)
                         .onFocusChanged { copyFocused = it.isFocused },
                     border = BorderStroke(
@@ -132,38 +117,23 @@ fun AboutScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(if (copied) "Copied!" else "Copy Device ID")
                 }
+                Spacer(Modifier.height(4.dp))
             }
 
-            InfoSection(title = "Sync", icon = Icons.Default.Sync) {
-                Text(
-                    "Sync your profiles and settings from the server. This happens automatically on startup.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                var syncFocused by remember { mutableStateOf(false) }
-                Button(
-                    onClick = { viewModel.syncNow() },
-                    enabled = !isSyncing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { syncFocused = it.isFocused },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (syncFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = if (syncFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+            // ── Attributions section ──────────────────────────────────────────
+            SettingsSectionContainer(title = "Attributions", icon = Icons.Default.Movie, uiStyle = uiStyle) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_tmdb),
+                        contentDescription = "The Movie Database",
+                        modifier = Modifier.height(20.dp).wrapContentWidth()
                     )
-                ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isSyncing) "Syncing..." else "Sync Now")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -171,6 +141,8 @@ fun AboutScreen(
         }
     }
 }
+
+// ── Legacy InfoSection — kept for any other callers ───────────────────────────
 
 @Composable
 private fun InfoSection(

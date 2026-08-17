@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -18,14 +18,14 @@ val Context.subtitleDataStore: DataStore<Preferences> by preferencesDataStore(na
 class SubtitlePreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val PREFERRED_LANGUAGES = stringSetPreferencesKey("preferred_languages")
+    private val PREFERRED_LANGUAGE = stringPreferencesKey("preferred_language")
 
-    val preferredLanguages: Flow<Set<String>> = context.subtitleDataStore.data
-        .map { prefs -> prefs[PREFERRED_LANGUAGES] ?: setOf("en") }
+    val preferredLanguage: Flow<String> = context.subtitleDataStore.data
+        .map { prefs -> prefs[PREFERRED_LANGUAGE] ?: "en" }
 
-    suspend fun savePreferredLanguages(languages: Set<String>) {
+    suspend fun savePreferredLanguage(language: String) {
         context.subtitleDataStore.edit { prefs ->
-            prefs[PREFERRED_LANGUAGES] = languages
+            prefs[PREFERRED_LANGUAGE] = language
         }
     }
 }

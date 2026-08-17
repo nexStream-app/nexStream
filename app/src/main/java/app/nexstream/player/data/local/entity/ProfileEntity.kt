@@ -13,7 +13,9 @@ data class ProfileEntity(
     @ColumnInfo(name = "is_default")   val isDefault: Boolean = false,
     @ColumnInfo(name = "sort_order")   val sortOrder: Int = 0,
     @ColumnInfo(name = "updated_at")   val updatedAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(name = "is_restricted") val isRestricted: Boolean = false,
+    @ColumnInfo(name = "is_restricted")  val isRestricted: Boolean = false,
+    @ColumnInfo(name = "max_age_rating") val maxAgeRating: String? = null,
+    @ColumnInfo(name = "allow_nr")       val allowNr: Boolean = true,
 )
 
 @Entity(tableName = "profile_category_filters", primaryKeys = ["profileId", "categoryType", "categoryName"])

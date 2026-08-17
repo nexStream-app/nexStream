@@ -11,7 +11,8 @@ data class TrialResponse(
     val is_new: Boolean?,
     val expires_at: String?,
     val is_expired: Boolean?,
-    val days_left: Int?
+    val days_left: Int?,
+    val sync_key: String?,
 )
 
 interface TrialApiService {

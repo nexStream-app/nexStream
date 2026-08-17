@@ -3,7 +3,6 @@ package app.nexstream.player.ui.theme
 import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
-import app.nexstream.player.data.remote.ThemeApiService
 import app.nexstream.player.license.LicencePreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -21,29 +20,31 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val TAG             = "ThemeManager"
-private const val PREFS_NAME      = "nexstream_theme"
-private const val KEY_DARK_VER    = "theme_dark_version"
-private const val KEY_LIGHT_VER   = "theme_light_version"
-private const val FILE_DARK       = "theme-dark.json"
-private const val FILE_LIGHT      = "theme-light.json"
-private const val BASE_URL        = "https://nexstream.uk/api/"
+private const val TAG                  = "ThemeManager"
+private const val PREFS_NAME           = "nexstream_theme"
+private const val KEY_DARK_VER         = "theme_dark_version"
+private const val KEY_LIGHT_VER        = "theme_light_version"
+private const val FILE_DARK            = "theme-dark.json"
+private const val FILE_LIGHT           = "theme-light.json"
+private const val FILE_HIGHCONTRAST    = "theme-dark-highcontrast.json"
+private const val BASE_URL             = "https://nexstream.uk/api/"
 
 @Singleton
 class ThemeManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val themeApiService: ThemeApiService,
     private val licencePrefs: LicencePreferences,
     private val httpClient: OkHttpClient,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val _darkTheme  = MutableStateFlow(ThemeDefaults.dark)
-    private val _lightTheme = MutableStateFlow(ThemeDefaults.light)
+    private val _darkTheme          = MutableStateFlow(ThemeDefaults.dark)
+    private val _lightTheme         = MutableStateFlow(ThemeDefaults.light)
+    private val _highContrastTheme  = MutableStateFlow(ThemeDefaults.dark)
 
-    val darkTheme:  StateFlow<NexStreamTheme> = _darkTheme.asStateFlow()
-    val lightTheme: StateFlow<NexStreamTheme> = _lightTheme.asStateFlow()
+    val darkTheme:         StateFlow<NexStreamTheme> = _darkTheme.asStateFlow()
+    val lightTheme:        StateFlow<NexStreamTheme> = _lightTheme.asStateFlow()
+    val highContrastTheme: StateFlow<NexStreamTheme> = _highContrastTheme.asStateFlow()
 
     /** Current theme based on system dark/light mode */
     fun currentTheme(): NexStreamTheme {
@@ -56,9 +57,8 @@ class ThemeManager @Inject constructor(
     // ─────────────────────────────────────────────────────────
 
     fun init() {
-        // 1. Load cached theme files immediately (fast, no network)
         loadFromCache()
-        // 2. Fetch fresh theme from API in background
+        loadBundledHighContrast()
         scope.launch { fetchFromApi() }
     }
 
@@ -101,7 +101,19 @@ class ThemeManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not load bundled asset, using hardcoded defaults", e)
-            // Already set to ThemeDefaults by field initialisation
+        }
+    }
+
+    private fun loadBundledHighContrast() {
+        try {
+            val json  = context.assets.open("themes/$FILE_HIGHCONTRAST").bufferedReader().readText()
+            val theme = ThemeParser.parse(json, context, isDark = true)
+            if (theme != null) {
+                _highContrastTheme.value = theme
+                Log.d(TAG, "Loaded bundled high contrast theme")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not load high contrast asset", e)
         }
     }
 
@@ -124,34 +136,45 @@ class ThemeManager @Inject constructor(
         val cachedVer = prefs.getInt(if (isDark) KEY_DARK_VER else KEY_LIGHT_VER, 0)
 
         try {
-            val response = themeApiService.getTheme(
-                bearerKey = "Bearer $licenceKey",
-                mode      = mode,
-            )
+            val request = Request.Builder()
+                .url("${BASE_URL}theme.php?mode=$mode")
+                .header("Authorization", "Bearer $licenceKey")
+                .build()
 
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Theme API returned ${response.code()} for $mode")
-                return
-            }
+            val bodyStr = withContext(Dispatchers.IO) {
+                val resp = httpClient.newCall(request).execute()
+                if (!resp.isSuccessful) {
+                    Log.w(TAG, "Theme API returned ${resp.code} for $mode")
+                    return@withContext null
+                }
+                resp.body?.string()
+            } ?: return
 
-            val body = response.body() ?: return
-            if (!body.success) return
+            val wrapper       = JSONObject(bodyStr)
+            val serverVersion = wrapper.optInt("version", 0)
 
-            val serverVersion = body.version
+            Log.d(TAG, "$mode theme: serverVersion=$serverVersion cachedVer=$cachedVer")
+
             if (serverVersion <= cachedVer) {
                 Log.d(TAG, "$mode theme already up to date (v$cachedVer)")
                 return
             }
 
-            // Re-fetch as raw JSON for ThemeParser (Retrofit Map<String,Any> loses type info)
-            val rawJson = fetchRawJson(licenceKey, mode) ?: return
-            val theme   = ThemeParser.parse(rawJson, context, isDark, serverVersion) ?: return
+            val themeJson = wrapper.optJSONObject("theme")?.toString() ?: run {
+                Log.w(TAG, "$mode: response had no 'theme' object — body: ${bodyStr.take(200)}")
+                return
+            }
+
+            val theme = ThemeParser.parse(themeJson, context, isDark, serverVersion) ?: run {
+                Log.w(TAG, "$mode: ThemeParser returned null — check parse errors above")
+                return
+            }
 
             // Cache to disk
             withContext(Dispatchers.IO) {
                 val dir = File(context.filesDir, "themes")
                 dir.mkdirs()
-                File(dir, if (isDark) FILE_DARK else FILE_LIGHT).writeText(rawJson)
+                File(dir, if (isDark) FILE_DARK else FILE_LIGHT).writeText(themeJson)
             }
 
             // Persist version
@@ -162,34 +185,12 @@ class ThemeManager @Inject constructor(
             // Update live state
             if (isDark) _darkTheme.value = theme else _lightTheme.value = theme
 
-            // Download custom font assets if URLs are present
             downloadFontIfNeeded(theme)
 
-            Log.d(TAG, "Updated $mode theme to v$serverVersion")
+            Log.d(TAG, "Applied $mode theme v$serverVersion — appName=${theme.identity.appName} primary=${theme.global.primary}")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch $mode theme", e)
-        }
-    }
-
-    private suspend fun fetchRawJson(licenceKey: String, mode: String): String? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val request = Request.Builder()
-                    .url("${BASE_URL}theme.php?mode=$mode")
-                    .header("Authorization", "Bearer $licenceKey")
-                    .build()
-                val resp = httpClient.newCall(request).execute()
-                if (resp.isSuccessful) {
-                    val bodyStr = resp.body?.string() ?: return@withContext null
-                    // Extract the "theme" object from the wrapper response
-                    val wrapper = JSONObject(bodyStr)
-                    wrapper.optJSONObject("theme")?.toString()
-                } else null
-            } catch (e: Exception) {
-                Log.e(TAG, "Raw JSON fetch failed", e)
-                null
-            }
         }
     }
 
@@ -223,6 +224,11 @@ class ThemeManager @Inject constructor(
 
     fun refresh() {
         prefs.edit().remove(KEY_DARK_VER).remove(KEY_LIGHT_VER).apply()
+        scope.launch { fetchFromApi() }
+    }
+
+    /** Checks server version without clearing cache — safe to call on every app resume. */
+    fun checkForUpdates() {
         scope.launch { fetchFromApi() }
     }
 }

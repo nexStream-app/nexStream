@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,20 +9,67 @@ plugins {
 }
 
 
+val keystoreProps = Properties()
+val keystoreFile = rootProject.file("keystore.properties")
+if (keystoreFile.exists()) keystoreFile.inputStream().use { keystoreProps.load(it) }
+
+val localProps = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) localPropsFile.inputStream().use { localProps.load(it) }
+
 android {
     namespace = "app.nexstream.player"
-    compileSdk = 34
+    compileSdk = 35
+
+    val buildNumberFile = rootProject.file("build_number.txt")
+    val buildNumber = if (buildNumberFile.exists()) buildNumberFile.readText().trim() else "00001"
 
     defaultConfig {
         applicationId = "app.nexstream.player"
         minSdk = 21
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        targetSdk = 35
+        versionCode = 5
+        versionName = "1.0.4"
+        buildConfigField("String", "BUILD_NUMBER", "\"$buildNumber\"")
+        buildConfigField("int",    "BUILD_NUMBER_INT", (buildNumber.toIntOrNull() ?: 1).toString())
+        buildConfigField("String", "GROQ_API_KEY",
+            "\"${localProps.getProperty("GROQ_API_KEY", "")}\"")
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                // Disable SIMD unavailable on all Android targets
+                arguments += listOf(
+                    "-DGGML_AVX=OFF",
+                    "-DGGML_AVX2=OFF",
+                    "-DGGML_F16C=OFF",
+                    "-DGGML_FMA=OFF"
+                )
+            }
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile     = file(keystoreProps["storeFile"] as String)
+            storePassword = keystoreProps["storePassword"] as String
+            keyAlias      = keystoreProps["keyAlias"] as String
+            keyPassword   = keystoreProps["keyPassword"] as String
+        }
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     composeOptions {
@@ -42,6 +91,8 @@ android {
         }
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -52,6 +103,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            excludes += "**/libparakeet.so"
         }
     }
 }
@@ -84,7 +138,6 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
 
     implementation(libs.coroutines.android)
     implementation(libs.lifecycle.viewmodel.compose)
@@ -100,11 +153,6 @@ dependencies {
 
     implementation(libs.media3.datasource.okhttp)
 
-    implementation(libs.coil.compose)
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
-
-
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
@@ -115,17 +163,17 @@ dependencies {
     // ZXing — QR code generation
     implementation("com.google.zxing:core:3.5.3")
 
-    implementation("androidx.compose.material3:material3:1.2.1")
-
-    implementation("androidx.core:core-ktx:1.13.1")
-
-
     implementation("com.google.firebase:firebase-messaging:24.0.0")
 
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.3.1+2")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
+    // Casting (Chromecast + DLNA/AirPlay discovery)
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+
+    // Whisper.cpp AI subtitles built via NDK — see app/src/main/cpp/
 
     }
 //

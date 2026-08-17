@@ -9,6 +9,7 @@ import app.nexstream.player.data.sync.ProgressSyncManager
 import app.nexstream.player.license.TrialManager
 import app.nexstream.player.subtitle.SubtitleManager
 import app.nexstream.player.subtitle.SubtitlePreferences
+import app.nexstream.player.subtitle.WhisperSubtitleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -22,7 +23,8 @@ class PlayerViewModel @Inject constructor(
     private val progressSync:       ProgressSyncManager,
     val trialManager:               TrialManager,
     val subtitleManager:            SubtitleManager,
-    val subtitlePreferences:        SubtitlePreferences
+    val subtitlePreferences:        SubtitlePreferences,
+    val whisperSubtitleManager:     WhisperSubtitleManager
 ) : ViewModel() {
 
     suspend fun getMovieById(movieId: String)     = repository.getMovieByIdOnce(movieId)
@@ -109,6 +111,23 @@ class PlayerViewModel @Inject constructor(
 
     suspend fun getEpisodeResumePosition(episodeId: String, profileId: String): Long =
         progressRepository.getEpisodePosition(profileId, episodeId)
+
+    // ── CatchUp progress ──────────────────────────────────────────────────────
+
+    fun saveCatchupPositionSync(url: String, positionMs: Long, durationMs: Long = 0L, profileId: String = "default") {
+        runBlocking {
+            progressRepository.saveCatchupProgress(profileId, url, positionMs, durationMs)
+        }
+    }
+
+    fun clearCatchupPosition(url: String, profileId: String) {
+        viewModelScope.launch {
+            progressRepository.clearCatchupProgress(profileId, url)
+        }
+    }
+
+    suspend fun getCatchupResumePosition(url: String, profileId: String): Long =
+        progressRepository.getCatchupPosition(profileId, url)
 
     fun getCurrentProgrammeForUrl(channelUrl: String): Flow<ProgramEntity?> =
         repository.getCurrentProgrammeForChannelUrl(channelUrl)

@@ -18,8 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
-import app.nexstream.player.ui.screens.appearance.ThemeMode
-import app.nexstream.player.ui.screens.appearance.getThemeModeFlow
+import app.nexstream.player.ui.theme.ThemeMode
+import app.nexstream.player.ui.theme.getThemeModeFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
@@ -34,15 +34,16 @@ class ThemeViewModel @Inject constructor(
     val themeManager: ThemeManager,
 ) : AndroidViewModel(application) {
 
-    data class ThemePair(val dark: NexStreamTheme, val light: NexStreamTheme)
+    data class ThemePair(val dark: NexStreamTheme, val light: NexStreamTheme, val highContrast: NexStreamTheme)
 
     val themes: StateFlow<ThemePair> = combine(
         themeManager.darkTheme,
         themeManager.lightTheme,
-    ) { dark, light -> ThemePair(dark, light) }.stateIn(
+        themeManager.highContrastTheme,
+    ) { dark, light, hc -> ThemePair(dark, light, hc) }.stateIn(
         scope        = viewModelScope,
         started      = SharingStarted.Eagerly,
-        initialValue = ThemePair(ThemeDefaults.dark, ThemeDefaults.light),
+        initialValue = ThemePair(ThemeDefaults.dark, ThemeDefaults.light, ThemeDefaults.dark),
     )
 }
 
@@ -59,21 +60,32 @@ fun NexStreamThemeProvider(
     val themes    by themeViewModel.themes.collectAsState()
     // Use applicationContext so we always read from the same DataStore instance
     // as AppearanceScreen, regardless of which Activity context is current.
-    val context   = LocalContext.current.applicationContext
-    val themeMode by context.getThemeModeFlow().collectAsState(initial = initialThemeMode)
+    val context            = LocalContext.current.applicationContext
+    val themeMode          by context.getThemeModeFlow().collectAsState(initial = initialThemeMode)
+    val userFontScaleOrNull by context.getFontScaleFlow().collectAsState(initial = null)
+    val userFontWeightOrNull by context.getFontWeightFlow().collectAsState(initial = null)
     val systemDark = isSystemInDarkTheme()
 
     val isDark = when (themeMode) {
-        ThemeMode.DARK   -> true
-        ThemeMode.LIGHT  -> false
-        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.DARK         -> true
+        ThemeMode.LIGHT        -> false
+        ThemeMode.HIGH_CONTRAST -> true
+        ThemeMode.SYSTEM       -> systemDark
     }
 
-    val active = if (isDark) themes.dark else themes.light
-    android.util.Log.d("ThemeDebug", "active.global.surface=${active.global.surface} themes.light.global.surface=${themes.light.global.surface}")
-    val g      = active.global
+    val activeRaw = when (themeMode) {
+        ThemeMode.HIGH_CONTRAST -> themes.highContrast
+        else -> if (isDark) themes.dark else themes.light
+    }
+    android.util.Log.d("ThemeDebug", "active.global.surface=${activeRaw.global.surface} themes.light.global.surface=${themes.light.global.surface}")
 
-    val colorScheme = remember(active, isDark) {
+    // Apply user overrides — falls back to JSON theme values when not yet set by the user
+    val s           = userFontScaleOrNull  ?: activeRaw.typography.scale
+    val fontWeight  = userFontWeightOrNull ?: activeRaw.typography.weight
+    val active      = activeRaw.copy(typography = activeRaw.typography.copy(scale = s, weight = fontWeight))
+    val g        = active.global
+
+    val colorScheme = remember(g, isDark) {
         if (isDark) darkColorScheme(
             primary            = g.primary,
             primaryContainer   = g.primaryContainer,
@@ -103,16 +115,33 @@ fun NexStreamThemeProvider(
         )
     }
 
-    CompositionLocalProvider(LocalNexStreamTheme provides active) {
-        val weight = if (active.typography.bold)
-            androidx.compose.ui.text.font.FontWeight.Bold
-        else
-            androidx.compose.ui.text.font.FontWeight.Normal
+    val uiStyle by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
 
-        val s = active.typography.scale
+    // Map active theme to Modern UI semantic tokens
+    val nsGradientOverlay = Color.Black.copy(alpha = 0.65f)
+
+    CompositionLocalProvider(
+        LocalNexStreamTheme    provides active,
+        LocalUiStyle           provides uiStyle,
+        LocalNsBackground      provides g.surface,
+        LocalNsSurface         provides g.surfaceVariant,
+        LocalNsSurfaceFocused  provides g.primaryContainer,
+        LocalNsAccent          provides g.primary,
+        LocalNsTextPrimary     provides g.onSurface,
+        LocalNsTextSecondary   provides g.onSurfaceVariant,
+        LocalNsTextOnAccent    provides g.onPrimary,
+        LocalNsGradientOverlay provides nsGradientOverlay,
+        LocalNsDivider         provides g.outline,
+    ) {
+        val weight = when (fontWeight) {
+            "bold"     -> androidx.compose.ui.text.font.FontWeight.Bold
+            "semibold" -> androidx.compose.ui.text.font.FontWeight.SemiBold
+            else       -> androidx.compose.ui.text.font.FontWeight.Normal
+        }
+
         val f = active.identity.fontFamily
 
-        val typography = remember(active, f, s, weight) {
+        val typography = remember(f, s, weight) {
             androidx.compose.material3.Typography(
                 displayLarge   = androidx.compose.ui.text.TextStyle(fontFamily = f, fontWeight = weight, fontSize = (57 * s).sp),
                 displayMedium  = androidx.compose.ui.text.TextStyle(fontFamily = f, fontWeight = weight, fontSize = (45 * s).sp),

@@ -28,11 +28,25 @@ interface ChannelDao {
     @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
     fun getAllChannels(): Flow<List<ChannelEntity>>
 
+    @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
+    suspend fun getAllChannelsOnce(): List<ChannelEntity>
+
     @Query("SELECT * FROM channels WHERE streamUrl = :streamUrl LIMIT 1")
     fun getChannelByStreamUrl(streamUrl: String): Flow<ChannelEntity?>
-    @Query("SELECT DISTINCT groupTitle FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' ORDER BY groupTitle ASC")
+    @Query("SELECT groupTitle FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' GROUP BY groupTitle ORDER BY MIN(sortIndex) ASC")
     fun getAllCategories(): Flow<List<String>>
+
+    @Query("SELECT groupTitle, COUNT(*) as count FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' GROUP BY groupTitle")
+    fun getChannelCountsByCategory(): Flow<List<CategoryChannelCount>>
 
     @Query("SELECT id, logoUrl FROM channels WHERE logoUrl IS NOT NULL AND logoUrl != ''")
     suspend fun getChannelIconUrls(): List<ChannelIconProjection>
+
+    @Query("SELECT * FROM channels WHERE id = :id LIMIT 1")
+    suspend fun getChannelById(id: String): ChannelEntity?
+
+    @Query("SELECT * FROM channels WHERE epgChannelId = :epgChannelId LIMIT 1")
+    suspend fun getChannelByEpgId(epgChannelId: String): ChannelEntity?
 }
+
+data class CategoryChannelCount(val groupTitle: String, val count: Int)

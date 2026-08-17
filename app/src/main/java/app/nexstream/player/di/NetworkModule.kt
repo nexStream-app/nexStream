@@ -1,6 +1,8 @@
 package app.nexstream.player.di
 
 import android.content.Context
+import app.nexstream.player.data.remote.RtApiService
+import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.data.remote.ThemeApiService
 import app.nexstream.player.data.remote.WatchlistApiService
 import app.nexstream.player.license.LicenceApiService
@@ -17,7 +19,6 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
@@ -34,11 +35,6 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(
-                HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BASIC
-                }
-            )
             .build()
     }
 
@@ -132,5 +128,37 @@ object NetworkModule {
             .create(ProgressApiService::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideSportsApiService(): SportsApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://nexstream.uk/api/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(SportsApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideRtApiService(): RtApiService {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .addHeader("x-rapidapi-key", "5f6bf6dc08mshc10acb7cff1462ep1d1f1cjsn291de038dc0b")
+                        .addHeader("x-rapidapi-host", "rottentomato.p.rapidapi.com")
+                        .build()
+                )
+            }
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("https://rottentomato.p.rapidapi.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(RtApiService::class.java)
+    }
 
 }

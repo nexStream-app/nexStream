@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,17 +33,22 @@ data class ReminderOverlayData(
 fun ReminderOverlay(
     data: ReminderOverlayData,
     onDismiss: () -> Unit,
+    onSnooze: () -> Unit,
     onWatchNow: (streamUrl: String, channelName: String) -> Unit
 ) {
     val autoSwitchSeconds = 20
     var secondsLeft by remember { mutableStateOf(autoSwitchSeconds) }
+    var minutesUntilStart by remember {
+        mutableLongStateOf(((data.startTime - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0L))
+    }
     val watchNowFocus = remember { FocusRequester() }
 
-    // Countdown timer
+    // Countdown timer — updates both auto-switch seconds and live "starting in X min" label
     LaunchedEffect(data.reminderId) {
         while (secondsLeft > 0) {
             delay(1000L)
             secondsLeft--
+            minutesUntilStart = ((data.startTime - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0L)
         }
         // Auto-switch when countdown reaches zero
         onWatchNow(data.streamUrl, data.channelName)
@@ -52,11 +58,6 @@ fun ReminderOverlay(
     LaunchedEffect(Unit) {
         delay(100)
         try { watchNowFocus.requestFocus() } catch (_: Exception) {}
-    }
-
-    val minutesUntilStart = remember(data.startTime) {
-        val diff = (data.startTime - System.currentTimeMillis()) / 60_000L
-        diff.coerceAtLeast(0L)
     }
 
     val progress = secondsLeft.toFloat() / autoSwitchSeconds.toFloat()
@@ -146,25 +147,34 @@ fun ReminderOverlay(
                 // Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Dismiss")
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Dismiss", fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onSnooze,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Snooze, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Snooze 1m", fontSize = 12.sp)
                     }
                     Button(
                         onClick = { onWatchNow(data.streamUrl, data.channelName) },
                         modifier = Modifier.weight(1f).focusRequester(watchNowFocus),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Watch Now")
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Watch Now", fontSize = 12.sp)
                     }
                 }
             }

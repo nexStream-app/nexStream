@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "mode": "dark",
+  "identity": {
+    "app_name": "nexStream",
+    "logo_mode": "text",
+    "logo_url": null,
+    "font_family": "exo2"
+  },
+  "typography": {
+    "scale": 1.15,
+    "weight": "bold"
+  },
+  "sidebar": {
+    "background": "#000000",
+    "rail_background": "#000000",
+    "rail_item_active_bg": "#1A1400",
+    "rail_item_focused_bg": "#2A2200",
+    "rail_icon": "#AAAAAA",
+    "rail_icon_active": "#FFCC00",
+    "panel_background": "#0A0A0A",
+    "category_selected_bg": "#1A1400",
+    "category_focused_bg": "#222200",
+    "category_text": "#AAAAAA",
+    "category_text_selected": "#FFCC00",
+    "category_text_focused": "#FFFF00",
+    "divider": "#444444",
+    "account_bar_bg": "#000000",
+    "account_bar_text": "#FFFFFF",
+    "account_bar_text_secondary": "#AAAAAA"
+  },
+  "epg": {
+    "background": "#000000",
+    "header_background": "#111111",
+    "header_time_text": "#AAAAAA",
+    "header_day_text": "#FFCC00",
+    "header_divider": "#444444",
+    "channel_column_bg": "#111111",
+    "channel_name_text": "#FFFFFF",
+    "channel_divider": "#444444",
+    "row_focused_tint": "#1A1400",
+    "program_cell_bg": "#1A1A1A",
+    "program_cell_now_bg": "#222200",
+    "program_cell_placeholder_bg": "#111111",
+    "program_cell_focused_bg": "#333300",
+    "program_cell_focused_border": "#FFCC00",
+    "program_text": "#CCCCCC",
+    "program_text_now": "#FFCC00",
+    "program_text_focused": "#FFFF00",
+    "program_text_placeholder": "#555555",
+    "now_line": "#FF3300",
+    "divider": "#444444",
+    "badge_catchup_bg": "#003300",
+    "badge_catchup_text": "#00FF66",
+    "badge_reminder_bg": "#330000",
+    "badge_reminder_text": "#FF6600"
+  },
+  "player": {
+    "controls_bg": "#EE000000",
+    "progress_played": "#FFCC00",
+    "progress_buffered": "#555500",
+    "progress_bg": "#333333",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#FFCC00"
+  },
+  "global": {
+    "primary": "#FFCC00",
+    "primary_container": "#333300",
+    "on_primary": "#000000",
+    "on_primary_container": "#FFFF00",
+    "surface": "#000000",
+    "surface_variant": "#1A1A1A",
+    "on_surface": "#FFFFFF",
+    "on_surface_variant": "#CCCCCC",
+    "outline": "#555555",
+    "error": "#FF4444"
+  }
+}

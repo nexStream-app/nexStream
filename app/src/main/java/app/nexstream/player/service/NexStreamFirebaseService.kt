@@ -5,7 +5,9 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
+import app.nexstream.player.data.sync.ChannelGroupSyncManager
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.data.sync.SettingsSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.license.LicenceManager
 import app.nexstream.player.license.PlaylistCrypto
@@ -22,6 +24,8 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class NexStreamFirebaseService : FirebaseMessagingService() {
 
+    @Inject lateinit var channelGroupSyncManager: ChannelGroupSyncManager
+    @Inject lateinit var settingsSyncManager: SettingsSyncManager
     @Inject lateinit var profileSyncManager: ProfileSyncManager
     @Inject lateinit var watchlistSyncManager: WatchlistSyncManager
     @Inject lateinit var profileManager: ProfileManager
@@ -54,6 +58,18 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
                     val pid = profileManager.activeProfile.value?.id ?: return@launch
                     watchlistSyncManager.syncFromServer(pid)
                     Log.d("FCM", "Watchlist sync triggered for profile $pid")
+                }
+            }
+            "channel_group_sync" -> {
+                scope.launch {
+                    channelGroupSyncManager.syncFromServer()
+                    Log.d("FCM", "Channel group sync triggered")
+                }
+            }
+            "settings_sync" -> {
+                scope.launch {
+                    settingsSyncManager.syncFromServer()
+                    Log.d("FCM", "Settings sync triggered")
                 }
             }
             "theme_refresh" -> {

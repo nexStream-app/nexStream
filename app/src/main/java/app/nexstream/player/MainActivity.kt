@@ -86,6 +86,9 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != ACTION_PIP_STOP) return
             stopPipSignal.value++
+            // Directly stop the playback service so audio stops even if the
+            // Compose LaunchedEffect hasn't fired yet (activity may be backgrounded)
+            stopService(Intent(this@MainActivity, app.nexstream.player.service.NexStreamPlaybackService::class.java))
             moveTaskToBack(true)
         }
     }
