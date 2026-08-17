@@ -14,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 data class PlaylistLoadState(val loaded: Boolean, val playlists: List<PlaylistEntity>)
@@ -28,6 +29,9 @@ class MainScreenViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isReseller: Boolean = licencePreferences.isResellerAssigned()
+
+    private val _profilesReady = MutableStateFlow(false)
+    val profilesReady: StateFlow<Boolean> = _profilesReady.asStateFlow()
 
     // Single subscription — loaded + playlists are always from the same emission
     val playlistLoadState: StateFlow<PlaylistLoadState> = repository.getAllPlaylists()
@@ -57,6 +61,13 @@ class MainScreenViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     init {
+        // Wait for the first profile sync to complete before the LoadingScreen navigates,
+        // so the profile picker always shows server-side profiles (e.g. created on another device).
+        // Falls through after 3 seconds to handle offline / cloud-sync-off cases.
+        viewModelScope.launch {
+            withTimeoutOrNull(3_000L) { profileManager.initialSyncDone.first { it } }
+            _profilesReady.value = true
+        }
         viewModelScope.launch {
             // Wait for active profile to be available
             val profileId = profileManager.activeProfile.value?.id

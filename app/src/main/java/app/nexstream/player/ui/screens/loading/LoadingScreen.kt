@@ -19,28 +19,21 @@ fun LoadingScreen(
     onLoadingComplete: (hasPlaylists: Boolean) -> Unit,
     viewModel: MainScreenViewModel = hiltViewModel()
 ) {
-    val playlists by viewModel.playlists.collectAsState()
-    val playlistsLoaded by viewModel.playlistsLoaded.collectAsState()
-    val channelCount by viewModel.channelCount.collectAsState()
+    val loadState     by viewModel.playlistLoadState.collectAsState()
+    val profilesReady by viewModel.profilesReady.collectAsState()
 
     val statusText = when {
-        !playlistsLoaded    -> "Starting up..."
-        playlists.isEmpty() -> "No playlist found..."
-        else                -> "Loading..."
+        !loadState.loaded              -> "Starting up..."
+        loadState.playlists.isEmpty()  -> "No playlist found..."
+        else                           -> "Loading..."
     }
 
-    LaunchedEffect(playlistsLoaded, playlists) {
-        when {
-            !playlistsLoaded -> return@LaunchedEffect
-            playlists.isEmpty() -> {
-                kotlinx.coroutines.delay(300)
-                onLoadingComplete(false)
-            }
-            else -> {
-                // Playlists exist — navigate immediately, screens handle their own loading state
-                onLoadingComplete(true)
-            }
-        }
+    // Wait for both playlists (Room, instant) AND the first profile sync (network) before
+    // navigating, so the profile picker always shows profiles from all devices.
+    // profilesReady falls through after 3 s to handle offline / sync-disabled cases.
+    LaunchedEffect(loadState, profilesReady) {
+        if (!loadState.loaded || !profilesReady) return@LaunchedEffect
+        onLoadingComplete(loadState.playlists.isNotEmpty())
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")

@@ -2,17 +2,34 @@ package app.nexstream.player.data.profile
 
 import android.content.Context
 import android.util.Log
-import app.nexstream.player.data.local.NexStreamDatabase
+import app.nexstream.player.data.local.dao.ProfileAppearanceDao
 import app.nexstream.player.data.local.dao.ProfileDao
+import app.nexstream.player.data.local.entity.ProfileAppearanceEntity
 import app.nexstream.player.data.local.entity.ProfileCategoryFilter
 import app.nexstream.player.data.local.entity.ProfileEntity
+import app.nexstream.player.ui.theme.AspectRatio
+import app.nexstream.player.ui.theme.AspectRatioType
+import app.nexstream.player.ui.theme.ThemeMode
+import app.nexstream.player.ui.theme.UiStyle
+import app.nexstream.player.ui.theme.saveAspectRatio
+import app.nexstream.player.ui.theme.saveEpgMiniPlayer
+import app.nexstream.player.ui.theme.saveFontScale
+import app.nexstream.player.ui.theme.saveFontWeight
+import app.nexstream.player.ui.theme.saveKeyboardFontScale
+import app.nexstream.player.ui.theme.saveThemeMode
+import app.nexstream.player.ui.theme.saveUiStyle
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.UUID
@@ -29,7 +46,8 @@ val PROFILE_EMOJIS = listOf(
 @Singleton
 class ProfileManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val dao: ProfileDao
+    private val dao: ProfileDao,
+    private val profileAppearanceDao: ProfileAppearanceDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -43,11 +61,29 @@ class ProfileManager @Inject constructor(
     private val _profiles = MutableStateFlow<List<ProfileEntity>>(emptyList())
     val profiles: StateFlow<List<ProfileEntity>> = _profiles.asStateFlow()
 
+    private val _initialSyncDone = MutableStateFlow(false)
+    val initialSyncDone: StateFlow<Boolean> = _initialSyncDone.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun init() {
         scope.launch {
             ensureDefaultProfileExists()
             loadProfiles()
             restoreActiveProfile()
+        }
+        // Observe active profile's appearance in Room — re-applies to DataStore whenever
+        // FCM sync updates the profile's appearance while it is already the active profile.
+        scope.launch {
+            _activeProfile
+                .filterNotNull()
+                .map { it.id }
+                .distinctUntilChanged()
+                .flatMapLatest { profileId -> profileAppearanceDao.getAppearanceFlow(profileId) }
+                .distinctUntilChanged()
+                .collect { _ ->
+                    val activeId = _activeProfile.value?.id ?: return@collect
+                    applyAppearanceToDataStore(activeId)
+                }
         }
     }
 
@@ -57,7 +93,7 @@ class ProfileManager @Inject constructor(
             dao.upsertProfile(
                 ProfileEntity(
                     id           = UUID.randomUUID().toString(),
-                    name         = "nexStream User",
+                    name         = "Default",
                     emoji        = "🦁",
                     isDefault    = true,
                     isRestricted = false,
@@ -85,7 +121,9 @@ class ProfileManager @Inject constructor(
         name: String,
         emoji: String,
         pin: String? = null,
-        isRestricted: Boolean = false
+        isRestricted: Boolean = false,
+        maxAgeRating: String? = null,
+        allowNr: Boolean = true
     ): ProfileEntity {
         val count = dao.getProfileCount()
         val profile = ProfileEntity(
@@ -95,7 +133,9 @@ class ProfileManager @Inject constructor(
             pinHash      = pin?.let { hashPin(it) },
             isDefault    = false,
             isRestricted = isRestricted,
-            sortOrder    = count
+            sortOrder    = count,
+            maxAgeRating = maxAgeRating,
+            allowNr      = allowNr
         )
         dao.upsertProfile(profile)
         loadProfiles()
@@ -140,6 +180,9 @@ class ProfileManager @Inject constructor(
             )
         }
         if (toAdd.isNotEmpty()) dao.upsertFilters(toAdd)
+        if (_activeProfile.value?.id == profileId && type == "TV") {
+            _blockedTvCategories.value = blocked
+        }
     }
 
     suspend fun getBlockedCategories(profileId: String, type: String): Set<String> {
@@ -163,6 +206,7 @@ class ProfileManager @Inject constructor(
     }
 
     fun refreshAfterSync() {
+        _initialSyncDone.value = true
         scope.launch {
             loadProfiles()
             val savedId = prefs.getString("active_profile_id", null)
@@ -196,6 +240,39 @@ class ProfileManager @Inject constructor(
                 _blockedCategoriesCache[Pair(profile.id, type)] =
                     dao.getBlockedCategories(profile.id, type).toSet()
             }
+            // Apply per-profile appearance to DataStore
+            applyAppearanceToDataStore(profile.id)
+        }
+    }
+
+    private suspend fun applyAppearanceToDataStore(profileId: String) {
+        val appearance = profileAppearanceDao.getAppearance(profileId)
+            ?: ProfileAppearanceEntity(profileId = profileId)
+        try {
+            context.saveThemeMode(
+                ThemeMode.entries.firstOrNull { it.name == appearance.themeMode } ?: ThemeMode.DARK
+            )
+            appearance.fontScale?.let { context.saveFontScale(it) }
+            appearance.fontWeight?.let { context.saveFontWeight(it) }
+            context.saveUiStyle(
+                try { UiStyle.valueOf(appearance.uiStyle) } catch (_: Exception) { UiStyle.CLASSIC }
+            )
+            context.saveAspectRatio(
+                AspectRatioType.TV,
+                try { AspectRatio.valueOf(appearance.tvAspectRatio) } catch (_: Exception) { AspectRatio.FILL }
+            )
+            context.saveAspectRatio(
+                AspectRatioType.MOVIE,
+                try { AspectRatio.valueOf(appearance.movieAspectRatio) } catch (_: Exception) { AspectRatio.FIT }
+            )
+            context.saveAspectRatio(
+                AspectRatioType.SERIES,
+                try { AspectRatio.valueOf(appearance.seriesAspectRatio) } catch (_: Exception) { AspectRatio.FIT }
+            )
+            context.saveEpgMiniPlayer(appearance.epgMiniPlayer)
+            context.saveKeyboardFontScale(appearance.keyboardFontScale)
+        } catch (e: Exception) {
+            Log.e("ProfileManager", "Failed to apply appearance for profile $profileId", e)
         }
     }
 }

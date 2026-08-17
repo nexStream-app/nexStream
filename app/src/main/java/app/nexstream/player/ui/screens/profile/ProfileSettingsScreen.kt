@@ -85,6 +85,8 @@ fun ProfilesSettingsScreen(
     var showEditPin      by remember { mutableStateOf(false) }
     var editTarget       by remember { mutableStateOf<ProfileEntity?>(null) }
     var pinError         by remember { mutableStateOf(false) }
+    var showActionDialog by remember { mutableStateOf(false) }
+    var actionProfile    by remember { mutableStateOf<ProfileEntity?>(null) }
 
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
@@ -149,7 +151,7 @@ fun ProfilesSettingsScreen(
                 visibleProfiles.forEachIndexed { index, profile ->
                     val isActive = profile.id == activeProfile?.id
                     val thisFR = rowFRs.getOrNull(index)
-                    val canAdd = !isRestricted && visibleProfiles.size < 3
+                    val canAdd = !isRestricted && visibleProfiles.size < 6
                     val prevFR = if (index > 0) rowFRs[index - 1] else if (canAdd) addFR else rowFRs.last()
                     val nextFR = if (index < visibleProfiles.lastIndex) rowFRs[index + 1] else if (canAdd) addFR else rowFRs.first()
                     ProfileRow(
@@ -160,18 +162,25 @@ fun ProfilesSettingsScreen(
                         upFR             = prevFR,
                         downFR           = nextFR,
                         onClick          = {
-                            if (!profile.pinHash.isNullOrBlank() && profile.id != activeProfile?.id) {
-                                editTarget = profile; showEditPin = true; pinError = false
-                            } else {
-                                onEditProfile(profile)
+                            val isAdmin = activeProfile?.isDefault == true
+                            when {
+                                // Admin tapping a non-default profile → show action menu (edit/switch/delete)
+                                isAdmin && !profile.isDefault -> {
+                                    actionProfile = profile; showActionDialog = true
+                                }
+                                // Non-admin tapping a pinned profile they don't own → PIN gate
+                                !profile.pinHash.isNullOrBlank() && profile.id != activeProfile?.id -> {
+                                    editTarget = profile; showEditPin = true; pinError = false
+                                }
+                                else -> onEditProfile(profile)
                             }
                         }
                     )
                 }
             }
 
-            // Add profile button (max 3, hidden for restricted profiles)
-            if (!isRestricted && profiles.size < 3) {
+            // Add profile button (max 6, hidden for restricted profiles)
+            if (!isRestricted && profiles.size < 6) {
                 var addFocused by remember { mutableStateOf(false) }
                 val lastRowFR = rowFRs.lastOrNull()
                 val firstRowFR = rowFRs.firstOrNull()
@@ -205,6 +214,33 @@ fun ProfilesSettingsScreen(
                 }
             }
         }
+    }
+
+    // Action menu (Edit / Switch / Delete) — shown for non-default profiles when admin is active
+    if (showActionDialog && actionProfile != null) {
+        val target = actionProfile!!
+        ProfileActionDialog(
+            profile   = target,
+            isActive  = target.id == activeProfile?.id,
+            canDelete = !target.isDefault,
+            onEdit    = {
+                showActionDialog = false; actionProfile = null
+                onEditProfile(target)
+            },
+            onSwitch  = {
+                showActionDialog = false; actionProfile = null
+                if (!target.pinHash.isNullOrBlank()) {
+                    switchTarget = target; showSwitchPin = true; pinError = false
+                } else {
+                    viewModel.switchProfile(target)
+                }
+            },
+            onDelete  = {
+                showActionDialog = false; actionProfile = null
+                profileToDelete = target; showDeleteConfirm = true
+            },
+            onDismiss = { showActionDialog = false; actionProfile = null }
+        )
     }
 
     // Delete confirm
