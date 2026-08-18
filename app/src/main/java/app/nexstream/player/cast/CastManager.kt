@@ -264,38 +264,52 @@ class CastManager(private val context: Context) {
 
     // ── Connect ────────────────────────────────────────────────────────────────
 
-    fun connect(device: CastDevice, url: String, title: String?, positionMs: Long) {
+    fun connect(device: CastDevice, url: String, title: String?, positionMs: Long, isLive: Boolean = false) {
         _castState.value = CastState.Connecting(device)
         when (device.type) {
-            CastType.CHROMECAST -> connectChromecast(device, url, title, positionMs)
+            CastType.CHROMECAST -> connectChromecast(device, url, title, positionMs, isLive)
             CastType.DLNA       -> connectDlna(device, url, positionMs)
             CastType.AIRPLAY    -> connectAirPlay(device, url, positionMs)
         }
     }
 
-    private fun connectChromecast(device: CastDevice, url: String, title: String?, positionMs: Long) {
+    private fun loadToSession(session: CastSession, url: String, title: String?, positionMs: Long, isLive: Boolean) {
+        val meta = MediaMetadata(MediaMetadata.MEDIA_TYPE_GENERIC)
+            .also { title?.let { t -> it.putString(MediaMetadata.KEY_TITLE, t) } }
+        val streamType = if (isLive) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED
+        val info = MediaInfo.Builder(url)
+            .setStreamType(streamType)
+            .setMetadata(meta)
+            .build()
+        session.remoteMediaClient?.load(
+            MediaLoadRequestData.Builder()
+                .setMediaInfo(info)
+                .setCurrentTime(if (isLive) 0L else positionMs)
+                .setAutoplay(true)
+                .build()
+        )
+    }
+
+    private fun connectChromecast(device: CastDevice, url: String, title: String?, positionMs: Long, isLive: Boolean) {
         val router = mediaRouter ?: run { _castState.value = CastState.Idle; return }
         val route  = router.routes.firstOrNull { it.id == device.id }
             ?: run { _castState.value = CastState.Idle; return }
+
+        // If a session is already active, load media directly without waiting for onSessionStarted
+        val existingSession = castContext?.sessionManager?.currentCastSession
+        if (existingSession != null && existingSession.isConnected) {
+            castSession = existingSession
+            _castState.value = CastState.Active(device)
+            loadToSession(existingSession, url, title, positionMs, isLive)
+            return
+        }
 
         val listener = object : SessionManagerListener<CastSession> {
             override fun onSessionStarting(s: CastSession) {}
             override fun onSessionStarted(s: CastSession, id: String) {
                 castSession = s
                 _castState.value = CastState.Active(device)
-                val meta = MediaMetadata(MediaMetadata.MEDIA_TYPE_GENERIC)
-                    .also { title?.let { t -> it.putString(MediaMetadata.KEY_TITLE, t) } }
-                val info = MediaInfo.Builder(url)
-                    .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-                    .setMetadata(meta)
-                    .build()
-                s.remoteMediaClient?.load(
-                    MediaLoadRequestData.Builder()
-                        .setMediaInfo(info)
-                        .setCurrentTime(positionMs)
-                        .setAutoplay(true)
-                        .build()
-                )
+                loadToSession(s, url, title, positionMs, isLive)
                 castContext?.sessionManager?.removeSessionManagerListener(this, CastSession::class.java)
             }
             override fun onSessionStartFailed(s: CastSession, e: Int) {

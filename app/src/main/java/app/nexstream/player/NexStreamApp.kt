@@ -68,6 +68,11 @@ class NexStreamApp : Application(), ImageLoaderFactory, Configuration.Provider {
                     profileSyncManager.sendFcmToken(token)
                 }
             }
+        // Subscribe to broadcast topic so all devices receive admin push notifications
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance()
+                .subscribeToTopic("broadcast")
+        } catch (_: Exception) {}
     }
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)

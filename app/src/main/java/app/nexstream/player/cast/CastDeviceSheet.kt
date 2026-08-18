@@ -20,7 +20,8 @@ fun CastDeviceSheet(
     currentUrl: String,
     title: String?,
     currentPositionMs: Long,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isLive: Boolean = false
 ) {
     val devices    by castManager.devices.collectAsState()
     val castState  by castManager.castState.collectAsState()
@@ -112,7 +113,7 @@ fun CastDeviceSheet(
                 SectionHeader("Chromecast")
                 chromecasts.forEach { device ->
                     DeviceRow(device, castState) {
-                        castManager.connect(device, currentUrl, title, currentPositionMs)
+                        castManager.connect(device, currentUrl, title, currentPositionMs, isLive)
                     }
                 }
             }
@@ -120,7 +121,7 @@ fun CastDeviceSheet(
                 SectionHeader("DLNA / Smart TV")
                 dlnaDevices.forEach { device ->
                     DeviceRow(device, castState) {
-                        castManager.connect(device, currentUrl, title, currentPositionMs)
+                        castManager.connect(device, currentUrl, title, currentPositionMs, isLive)
                     }
                 }
             }
@@ -128,7 +129,7 @@ fun CastDeviceSheet(
                 SectionHeader("AirPlay")
                 airPlayDevs.forEach { device ->
                     DeviceRow(device, castState) {
-                        castManager.connect(device, currentUrl, title, currentPositionMs)
+                        castManager.connect(device, currentUrl, title, currentPositionMs, isLive)
                     }
                 }
             }

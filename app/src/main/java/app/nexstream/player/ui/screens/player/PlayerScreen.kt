@@ -649,6 +649,9 @@ fun PlayerScreen(
     // ── Playback state ────────────────────────────────────────────────────────
     var isPlaying          by remember { mutableStateOf(true) }
     var isBuffering        by remember { mutableStateOf(false) }
+    var videoWidth         by remember { mutableIntStateOf(0) }
+    var videoHeight        by remember { mutableIntStateOf(0) }
+    var videoBitrateKbps   by remember { mutableIntStateOf(0) }
     var hasError           by remember { mutableStateOf(false) }
     var errorMessage       by remember { mutableStateOf("") }
     var errorFocusedButton by remember { mutableStateOf(ErrorButton.RETRY) }
@@ -660,6 +663,22 @@ fun PlayerScreen(
     var nextEpisodeAvailable     by remember { mutableStateOf<EpisodeEntity?>(null) }
     var previousEpisodeAvailable by remember { mutableStateOf<EpisodeEntity?>(null) }
     var shouldAutoPlayNext       by remember { mutableStateOf(false) }
+
+    val videoQualityLabel: String? = remember(videoWidth, videoHeight, videoBitrateKbps) {
+        if (videoWidth <= 0) return@remember null
+        val res = when {
+            videoHeight >= 2160 -> "4K"
+            videoHeight >= 1080 -> "1080p"
+            videoHeight >= 720  -> "720p"
+            videoHeight >= 576  -> "576p"
+            videoHeight >= 480  -> "480p"
+            else -> "${videoHeight}p"
+        }
+        if (videoBitrateKbps > 0) {
+            val mb = videoBitrateKbps / 1000f
+            "$res • ${"%.1f".format(mb)} Mbps"
+        } else res
+    }
 
     DisposableEffect(player) {
         val p = player ?: return@DisposableEffect onDispose { }
@@ -725,9 +744,26 @@ fun PlayerScreen(
             override fun onCues(cueGroup: CueGroup) {
                 subtitleCueLines = cueGroup.cues.mapNotNull { it.text?.toString() }.filter { it.isNotBlank() }
             }
+            override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
+                if (size.width > 0) {
+                    videoWidth = size.width
+                    videoHeight = size.height
+                    val br = (p as? ExoPlayer)?.videoFormat?.bitrate ?: -1
+                    if (br > 0) videoBitrateKbps = br / 1000
+                }
+            }
         }
         p.addListener(listener)
         onDispose { p.removeListener(listener) }
+    }
+
+    // Poll video format for adaptive bitrate changes (every 4s while playing)
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            val br = (player as? ExoPlayer)?.videoFormat?.bitrate ?: -1
+            if (br > 0) videoBitrateKbps = br / 1000
+            kotlinx.coroutines.delay(4_000L)
+        }
     }
 
     // Buffering watchdog: reconnect if stuck — 30s for live TV, 60s for VOD/catchup
@@ -1261,6 +1297,37 @@ fun PlayerScreen(
                             }
                         }
 
+                        // Stream quality badge
+                        if (videoQualityLabel != null && !isCasting) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.Black.copy(alpha = 0.55f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Hd,
+                                            contentDescription = null,
+                                            tint = controlText.copy(alpha = 0.75f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text  = videoQualityLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = controlText.copy(alpha = 0.75f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // ── ICONS ROW: aspect ratio + cast (phone-only, hidden on TV) ────
                         if (iconButtons.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1770,6 +1837,7 @@ fun PlayerScreen(
                 castManager      = castManager,
                 currentUrl       = channelUrl,
                 title            = nowPlayingTitle,
+                isLive           = movieId == null && episodeId == null && !isCatchup,
                 currentPositionMs = if (isCasting) castPositionMs else player?.currentPosition ?: 0L,
                 onDismiss        = { showCastSheet = false }
             )
