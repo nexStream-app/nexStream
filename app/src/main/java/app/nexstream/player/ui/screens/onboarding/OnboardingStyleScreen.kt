@@ -34,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nexstream.player.ui.theme.ThemeMode
+import app.nexstream.player.ui.theme.getFontScaleFlow
+import app.nexstream.player.ui.theme.getFontWeightFlow
 import app.nexstream.player.ui.theme.getThemeModeFlow
 import app.nexstream.player.ui.theme.saveThemeMode
 import app.nexstream.player.ui.theme.LocalNsAccent
@@ -71,18 +73,22 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     val textPrimary   = LocalNsTextPrimary.current
     val textSecondary = LocalNsTextSecondary.current
 
-    val currentThemeMode by context.getThemeModeFlow().collectAsState(initial = ThemeMode.DARK)
-    val currentUiStyle   by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
+    val currentThemeMode  by context.getThemeModeFlow().collectAsState(initial = ThemeMode.DARK)
+    val currentUiStyle    by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
+    val currentFontScale  by context.getFontScaleFlow().collectAsState(initial = null)
+    val currentFontWeight by context.getFontWeightFlow().collectAsState(initial = null)
 
-    var selectedMode      by remember { mutableStateOf(ThemeMode.DARK) }
-    var selectedStyle     by remember { mutableStateOf(UiStyle.CLASSIC) }
-    var selectedFontScale by remember { mutableStateOf(1.0f) }
+    var selectedMode       by remember { mutableStateOf(ThemeMode.DARK) }
+    var selectedStyle      by remember { mutableStateOf(UiStyle.CLASSIC) }
+    var selectedFontScale  by remember { mutableStateOf(1.0f) }
     var selectedFontWeight by remember { mutableStateOf("normal") }
     var selectedCloudSync  by remember { mutableStateOf(true) }
     var selectedAiSubs     by remember { mutableStateOf(false) }
 
-    LaunchedEffect(currentThemeMode) { selectedMode = currentThemeMode }
-    LaunchedEffect(currentUiStyle)   { selectedStyle = currentUiStyle }
+    LaunchedEffect(currentThemeMode)  { selectedMode = currentThemeMode }
+    LaunchedEffect(currentUiStyle)    { selectedStyle = currentUiStyle }
+    LaunchedEffect(currentFontScale)  { currentFontScale?.let { selectedFontScale = it } }
+    LaunchedEffect(currentFontWeight) { currentFontWeight?.let { selectedFontWeight = it } }
 
     // Check if annual/lifetime licence (available by onboarding time)
     val showCloudSync = remember {

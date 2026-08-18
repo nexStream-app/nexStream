@@ -150,10 +150,11 @@ class AddPlaylistViewModel @Inject constructor(
         // HTTP polling fallback — fires every 4 s in case FCM is unavailable
         viewModelScope.launch {
             delay(2000)
-            // Fresh install: no playlists yet — look back at all assignments (since=0)
-            // so a pre-existing assignment (e.g. from a previous install) is picked up.
+            // On fresh install look back 30 minutes only — enough for the QR/web setup flow
+            // (~15 min QR window + ~5 min to submit) without auto-importing stale credentials
+            // from a previous install that could hijack the UI before the user can enter new ones.
             val hasPlaylists = repository.getAllPlaylists().first().isNotEmpty()
-            val firstSince   = if (hasPlaylists) screenOpenedAt else 0L
+            val firstSince   = if (hasPlaylists) screenOpenedAt else (screenOpenedAt - 30L * 60 * 1000L)
             val firstEvent   = repository.pollForPendingPlaylist(deviceId, firstSince)
             if (firstEvent != null && _pollState.value == MacPollState.Polling) {
                 handlePlaylistEvent(firstEvent); return@launch
@@ -1037,7 +1038,7 @@ private fun PlaylistImportProgressScreen(
                             icon = Icons.Default.Tv,
                             label = "Live Channels",
                             isLoading = false,
-                            isDone = channelCount > 0,
+                            isDone = channelCount > 0 || isDone,
                             count = channelCount,
                             unit = "channels"
                         )
@@ -1057,7 +1058,7 @@ private fun PlaylistImportProgressScreen(
                             icon = Icons.Default.Movie,
                             label = "Movies",
                             isLoading = isLoadingVOD,
-                            isDone = !isLoadingVOD && vodCount > 0,
+                            isDone = !isLoadingVOD && (vodCount > 0 || isDone),
                             count = vodCount,
                             unit = "movies"
                         )
@@ -1065,7 +1066,7 @@ private fun PlaylistImportProgressScreen(
                             icon = Icons.Default.VideoLibrary,
                             label = "Series",
                             isLoading = isLoadingSeries,
-                            isDone = !isLoadingSeries && seriesCount > 0,
+                            isDone = !isLoadingSeries && (seriesCount > 0 || isDone),
                             count = seriesCount,
                             unit = "series"
                         )
@@ -1075,7 +1076,7 @@ private fun PlaylistImportProgressScreen(
                             icon = Icons.Default.MusicNote,
                             label = "Music",
                             isLoading = isLoadingMusic,
-                            isDone = !isLoadingMusic && musicCount > 0,
+                            isDone = !isLoadingMusic && (musicCount > 0 || isDone),
                             count = musicCount,
                             unit = "tracks"
                         )
@@ -1141,11 +1142,11 @@ private fun ImportProgressRow(
             Text(label, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface)
             val subText = when {
-                isDone && count > 0 -> "${formatCount(count)} $unit"
-                isDone              -> "Done"
+                isDone && count > 0    -> "${formatCount(count)} $unit"
+                isDone                 -> "None found"
                 isLoading && count > 0 -> "${formatCount(count)} $unit…"
-                isLoading           -> "Importing…"
-                else                -> "Waiting…"
+                isLoading              -> "Importing…"
+                else                   -> "Waiting…"
             }
             Text(subText, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)

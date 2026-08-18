@@ -303,10 +303,10 @@ fun MainScreen(
         if (idx >= 0) catchUpDateLabels.getOrNull(idx) else null
     }
     val isReseller = viewModel.isReseller
-    val settingsSubCategories: List<String> = remember(isReseller) {
+    val settingsSubCategories: List<String> = remember {
         buildList {
             add("Playlists"); add("Sports Guide"); add("Appearance"); add("Player")
-            if (!isReseller) add("Sync")
+            add("Sync")
             add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("About")
         }
     }
@@ -883,7 +883,7 @@ fun MainScreen(
                 vodRestricted         = vodRestricted,
                 activeProfileName     = activeProfile?.name ?: "Default",
                 activeProfileEmoji    = activeProfile?.emoji ?: "👤",
-                showSyncSettings     = !isReseller,
+                showSyncSettings     = true,
                 channelGroups         = guideChannelGroups,
                 selectedSettingsRoute = if (currentRoute.isSettings && currentRoute != AppRoute.Settings) currentRoute else null,
                 watchlistIds          = watchlistIds,
