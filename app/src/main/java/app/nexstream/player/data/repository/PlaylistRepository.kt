@@ -643,6 +643,233 @@ class PlaylistRepository @Inject constructor(
         }
     }
 
+    // ── Plex ──────────────────────────────────────────────────────────────────
+
+    suspend fun requestPlexPin(clientId: String): Result<Pair<Long, String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val plexAuth = buildRetrofit("https://plex.tv/").create(app.nexstream.player.data.remote.PlexAuthApiService::class.java)
+            val pin = plexAuth.createPin(clientId = clientId)
+            Pair(pin.id, pin.code)
+        }
+    }
+
+    suspend fun checkPlexPin(pinId: Long, clientId: String): Result<String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val plexAuth = buildRetrofit("https://plex.tv/").create(app.nexstream.player.data.remote.PlexAuthApiService::class.java)
+            plexAuth.getPin(id = pinId, clientId = clientId).authToken
+        }
+    }
+
+    suspend fun getPlexServers(token: String): Result<List<app.nexstream.player.data.remote.PlexDevice>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val plexAuth = buildRetrofit("https://plex.tv/").create(app.nexstream.player.data.remote.PlexAuthApiService::class.java)
+            plexAuth.getResources(token = token)
+        }
+    }
+
+    suspend fun addPlexPlaylist(serverName: String, serverUrl: String, token: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val cleanUrl = serverUrl.trimEnd('/')
+            val id = UUID.randomUUID().toString()
+            val playlist = PlaylistEntity(
+                id = id, name = serverName, url = cleanUrl,
+                type = "PLEX", plexToken = token
+            )
+            database.playlistDao().insert(playlist)
+            _channelImportedCount.value = 0
+            _vodLoadedCount.value = 0
+            _seriesLoadedCount.value = 0
+            _musicLoadedCount.value = 0
+            _isBackgroundSyncComplete.value = false
+            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                syncPlexLibrary(playlist)
+            }
+            id
+        }
+    }
+
+    suspend fun syncPlexLibrary(playlist: PlaylistEntity) = withContext(Dispatchers.IO) {
+        val token = playlist.plexToken ?: return@withContext
+        val baseUrl = playlist.url.trimEnd('/') + "/"
+        val plexApi = buildRetrofit(baseUrl).create(app.nexstream.player.data.remote.PlexMediaApiService::class.java)
+
+        try {
+            val sections = plexApi.getLibrarySections(token = token)
+                .mediaContainer?.directories ?: return@withContext
+
+            for (section in sections) {
+                when (section.type) {
+                    "movie"  -> importPlexMovies(plexApi, playlist.id, section.key, token, baseUrl)
+                    "show"   -> importPlexSeries(plexApi, playlist.id, section.key, token, baseUrl)
+                    "artist" -> importPlexMusic(plexApi, playlist.id, section.key, token, baseUrl)
+                }
+            }
+            _isBackgroundSyncComplete.value = true
+        } catch (e: Exception) {
+            android.util.Log.e("PlaylistRepository", "Plex sync failed", e)
+            _isBackgroundSyncComplete.value = true
+        }
+    }
+
+    private suspend fun importPlexMovies(
+        api: app.nexstream.player.data.remote.PlexMediaApiService,
+        playlistId: String,
+        sectionKey: String,
+        token: String,
+        baseUrl: String
+    ) {
+        val base = baseUrl.trimEnd('/')
+        var start = 0
+        while (true) {
+            val items = api.getSectionItems(sectionKey, token, start = start, size = 500)
+                .mediaContainer?.metadata ?: break
+            if (items.isEmpty()) break
+            val movies = items.map { m ->
+                val streamPath = m.media?.firstOrNull()?.parts?.firstOrNull()?.key ?: ""
+                val streamUrl = if (streamPath.isNotEmpty()) "$base$streamPath?X-Plex-Token=$token" else ""
+                val posterUrl = if (m.thumb != null) "$base${m.thumb}?X-Plex-Token=$token" else null
+                MovieEntity(
+                    id           = "plex_${playlistId}_${m.ratingKey}",
+                    playlistId   = playlistId,
+                    name         = m.title,
+                    streamUrl    = streamUrl,
+                    posterUrl    = posterUrl,
+                    backdropUrl  = null,
+                    plot         = m.summary,
+                    cast         = null,
+                    director     = null,
+                    genre        = null,
+                    releaseDate  = m.year?.toString(),
+                    rating       = null,
+                    duration     = null,
+                    categoryId   = null,
+                    categoryName = "Movies",
+                )
+            }
+            database.movieDao().insertAll(movies)
+            _vodLoadedCount.value += movies.size
+            if (items.size < 500) break
+            start += 500
+        }
+    }
+
+    private suspend fun importPlexSeries(
+        api: app.nexstream.player.data.remote.PlexMediaApiService,
+        playlistId: String,
+        sectionKey: String,
+        token: String,
+        baseUrl: String
+    ) {
+        val base = baseUrl.trimEnd('/')
+        var start = 0
+        while (true) {
+            val shows = api.getSectionItems(sectionKey, token, start = start, size = 500)
+                .mediaContainer?.metadata ?: break
+            if (shows.isEmpty()) break
+            shows.forEach { show ->
+                val seriesId = "plex_${playlistId}_${show.ratingKey}"
+                val posterUrl = if (show.thumb != null) "$base${show.thumb}?X-Plex-Token=$token" else null
+                database.seriesDao().insertAllSeries(listOf(
+                    SeriesEntity(
+                        id           = seriesId,
+                        seriesId     = show.ratingKey,
+                        name         = show.title,
+                        posterUrl    = posterUrl,
+                        backdropUrl  = null,
+                        plot         = show.summary,
+                        cast         = null,
+                        director     = null,
+                        genre        = null,
+                        releaseDate  = show.year?.toString(),
+                        rating       = null,
+                        categoryId   = null,
+                        categoryName = "Series",
+                        playlistId   = playlistId,
+                    )
+                ))
+                _seriesLoadedCount.value++
+
+                // Fetch seasons
+                val seasons = api.getChildren(show.ratingKey, token)
+                    .mediaContainer?.metadata ?: return@forEach
+                seasons.forEach { season ->
+                    // Fetch episodes
+                    val episodes = api.getChildren(season.ratingKey, token)
+                        .mediaContainer?.metadata ?: return@forEach
+                    val episodeEntities = episodes.mapIndexed { idx, ep ->
+                        val streamPath = ep.media?.firstOrNull()?.parts?.firstOrNull()?.key ?: ""
+                        val streamUrl  = if (streamPath.isNotEmpty()) "$base$streamPath?X-Plex-Token=$token" else ""
+                        EpisodeEntity(
+                            id                 = "plex_${playlistId}_${ep.ratingKey}",
+                            episodeId          = ep.ratingKey,
+                            seriesId           = seriesId,
+                            name               = ep.title,
+                            seasonNum          = season.index ?: 1,
+                            episodeNum         = ep.index ?: (idx + 1),
+                            streamUrl          = streamUrl,
+                            posterUrl          = null,
+                            plot               = ep.summary,
+                            duration           = null,
+                            containerExtension = "",
+                            playlistId         = playlistId,
+                        )
+                    }
+                    if (episodeEntities.isNotEmpty())
+                        database.seriesDao().insertAllEpisodes(episodeEntities)
+                }
+            }
+            if (shows.size < 500) break
+            start += 500
+        }
+    }
+
+    private suspend fun importPlexMusic(
+        api: app.nexstream.player.data.remote.PlexMediaApiService,
+        playlistId: String,
+        sectionKey: String,
+        token: String,
+        baseUrl: String
+    ) {
+        val base = baseUrl.trimEnd('/')
+        var start = 0
+        while (true) {
+            val artists = api.getSectionItems(sectionKey, token, start = start, size = 200)
+                .mediaContainer?.metadata ?: break
+            if (artists.isEmpty()) break
+            artists.forEach { artist ->
+                val albums = api.getChildren(artist.ratingKey, token)
+                    .mediaContainer?.metadata ?: return@forEach
+                albums.forEach { album ->
+                    val albumArtUrl = if (album.thumb != null) "$base${album.thumb}?X-Plex-Token=$token" else null
+                    val tracks = api.getChildren(album.ratingKey, token)
+                        .mediaContainer?.metadata ?: return@forEach
+                    val trackEntities = tracks.map { track ->
+                        val streamPath = track.media?.firstOrNull()?.parts?.firstOrNull()?.key ?: ""
+                        val streamUrl  = if (streamPath.isNotEmpty()) "$base$streamPath?X-Plex-Token=$token" else ""
+                        app.nexstream.player.data.local.entity.MusicTrackEntity(
+                            id             = "plex_${playlistId}_${track.ratingKey}",
+                            jellyfinItemId = track.ratingKey,
+                            title          = track.title,
+                            artist         = artist.title,
+                            album          = album.title,
+                            albumId        = album.ratingKey,
+                            albumArtUrl    = albumArtUrl,
+                            streamUrl      = streamUrl,
+                            playlistId     = playlistId,
+                            durationMs     = track.duration ?: 0L,
+                            trackNumber    = track.index
+                        )
+                    }
+                    if (trackEntities.isNotEmpty())
+                        database.musicDao().insertAll(trackEntities)
+                    _musicLoadedCount.value += trackEntities.size
+                }
+            }
+            if (artists.size < 200) break
+            start += 200
+        }
+    }
+
     // ── VOD fetch ─────────────────────────────────────────────────────────────
     suspend fun fetchAndStoreMovies(
         playlistId: String,

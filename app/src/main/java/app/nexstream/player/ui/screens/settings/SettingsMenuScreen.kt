@@ -95,6 +95,13 @@ fun SettingsMenuScreen(
                 route = AppRoute.SettingsProfiles
             ),
             MenuItemData(
+                title = "Sync",
+                subtitle = "Cloud sync and data settings per profile",
+                icon = Icons.Default.Sync,
+                focusRequester = null,
+                route = AppRoute.SettingsSyncSettings
+            ),
+            MenuItemData(
                 title = "Navigation",
                 subtitle = "Set start screen and reorder rail items",
                 icon = Icons.Default.Reorder,

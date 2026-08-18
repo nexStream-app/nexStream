@@ -295,6 +295,23 @@ private fun PlaylistCard(
                             onClick = {}
                         )
                     }
+                    "PLEX" -> {
+                        SettingsFocusableButton(
+                            label = "Movies", icon = Icons.Default.Movie,
+                            isLoading = isRefreshingMovies, enabled = !isAnyRefreshing,
+                            focusRequester = firstButtonFocus, onClick = onRefreshMovies
+                        )
+                        SettingsFocusableButton(
+                            label = "Series", icon = Icons.Default.VideoLibrary,
+                            isLoading = isRefreshingSeries, enabled = !isAnyRefreshing,
+                            onClick = onRefreshSeries
+                        )
+                        SettingsFocusableButton(
+                            label = "Music", icon = Icons.Default.MusicNote,
+                            isLoading = false, enabled = !isAnyRefreshing,
+                            onClick = {}
+                        )
+                    }
                     "M3U" -> {
                         SettingsFocusableButton(
                             label = "TV", icon = Icons.Default.Tv,
@@ -471,9 +488,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshingMovies.value = true; repository.setLoadingVOD(true)
             try {
-                if (playlist.type == "XTREAM" && !playlist.xtreamHost.isNullOrEmpty()
-                    && !playlist.xtreamUsername.isNullOrEmpty() && !playlist.xtreamPassword.isNullOrEmpty())
-                    repository.fetchAndStoreMovies(playlist.id, playlist.xtreamHost!!, playlist.xtreamUsername!!, playlist.xtreamPassword!!)
+                when {
+                    playlist.type == "XTREAM" && !playlist.xtreamHost.isNullOrEmpty()
+                        && !playlist.xtreamUsername.isNullOrEmpty() && !playlist.xtreamPassword.isNullOrEmpty() ->
+                        repository.fetchAndStoreMovies(playlist.id, playlist.xtreamHost!!, playlist.xtreamUsername!!, playlist.xtreamPassword!!)
+                    playlist.type == "PLEX" ->
+                        repository.syncPlexLibrary(playlist)
+                }
             } catch (e: Exception) { android.util.Log.e("SettingsViewModel", "Movies refresh failed", e) }
             finally { _isRefreshingMovies.value = false; repository.setLoadingVOD(false) }
             // Fetch missing certifications in background after refresh
@@ -485,9 +506,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshingSeries.value = true; repository.setLoadingSeries(true)
             try {
-                if (playlist.type == "XTREAM" && !playlist.xtreamHost.isNullOrEmpty()
-                    && !playlist.xtreamUsername.isNullOrEmpty() && !playlist.xtreamPassword.isNullOrEmpty())
-                    repository.fetchAndStoreSeries(playlist.id, playlist.xtreamHost!!, playlist.xtreamUsername!!, playlist.xtreamPassword!!)
+                when {
+                    playlist.type == "XTREAM" && !playlist.xtreamHost.isNullOrEmpty()
+                        && !playlist.xtreamUsername.isNullOrEmpty() && !playlist.xtreamPassword.isNullOrEmpty() ->
+                        repository.fetchAndStoreSeries(playlist.id, playlist.xtreamHost!!, playlist.xtreamUsername!!, playlist.xtreamPassword!!)
+                    playlist.type == "PLEX" ->
+                        repository.syncPlexLibrary(playlist)
+                }
             } catch (e: Exception) { android.util.Log.e("SettingsViewModel", "Series refresh failed", e) }
             finally { _isRefreshingSeries.value = false; repository.setLoadingSeries(false) }
             // Fetch missing certifications in background after refresh

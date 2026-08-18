@@ -21,13 +21,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.local.dao.ProfileDao
 import app.nexstream.player.data.local.dao.WatchlistDao
+import app.nexstream.player.data.local.entity.ProfileEntity
 import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.sync.ProfileSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
-import app.nexstream.player.ui.theme.getCloudSyncEnabledFlow
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +49,11 @@ data class SyncSettingsUiState(
     val isSyncing: Boolean = false,
     val syncMessage: String? = null,
     val profileStats: List<ProfileSyncStat> = emptyList(),
+    val syncCloudEnabled: Boolean = true,
+    val syncChannelFolders: Boolean = true,
+    val syncAppearance: Boolean = true,
+    val syncPlayerSettings: Boolean = true,
+    val activeProfileId: String = "",
 )
 
 @HiltViewModel
@@ -64,7 +69,52 @@ class SyncSettingsViewModel @Inject constructor(
     val uiState: StateFlow<SyncSettingsUiState> = _uiState
 
     init {
+        viewModelScope.launch {
+            profileManager.activeProfile.collect { profile ->
+                if (profile != null) {
+                    _uiState.update {
+                        it.copy(
+                            activeProfileId    = profile.id,
+                            syncCloudEnabled   = profile.syncCloudEnabled,
+                            syncChannelFolders = profile.syncChannelFolders,
+                            syncAppearance     = profile.syncAppearance,
+                            syncPlayerSettings = profile.syncPlayerSettings,
+                        )
+                    }
+                }
+            }
+        }
         refreshStats()
+    }
+
+    fun setSyncCloudEnabled(enabled: Boolean, context: android.content.Context) {
+        _uiState.update { it.copy(syncCloudEnabled = enabled) }
+        persistSync { it.copy(syncCloudEnabled = enabled) }
+        // Keep global DataStore gate in sync with active profile's preference
+        viewModelScope.launch { context.saveCloudSyncEnabled(enabled) }
+    }
+
+    fun setSyncChannelFolders(enabled: Boolean) {
+        _uiState.update { it.copy(syncChannelFolders = enabled) }
+        persistSync { it.copy(syncChannelFolders = enabled) }
+    }
+
+    fun setSyncAppearance(enabled: Boolean) {
+        _uiState.update { it.copy(syncAppearance = enabled) }
+        persistSync { it.copy(syncAppearance = enabled) }
+    }
+
+    fun setSyncPlayerSettings(enabled: Boolean) {
+        _uiState.update { it.copy(syncPlayerSettings = enabled) }
+        persistSync { it.copy(syncPlayerSettings = enabled) }
+    }
+
+    private fun persistSync(transform: (ProfileEntity) -> ProfileEntity) {
+        viewModelScope.launch {
+            val profileId = _uiState.value.activeProfileId.takeIf { it.isNotEmpty() } ?: return@launch
+            val profile = profileDao.getProfileById(profileId) ?: return@launch
+            profileDao.upsertProfile(transform(profile).copy(updatedAt = System.currentTimeMillis()))
+        }
     }
 
     fun refreshStats() {
@@ -74,8 +124,8 @@ class SyncSettingsViewModel @Inject constructor(
             val stats = profiles.map { profile ->
                 val items = allItems.filter { it.profileId == profile.id }
                 ProfileSyncStat(
-                    profileId   = profile.id,
-                    profileName = profile.name,
+                    profileId    = profile.id,
+                    profileName  = profile.name,
                     profileEmoji = profile.emoji,
                     movies  = items.count { it.type == WatchlistType.MOVIE },
                     series  = items.count { it.type == WatchlistType.SERIES },
@@ -87,6 +137,7 @@ class SyncSettingsViewModel @Inject constructor(
     }
 
     fun manualSync() {
+        if (!_uiState.value.syncCloudEnabled) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, syncMessage = null) }
             profileSyncManager.syncFromServer()
@@ -98,7 +149,7 @@ class SyncSettingsViewModel @Inject constructor(
             val count = profiles.size
             _uiState.update {
                 it.copy(
-                    isSyncing = false,
+                    isSyncing   = false,
                     syncMessage = "Synced $count profile${if (count == 1) "" else "s"}"
                 )
             }
@@ -111,17 +162,15 @@ fun SyncSettingsScreen(
     firstItemFocusRequester: FocusRequester? = null,
     viewModel: SyncSettingsViewModel = hiltViewModel()
 ) {
-    val context    = LocalContext.current
-    val nsTheme    = LocalNexStreamTheme.current
-    val sTheme     = nsTheme.sidebar
+    val context  = LocalContext.current
+    val nsTheme  = LocalNexStreamTheme.current
+    val sTheme   = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
-    val uiStyle    = rememberUiStyle()
-    val scope      = rememberCoroutineScope()
+    val uiStyle  = rememberUiStyle()
 
-    val cloudSyncEnabled by context.getCloudSyncEnabledFlow().collectAsState(initial = true)
-    val uiState          by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    val firstFR  = firstItemFocusRequester ?: remember { FocusRequester() }
+    val firstFR   = firstItemFocusRequester ?: remember { FocusRequester() }
     val syncBtnFR = remember { FocusRequester() }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -142,68 +191,102 @@ fun SyncSettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Cloud Sync toggle ─────────────────────────────────────────────
+            // ── Cloud Sync section ────────────────────────────────────────────
             SettingsSectionContainer(title = "Cloud Sync", icon = Icons.Default.Cloud, uiStyle = uiStyle) {
                 SettingsToggle(
-                    label       = "Cloud Sync",
-                    description = "Syncs your watchlist, watch progress, and profiles to nexstream.uk. Turn off to keep all data on this device only.",
-                    checked     = cloudSyncEnabled,
-                    uiStyle     = uiStyle,
-                    onToggle    = { scope.launch { context.saveCloudSyncEnabled(!cloudSyncEnabled) } },
+                    label          = "Cloud Sync",
+                    description    = "Sync data to nexstream.uk across your devices. Turn off to keep all data on this device only.",
+                    checked        = uiState.syncCloudEnabled,
+                    uiStyle        = uiStyle,
+                    onToggle       = { viewModel.setSyncCloudEnabled(!uiState.syncCloudEnabled, context) },
                     focusRequester = firstFR,
                 )
 
-                // ── Manual sync button ────────────────────────────────────────
-                Spacer(Modifier.height(4.dp))
-                var syncFocused by remember { mutableStateOf(false) }
-                Button(
-                    onClick  = { if (cloudSyncEnabled && !uiState.isSyncing) viewModel.manualSync() },
-                    enabled  = cloudSyncEnabled && !uiState.isSyncing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .focusRequester(syncBtnFR)
-                        .onFocusChanged { syncFocused = it.isFocused }
-                        .onKeyEvent { e ->
-                            if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)) {
-                                if (cloudSyncEnabled && !uiState.isSyncing) viewModel.manualSync()
-                                true
-                            } else false
-                        },
-                ) {
-                    if (uiState.isSyncing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Syncing…")
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Sync Now")
-                    }
-                }
+                if (uiState.syncCloudEnabled) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+                    Text(
+                        "Choose what syncs for this profile",
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    SettingsToggle(
+                        label       = "Channel Folders",
+                        description = "Sync your channel folder and group layout",
+                        checked     = uiState.syncChannelFolders,
+                        uiStyle     = uiStyle,
+                        onToggle    = { viewModel.setSyncChannelFolders(!uiState.syncChannelFolders) },
+                    )
+                    SettingsToggle(
+                        label       = "Appearance",
+                        description = "Sync theme, font and layout settings",
+                        checked     = uiState.syncAppearance,
+                        uiStyle     = uiStyle,
+                        onToggle    = { viewModel.setSyncAppearance(!uiState.syncAppearance) },
+                    )
+                    SettingsToggle(
+                        label       = "Player Settings",
+                        description = "Sync playback, buffer and subtitle settings",
+                        checked     = uiState.syncPlayerSettings,
+                        uiStyle     = uiStyle,
+                        onToggle    = { viewModel.setSyncPlayerSettings(!uiState.syncPlayerSettings) },
+                    )
 
-                uiState.syncMessage?.let { msg ->
+                    // ── Manual sync button ────────────────────────────────────
                     Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    var syncFocused by remember { mutableStateOf(false) }
+                    Button(
+                        onClick  = { if (!uiState.isSyncing) viewModel.manualSync() },
+                        enabled  = !uiState.isSyncing,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .focusRequester(syncBtnFR)
+                            .onFocusChanged { syncFocused = it.isFocused }
+                            .onKeyEvent { e ->
+                                if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)) {
+                                    if (!uiState.isSyncing) viewModel.manualSync()
+                                    true
+                                } else false
+                            },
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        if (uiState.isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Syncing…")
+                        } else {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Sync Now")
+                        }
                     }
+
+                    uiState.syncMessage?.let { msg ->
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
-                Spacer(Modifier.height(4.dp))
             }
 
-            // ── Stats per profile ─────────────────────────────────────────────
-            if (uiState.profileStats.isNotEmpty()) {
+            // ── My List stats per profile ─────────────────────────────────────
+            if (uiState.syncCloudEnabled && uiState.profileStats.isNotEmpty()) {
                 SettingsSectionContainer(title = "My List", icon = Icons.Default.Favorite, uiStyle = uiStyle) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
                             "${uiState.profileStats.size} profile${if (uiState.profileStats.size == 1) "" else "s"} synced",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style      = MaterialTheme.typography.bodySmall,
+                            color      = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
                         )
                         uiState.profileStats.forEach { stat ->
@@ -236,9 +319,9 @@ private fun StatChip(label: String, count: Int) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             "$count",
-            style = MaterialTheme.typography.bodySmall,
+            style      = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            color      = MaterialTheme.colorScheme.primary
         )
         Text(
             label,

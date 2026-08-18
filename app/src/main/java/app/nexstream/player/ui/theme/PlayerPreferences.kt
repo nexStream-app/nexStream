@@ -146,6 +146,23 @@ suspend fun Context.saveSportsCategoryOrder(order: List<String>) {
     playerPrefsDataStore.edit { it[KEY_SPORTS_CATEGORY_ORDER] = order.joinToString(",") }
 }
 
+private val KEY_EXT_PLAYER_LIVE_TV  = stringPreferencesKey("ext_player_live_tv")
+private val KEY_EXT_PLAYER_MOVIES   = stringPreferencesKey("ext_player_movies")
+private val KEY_EXT_PLAYER_SERIES   = stringPreferencesKey("ext_player_series")
+private val KEY_EXT_PLAYER_CATCHUP  = stringPreferencesKey("ext_player_catchup")
+
+fun Context.getExtPlayerLiveTvFlow(): Flow<String>  = playerPrefsDataStore.data.map { it[KEY_EXT_PLAYER_LIVE_TV]  ?: "nexstream" }
+suspend fun Context.saveExtPlayerLiveTv(pkg: String)  { playerPrefsDataStore.edit { it[KEY_EXT_PLAYER_LIVE_TV]  = pkg } }
+
+fun Context.getExtPlayerMoviesFlow(): Flow<String>   = playerPrefsDataStore.data.map { it[KEY_EXT_PLAYER_MOVIES]   ?: "nexstream" }
+suspend fun Context.saveExtPlayerMovies(pkg: String)   { playerPrefsDataStore.edit { it[KEY_EXT_PLAYER_MOVIES]   = pkg } }
+
+fun Context.getExtPlayerSeriesFlow(): Flow<String>   = playerPrefsDataStore.data.map { it[KEY_EXT_PLAYER_SERIES]   ?: "nexstream" }
+suspend fun Context.saveExtPlayerSeries(pkg: String)   { playerPrefsDataStore.edit { it[KEY_EXT_PLAYER_SERIES]   = pkg } }
+
+fun Context.getExtPlayerCatchupFlow(): Flow<String>  = playerPrefsDataStore.data.map { it[KEY_EXT_PLAYER_CATCHUP]  ?: "nexstream" }
+suspend fun Context.saveExtPlayerCatchup(pkg: String)  { playerPrefsDataStore.edit { it[KEY_EXT_PLAYER_CATCHUP]  = pkg } }
+
 // ── Cross-device settings sync helpers ───────────────────────────────────────
 
 fun Context.playerPrefsChanges(): Flow<Unit> = playerPrefsDataStore.data.map { Unit }

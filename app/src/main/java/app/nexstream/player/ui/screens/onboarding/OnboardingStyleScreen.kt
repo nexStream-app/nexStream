@@ -27,7 +27,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -54,15 +53,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Focus indices
-private const val FOCUS_DARK          = 0
-private const val FOCUS_LIGHT         = 1
-private const val FOCUS_MODERN        = 2
-private const val FOCUS_CLASSIC       = 3
-private const val FOCUS_TEXT_SIZE     = 4
-private const val FOCUS_TEXT_WEIGHT   = 5
-private const val FOCUS_CLOUD_SYNC    = 6
-private const val FOCUS_AI_SUBTITLES  = 7
-private const val FOCUS_GETSTARTED    = 8
+private const val FOCUS_THEME         = 0  // Light/Dark toggle
+private const val FOCUS_INTERFACE     = 1  // Modern/Classic toggle
+private const val FOCUS_TEXT_SIZE     = 2
+private const val FOCUS_TEXT_WEIGHT   = 3
+private const val FOCUS_CLOUD_SYNC    = 4
+private const val FOCUS_GETSTARTED    = 5
 
 @Composable
 fun OnboardingStyleScreen(onComplete: () -> Unit) {
@@ -102,7 +98,7 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
         listOf("normal" to "Normal", "semibold" to "Semi Bold", "bold" to "Bold")
     }
 
-    var focusedIndex by remember { mutableStateOf(FOCUS_DARK) }
+    var focusedIndex by remember { mutableStateOf(FOCUS_THEME) }
     val outerFocus   = remember { FocusRequester() }
     val scrollState  = rememberScrollState()
 
@@ -114,7 +110,7 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     LaunchedEffect(focusedIndex) {
         if (scrollState.maxValue == 0) return@LaunchedEffect
         val fraction = when {
-            focusedIndex <= FOCUS_CLASSIC     -> 0f
+            focusedIndex <= FOCUS_INTERFACE   -> 0f
             focusedIndex == FOCUS_TEXT_SIZE   -> 0.35f
             focusedIndex == FOCUS_TEXT_WEIGHT -> 0.55f
             focusedIndex == FOCUS_CLOUD_SYNC  -> 0.78f
@@ -136,8 +132,8 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
         when (key) {
             // ── Left/Right ────────────────────────────────────────────────
             Key.DirectionRight -> when (focusedIndex) {
-                FOCUS_DARK    -> focusedIndex = FOCUS_LIGHT
-                FOCUS_MODERN  -> focusedIndex = FOCUS_CLASSIC
+                FOCUS_THEME     -> selectedMode  = ThemeMode.LIGHT
+                FOCUS_INTERFACE -> selectedStyle = UiStyle.MODERN
                 FOCUS_TEXT_SIZE -> {
                     val idx = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
                     val next = (idx + 1).coerceAtMost(fontSizeOptions.lastIndex)
@@ -148,12 +144,12 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     val next = (idx + 1).coerceAtMost(fontWeightOptions.lastIndex)
                     selectedFontWeight = fontWeightOptions[next].first
                 }
-                FOCUS_CLOUD_SYNC   -> selectedCloudSync = true
+                FOCUS_CLOUD_SYNC -> selectedCloudSync = true
                 else -> return false
             }
             Key.DirectionLeft -> when (focusedIndex) {
-                FOCUS_LIGHT   -> focusedIndex = FOCUS_DARK
-                FOCUS_CLASSIC -> focusedIndex = FOCUS_MODERN
+                FOCUS_THEME     -> selectedMode  = ThemeMode.DARK
+                FOCUS_INTERFACE -> selectedStyle = UiStyle.CLASSIC
                 FOCUS_TEXT_SIZE -> {
                     val idx = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
                     val prev = (idx - 1).coerceAtLeast(0)
@@ -164,37 +160,32 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     val prev = (idx - 1).coerceAtLeast(0)
                     selectedFontWeight = fontWeightOptions[prev].first
                 }
-                FOCUS_CLOUD_SYNC   -> selectedCloudSync = false
+                FOCUS_CLOUD_SYNC -> selectedCloudSync = false
                 else -> return false
             }
             // ── Down ──────────────────────────────────────────────────────
             Key.DirectionDown -> when (focusedIndex) {
-                FOCUS_DARK         -> focusedIndex = FOCUS_MODERN
-                FOCUS_LIGHT        -> focusedIndex = FOCUS_CLASSIC
-                FOCUS_MODERN,
-                FOCUS_CLASSIC      -> focusedIndex = FOCUS_TEXT_SIZE
-                FOCUS_TEXT_SIZE    -> focusedIndex = FOCUS_TEXT_WEIGHT
-                FOCUS_TEXT_WEIGHT  -> focusedIndex = nextAfterTextWeight()
-                FOCUS_CLOUD_SYNC   -> focusedIndex = FOCUS_GETSTARTED
+                FOCUS_THEME       -> focusedIndex = FOCUS_INTERFACE
+                FOCUS_INTERFACE   -> focusedIndex = FOCUS_TEXT_SIZE
+                FOCUS_TEXT_SIZE   -> focusedIndex = FOCUS_TEXT_WEIGHT
+                FOCUS_TEXT_WEIGHT -> focusedIndex = nextAfterTextWeight()
+                FOCUS_CLOUD_SYNC  -> focusedIndex = FOCUS_GETSTARTED
                 else -> return false
             }
             // ── Up ────────────────────────────────────────────────────────
             Key.DirectionUp -> when (focusedIndex) {
-                FOCUS_MODERN        -> focusedIndex = FOCUS_DARK
-                FOCUS_CLASSIC       -> focusedIndex = FOCUS_LIGHT
-                FOCUS_TEXT_SIZE     -> focusedIndex = FOCUS_CLASSIC
-                FOCUS_TEXT_WEIGHT   -> focusedIndex = FOCUS_TEXT_SIZE
-                FOCUS_CLOUD_SYNC    -> focusedIndex = FOCUS_TEXT_WEIGHT
-                FOCUS_GETSTARTED    -> focusedIndex = prevBeforeGetStarted()
+                FOCUS_INTERFACE   -> focusedIndex = FOCUS_THEME
+                FOCUS_TEXT_SIZE   -> focusedIndex = FOCUS_INTERFACE
+                FOCUS_TEXT_WEIGHT -> focusedIndex = FOCUS_TEXT_SIZE
+                FOCUS_CLOUD_SYNC  -> focusedIndex = FOCUS_TEXT_WEIGHT
+                FOCUS_GETSTARTED  -> focusedIndex = prevBeforeGetStarted()
                 else -> return false
             }
             // ── Enter/OK ──────────────────────────────────────────────────
             Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> when (focusedIndex) {
-                FOCUS_DARK       -> selectedMode  = ThemeMode.DARK
-                FOCUS_LIGHT      -> selectedMode  = ThemeMode.LIGHT
-                FOCUS_MODERN     -> selectedStyle = UiStyle.MODERN
-                FOCUS_CLASSIC    -> selectedStyle = UiStyle.CLASSIC
-                FOCUS_TEXT_SIZE  -> {
+                FOCUS_THEME     -> selectedMode  = if (selectedMode == ThemeMode.LIGHT) ThemeMode.DARK else ThemeMode.LIGHT
+                FOCUS_INTERFACE -> selectedStyle = if (selectedStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN
+                FOCUS_TEXT_SIZE -> {
                     val idx  = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
                     val next = (idx + 1) % fontSizeOptions.size
                     selectedFontScale = fontSizeOptions[next].first
@@ -204,8 +195,8 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     val next = (idx + 1) % fontWeightOptions.size
                     selectedFontWeight = fontWeightOptions[next].first
                 }
-                FOCUS_CLOUD_SYNC   -> selectedCloudSync = !selectedCloudSync
-                FOCUS_GETSTARTED   -> scope.launch {
+                FOCUS_CLOUD_SYNC -> selectedCloudSync = !selectedCloudSync
+                FOCUS_GETSTARTED -> scope.launch {
                     context.saveThemeMode(selectedMode)
                     context.saveUiStyle(selectedStyle)
                     context.saveFontScale(selectedFontScale)
@@ -264,64 +255,32 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
             }
 
             // ── Appearance ────────────────────────────────────────────────────
-            OnboardingSection(title = "Appearance", accent = accent) {
-                OnboardingCard(
-                    icon        = Icons.Default.DarkMode,
-                    title       = "Dark",
-                    description = "Easy on the eyes, great for evening viewing",
-                    selected    = selectedMode == ThemeMode.DARK,
-                    focused     = focusedIndex == FOCUS_DARK,
-                    accent      = accent,
-                    surface     = surface,
-                    textPrimary = textPrimary,
+            OnboardingSectionColumn(title = "Appearance", accent = accent) {
+                OnboardingToggleRow(
+                    title         = "Light Mode",
+                    description   = "Use a bright, light theme. Disable for dark mode.",
+                    checked       = selectedMode == ThemeMode.LIGHT,
+                    focused       = focusedIndex == FOCUS_THEME,
+                    accent        = accent,
+                    surface       = surface,
+                    textPrimary   = textPrimary,
                     textSecondary = textSecondary,
-                    modifier    = Modifier.weight(1f),
-                    onClick     = { focusedIndex = FOCUS_DARK; selectedMode = ThemeMode.DARK },
-                )
-                Spacer(Modifier.width(16.dp))
-                OnboardingCard(
-                    icon        = Icons.Default.LightMode,
-                    title       = "Light",
-                    description = "Bright and crisp for well-lit rooms",
-                    selected    = selectedMode == ThemeMode.LIGHT,
-                    focused     = focusedIndex == FOCUS_LIGHT,
-                    accent      = accent,
-                    surface     = surface,
-                    textPrimary = textPrimary,
-                    textSecondary = textSecondary,
-                    modifier    = Modifier.weight(1f),
-                    onClick     = { focusedIndex = FOCUS_LIGHT; selectedMode = ThemeMode.LIGHT },
+                    onToggle      = { focusedIndex = FOCUS_THEME; selectedMode = if (selectedMode == ThemeMode.LIGHT) ThemeMode.DARK else ThemeMode.LIGHT },
                 )
             }
 
             // ── Interface ─────────────────────────────────────────────────────
-            OnboardingSection(title = "Interface", accent = accent) {
-                OnboardingCard(
-                    icon        = Icons.Default.AutoAwesome,
-                    title       = "Modern",
-                    description = "Cinematic layouts with full-bleed artwork",
-                    selected    = selectedStyle == UiStyle.MODERN,
-                    focused     = focusedIndex == FOCUS_MODERN,
-                    accent      = accent,
-                    surface     = surface,
-                    textPrimary = textPrimary,
+            OnboardingSectionColumn(title = "Interface", accent = accent) {
+                OnboardingToggleRow(
+                    title         = "Modern Layout",
+                    description   = "Cinematic layouts with full-bleed artwork. Disable for the classic grid.",
+                    checked       = selectedStyle == UiStyle.MODERN,
+                    focused       = focusedIndex == FOCUS_INTERFACE,
+                    accent        = accent,
+                    surface       = surface,
+                    textPrimary   = textPrimary,
                     textSecondary = textSecondary,
-                    modifier    = Modifier.weight(1f),
-                    onClick     = { focusedIndex = FOCUS_MODERN; selectedStyle = UiStyle.MODERN },
-                )
-                Spacer(Modifier.width(16.dp))
-                OnboardingCard(
-                    icon        = Icons.Default.ViewList,
-                    title       = "Classic",
-                    description = "Clean grid layout with familiar navigation",
-                    selected    = selectedStyle == UiStyle.CLASSIC,
-                    focused     = focusedIndex == FOCUS_CLASSIC,
-                    accent      = accent,
-                    surface     = surface,
-                    textPrimary = textPrimary,
-                    textSecondary = textSecondary,
-                    modifier    = Modifier.weight(1f),
-                    onClick     = { focusedIndex = FOCUS_CLASSIC; selectedStyle = UiStyle.CLASSIC },
+                    onToggle      = { focusedIndex = FOCUS_INTERFACE; selectedStyle = if (selectedStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN },
                 )
             }
 
@@ -430,21 +389,6 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Section wrappers
 // ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun OnboardingSection(
-    title:   String,
-    accent:  Color,
-    content: @Composable RowScope.() -> Unit,
-) {
-    Column(
-        modifier            = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        SectionLabel(title, accent)
-        Row(modifier = Modifier.fillMaxWidth(), content = content)
-    }
-}
 
 @Composable
 private fun OnboardingSectionColumn(
@@ -610,80 +554,3 @@ private fun OnboardingToggleRow(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Choice card (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun OnboardingCard(
-    icon:         ImageVector,
-    title:        String,
-    description:  String,
-    selected:     Boolean,
-    focused:      Boolean,
-    accent:       Color,
-    surface:      Color,
-    textPrimary:  Color,
-    textSecondary: Color,
-    modifier:     Modifier = Modifier,
-    onClick:      () -> Unit = {},
-) {
-    val scale by animateFloatAsState(if (focused) 1.04f else 1.0f, label = "cardScale")
-
-    val bgColor = when {
-        selected -> accent.copy(alpha = 0.14f)
-        focused  -> surface
-        else     -> surface.copy(alpha = 0.55f)
-    }
-    val borderColor = when {
-        selected && focused -> accent
-        selected            -> accent.copy(alpha = 0.65f)
-        focused             -> accent.copy(alpha = 0.80f)
-        else                -> Color.Transparent
-    }
-    val iconTint = if (selected || focused) accent else textSecondary
-
-    Box(
-        modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .background(bgColor)
-            .border(2.dp, borderColor, RoundedCornerShape(14.dp))
-            .padding(12.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector        = icon,
-                    contentDescription = null,
-                    tint               = iconTint,
-                    modifier           = Modifier.size(26.dp),
-                )
-                if (selected) {
-                    Icon(
-                        imageVector        = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint               = accent,
-                        modifier           = Modifier.size(18.dp),
-                    )
-                }
-            }
-            Text(
-                text       = title,
-                fontSize   = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color      = if (selected || focused) textPrimary else textPrimary.copy(alpha = 0.65f),
-            )
-            Text(
-                text     = description,
-                fontSize = 12.sp,
-                color    = textSecondary,
-            )
-        }
-    }
-}

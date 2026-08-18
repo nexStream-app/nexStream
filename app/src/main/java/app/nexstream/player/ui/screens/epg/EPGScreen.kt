@@ -22,6 +22,8 @@ import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalNsBackground
 import app.nexstream.player.ui.theme.getEpgMiniPlayerFlow
+import app.nexstream.player.ui.theme.getExtPlayerLiveTvFlow
+import app.nexstream.player.ui.screens.player.ExternalPlayerManager
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.focus.FocusRequester
@@ -203,6 +205,7 @@ private fun EPGContent(
     val isTV = context.packageManager.hasSystemFeature("android.software.leanback")
 
     val epgMiniPlayerEnabled by context.getEpgMiniPlayerFlow().collectAsState(initial = true)
+    val extPlayerLiveTv by context.getExtPlayerLiveTvFlow().collectAsState(initial = "nexstream")
 
     val miniExoPlayer = remember { ExoPlayer.Builder(context).build() }
     DisposableEffect(Unit) {
@@ -523,11 +526,16 @@ private fun EPGContent(
                         }
                         override fun onChannelClicked(channel: ChannelEntity) {
                             // Channel logo tap → launch full player
-                            playerChannel = channel
-                            showPlayer = true
-                            showMiniPlayer = false
-                            onPlayerVisibilityChanged?.invoke(true)
-                            scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(channel) }
+                            if (extPlayerLiveTv != "nexstream" && extPlayerLiveTv.isNotEmpty() &&
+                                ExternalPlayerManager.launch(context, extPlayerLiveTv, channel.streamUrl, channel.name)) {
+                                scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(channel) }
+                            } else {
+                                playerChannel = channel
+                                showPlayer = true
+                                showMiniPlayer = false
+                                onPlayerVisibilityChanged?.invoke(true)
+                                scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(channel) }
+                            }
                         }
                         override fun onFocusedProgramChanged(channel: ChannelEntity, program: ProgramEntity?) {
                             focusedChannel = channel
@@ -611,11 +619,16 @@ private fun EPGContent(
                             }
                         }
                     } else {
-                        playerChannel  = _dc
-                        showPlayer     = true
-                        showMiniPlayer = false
-                        onPlayerVisibilityChanged?.invoke(true)
-                        scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(_dc) }
+                        if (extPlayerLiveTv != "nexstream" && extPlayerLiveTv.isNotEmpty() &&
+                            ExternalPlayerManager.launch(context, extPlayerLiveTv, _dc.streamUrl, _dc.name)) {
+                            scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(_dc) }
+                        } else {
+                            playerChannel  = _dc
+                            showPlayer     = true
+                            showMiniPlayer = false
+                            onPlayerVisibilityChanged?.invoke(true)
+                            scope.launch { mainViewModel.repository.recordRecentlyWatchedChannel(_dc) }
+                        }
                     }
                     dialogProgram = null; dialogChannel = null
                 },

@@ -629,87 +629,18 @@ fun AppearanceScreen(
                         modifier = Modifier.padding(vertical = 8.dp),
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
                     )
-                    Text(
-                        "Choose the app's visual layout style.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
                     val currentUiStyle by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
-
-                    listOf(
-                        UiStyle.CLASSIC to Pair("Classic", "Original NexStream layout"),
-                        UiStyle.MODERN  to Pair("Modern",  "Full-screen artwork, carousels and rich detail pages")
-                    ).forEach { (style, info) ->
-                        val (title, subtitle) = info
-                        val isSelected = currentUiStyle == style
-                        var isFocused by remember { mutableStateOf(false) }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    when {
-                                        isSelected -> MaterialTheme.colorScheme.primaryContainer
-                                        isFocused  -> MaterialTheme.colorScheme.surfaceVariant
-                                        else       -> MaterialTheme.colorScheme.surface
-                                    }
-                                )
-                                .then(
-                                    if (isSelected || isFocused) Modifier.border(
-                                        if (isSelected) 2.dp else 1.dp,
-                                        if (isSelected) MaterialTheme.colorScheme.primary
-                                        else            MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(8.dp)
-                                    ) else Modifier
-                                )
-                                .onFocusChanged { isFocused = it.isFocused }
-                                .onKeyEvent { e ->
-                                    if (e.type == KeyEventType.KeyDown && (
-                                        e.key == Key.Enter || e.key == Key.NumPadEnter ||
-                                        e.key == Key.DirectionCenter
-                                    )) {
-                                        scope.launch { viewModel.saveUiStyle(style) }
-                                        true
-                                    } else false
-                                }
-                                .clickable { scope.launch { viewModel.saveUiStyle(style) } }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Column(
-                                modifier            = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    title,
-                                    style      = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color      = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                                                 else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    subtitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isSelected)
-                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (isSelected) {
-                                Icon(
-                                    imageVector        = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint               = MaterialTheme.colorScheme.primary,
-                                    modifier           = Modifier.size(18.dp)
-                                )
+                    SettingsToggle(
+                        label       = "Modern Layout",
+                        description = "Full-screen artwork, carousels and rich detail pages. Disable for the classic grid layout.",
+                        checked     = currentUiStyle == UiStyle.MODERN,
+                        uiStyle     = uiStyle,
+                        onToggle    = {
+                            scope.launch {
+                                viewModel.saveUiStyle(if (currentUiStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN)
                             }
                         }
-                        Spacer(Modifier.height(4.dp))
-                    }
+                    )
                 }
             }
 

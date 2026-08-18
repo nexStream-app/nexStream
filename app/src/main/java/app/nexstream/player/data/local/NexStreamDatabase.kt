@@ -73,7 +73,7 @@ class RecentlyWatchedTypeConverters {
         ChannelGroupEntity::class,
         ChannelGroupMemberEntity::class
     ],
-    version = 32,
+    version = 34,
     exportSchema = false
 )
 abstract class NexStreamDatabase : RoomDatabase() {
@@ -325,6 +325,21 @@ abstract class NexStreamDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profiles ADD COLUMN sync_cloud_enabled INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN sync_channel_folders INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN sync_appearance INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN sync_player_settings INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE playlists ADD COLUMN plex_token TEXT")
+            }
+        }
+
         val MIGRATION_31_32 = object : Migration(31, 32) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Devices that ran the buggy MIGRATION_30_31 (which used IF NOT EXISTS
@@ -407,7 +422,8 @@ abstract class NexStreamDatabase : RoomDatabase() {
                     MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21,
                     MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25,
                     MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
-                    MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32
+                    MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33,
+                    MIGRATION_33_34
                 )
                 .build()
         }

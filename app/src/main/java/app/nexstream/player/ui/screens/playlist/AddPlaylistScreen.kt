@@ -94,11 +94,22 @@ class AddPlaylistViewModel @Inject constructor(
     private val licenceManager: LicenceManager
 ) : ViewModel() {
 
-    var isLoading      by mutableStateOf(false); private set
-    var errorMessage   by mutableStateOf<String?>(null); private set
-    var importStarted  by mutableStateOf(false); private set
-    var importIsXtream by mutableStateOf(false); private set
+    var isLoading        by mutableStateOf(false); private set
+    var errorMessage     by mutableStateOf<String?>(null); private set
+    var importStarted    by mutableStateOf(false); private set
+    var importIsXtream   by mutableStateOf(false); private set
     var importIsJellyfin by mutableStateOf(false); private set
+    var importIsPlex     by mutableStateOf(false); private set
+
+    // ── Plex PIN flow state ───────────────────────────────────────────────────
+    enum class PlexPinState { IDLE, REQUESTING, WAITING, FETCHING_SERVERS, READY, ERROR, EXPIRED }
+
+    var plexPinCode        by mutableStateOf<String?>(null); private set
+    var plexPinId          by mutableStateOf<Long?>(null); private set
+    var plexToken          by mutableStateOf<String?>(null); private set
+    var plexServers        by mutableStateOf<List<app.nexstream.player.data.remote.PlexDevice>>(emptyList()); private set
+    var plexSelectedServer by mutableStateOf<app.nexstream.player.data.remote.PlexDevice?>(null)
+    var plexPinState       by mutableStateOf(PlexPinState.IDLE); private set
 
     // Start in Polling state so DeviceBar immediately shows "Listening for playlist..."
     private val _pollState = MutableStateFlow<MacPollState>(MacPollState.Polling)
@@ -221,6 +232,63 @@ class AddPlaylistViewModel @Inject constructor(
         }
     }
 
+    fun requestPlexPin(clientId: String) {
+        viewModelScope.launch {
+            plexPinState = PlexPinState.REQUESTING
+            repository.requestPlexPin(clientId)
+                .onSuccess { (id, code) ->
+                    plexPinId = id; plexPinCode = code
+                    plexPinState = PlexPinState.WAITING
+                    pollForPlexToken(id, clientId)
+                }
+                .onFailure { plexPinState = PlexPinState.ERROR; errorMessage = it.message }
+        }
+    }
+
+    private fun pollForPlexToken(pinId: Long, clientId: String) {
+        viewModelScope.launch {
+            repeat(150) { // 5 minutes at 2s intervals
+                kotlinx.coroutines.delay(2000)
+                repository.checkPlexPin(pinId, clientId)
+                    .onSuccess { token ->
+                        if (token != null) {
+                            plexToken = token
+                            plexPinState = PlexPinState.FETCHING_SERVERS
+                            repository.getPlexServers(token)
+                                .onSuccess { servers ->
+                                    plexServers = servers.filter { it.connections?.isNotEmpty() == true }
+                                    plexSelectedServer = plexServers.firstOrNull()
+                                    plexPinState = PlexPinState.READY
+                                }
+                                .onFailure { plexPinState = PlexPinState.ERROR; errorMessage = it.message }
+                            return@launch
+                        }
+                    }
+                if (plexPinState != PlexPinState.WAITING) return@launch
+            }
+            if (plexPinState == PlexPinState.WAITING) plexPinState = PlexPinState.EXPIRED
+        }
+    }
+
+    fun addPlexServer() {
+        val server = plexSelectedServer ?: return
+        val token  = plexToken ?: return
+        // Pick best connection: prefer non-relay HTTPS, then non-relay HTTP, then relay
+        val conn = server.connections?.firstOrNull { !it.relay && it.uri.startsWith("https") }
+            ?: server.connections?.firstOrNull { !it.relay }
+            ?: server.connections?.firstOrNull()
+            ?: return
+        viewModelScope.launch {
+            isLoading = true; errorMessage = null
+            repository.resetImportState()
+            importIsJellyfin = false; importIsXtream = false; importIsPlex = true
+            importStarted = true
+            repository.addPlexPlaylist(server.name, conn.uri, token)
+                .onSuccess { isLoading = false }
+                .onFailure { isLoading = false; importStarted = false; importIsPlex = false; errorMessage = it.message }
+        }
+    }
+
 }
 
 // -- Screen --------------------------------------------------------------------
@@ -288,7 +356,7 @@ fun AddPlaylistScreen(
 
         // -- Tabs + forms ------------------------------------------------------
         TabRow(selectedTabIndex = selectedTab) {
-            listOf("Xtream Codes", "M3U URL", "Jellyfin").forEachIndexed { i, title ->
+            listOf("Xtream Codes", "M3U URL", "Jellyfin", "Plex").forEachIndexed { i, title ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i },
                     text = { Text(title, fontSize = 13.sp) })
             }
@@ -331,7 +399,7 @@ fun AddPlaylistScreen(
                     onBack = onCancel, cancelLabel = cancelLabel,
                     onSubmit = { viewModel.addM3UPlaylist(m3uName, m3uUrl) }
                 )
-            } else {
+            } else if (selectedTab == 2) {
                 InputField(isTv = isTv, label = "Server URL", value = jfHost,
                     placeholder = "http://jellyfin.local:8096", onValueChange = { jfHost = it },
                     onFocusSelect = { openKeyboard("jfHost", jfHost) })
@@ -346,6 +414,13 @@ fun AddPlaylistScreen(
                     isValid = jfHost.isNotBlank() && jfUsername.isNotBlank(),
                     onBack = onCancel, cancelLabel = cancelLabel,
                     onSubmit = { viewModel.addJellyfinPlaylist(jfHost, jfUsername, jfPassword) }
+                )
+            } else {
+                PlexTab(
+                    viewModel = viewModel,
+                    deviceId  = deviceId,
+                    onCancel  = onCancel,
+                    cancelLabel = cancelLabel
                 )
             }
 
@@ -398,6 +473,204 @@ fun AddPlaylistScreen(
     // -- QR Dialog -------------------------------------------------------------
     if (showQrDialog) {
         QrDialog(deviceId = deviceId, onDismiss = { showQrDialog = false }, onPlaylistDetected = { onBack() })
+    }
+}
+
+// -- Plex tab ------------------------------------------------------------------
+
+@Composable
+private fun PlexTab(
+    viewModel: AddPlaylistViewModel,
+    deviceId: String,
+    onCancel: () -> Unit,
+    cancelLabel: String
+) {
+    val pinState = viewModel.plexPinState
+    val pinCode  = viewModel.plexPinCode
+    val servers  = viewModel.plexServers
+
+    when (pinState) {
+        AddPlaylistViewModel.PlexPinState.IDLE -> {
+            var connectFocused by remember { mutableStateOf(false) }
+            Text(
+                "Sign in to your Plex account to link your media server.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { viewModel.requestPlexPin(deviceId) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { connectFocused = it.isFocused }
+                    .onKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown &&
+                            (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)
+                        ) { viewModel.requestPlexPin(deviceId); true } else false
+                    },
+                border = ButtonDefaults.outlinedButtonBorder.copy(width = if (connectFocused) 2.dp else 1.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (connectFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    contentColor   = if (connectFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                )
+            ) { Text("Connect with Plex", fontSize = 14.sp) }
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(
+                onClick = onCancel, enabled = true,
+                modifier = Modifier.fillMaxWidth().onFocusChanged { },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) { Text(cancelLabel, fontSize = 13.sp) }
+        }
+
+        AddPlaylistViewModel.PlexPinState.REQUESTING -> {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Requesting PIN…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        AddPlaylistViewModel.PlexPinState.WAITING -> {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Your Plex PIN", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = pinCode ?: "----",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 8.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Visit app.plex.tv/desktop on any device and sign in to link your account",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Text("Waiting for sign-in…", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        AddPlaylistViewModel.PlexPinState.FETCHING_SERVERS -> {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Fetching servers…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        AddPlaylistViewModel.PlexPinState.READY -> {
+            Text("Select your Plex Media Server", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            servers.forEach { server ->
+                val isSelected = viewModel.plexSelectedServer?.clientIdentifier == server.clientIdentifier
+                var itemFocused by remember { mutableStateOf(false) }
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { itemFocused = it.isFocused }
+                        .onKeyEvent { e ->
+                            if (e.type == KeyEventType.KeyDown &&
+                                (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)
+                            ) { viewModel.plexSelectedServer = server; true } else false
+                        },
+                    onClick = { viewModel.plexSelectedServer = server },
+                    shape = RoundedCornerShape(8.dp),
+                    color = when {
+                        isSelected  -> MaterialTheme.colorScheme.primaryContainer
+                        itemFocused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        else        -> MaterialTheme.colorScheme.surface
+                    },
+                    border = if (isSelected || itemFocused)
+                        ButtonDefaults.outlinedButtonBorder.copy(width = if (isSelected) 2.dp else 1.dp)
+                    else null,
+                    tonalElevation = if (itemFocused) 4.dp else 1.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Storage, contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(server.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface)
+                            val connUri = server.connections?.firstOrNull { !it.relay }?.uri
+                                ?: server.connections?.firstOrNull()?.uri ?: ""
+                            if (connUri.isNotEmpty()) {
+                                Text(connUri,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1)
+                            }
+                        }
+                        if (isSelected) Icon(Icons.Default.CheckCircle, contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            if (servers.isEmpty()) {
+                Text("No Plex servers found on your account.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(4.dp))
+            FormButtons(
+                isLoading = viewModel.isLoading,
+                errorMessage = viewModel.errorMessage,
+                isValid = viewModel.plexSelectedServer != null,
+                onBack = onCancel,
+                cancelLabel = cancelLabel,
+                onSubmit = { viewModel.addPlexServer() }
+            )
+        }
+
+        AddPlaylistViewModel.PlexPinState.EXPIRED -> {
+            Text("PIN expired. Please try again.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            FormButtons(
+                isLoading = false, errorMessage = null, isValid = true,
+                onBack = onCancel, cancelLabel = cancelLabel,
+                onSubmit = { viewModel.requestPlexPin(deviceId) }
+            )
+        }
+
+        AddPlaylistViewModel.PlexPinState.ERROR -> {
+            Text(viewModel.errorMessage ?: "An error occurred.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            FormButtons(
+                isLoading = false, errorMessage = null, isValid = true,
+                onBack = onCancel, cancelLabel = cancelLabel,
+                onSubmit = { viewModel.requestPlexPin(deviceId) }
+            )
+        }
     }
 }
 
@@ -702,6 +975,7 @@ private fun PlaylistImportProgressScreen(
     val isDone       by viewModel.isBackgroundSyncComplete.collectAsState()
     val isXtream     = viewModel.importIsXtream
     val isJellyfin   = viewModel.importIsJellyfin
+    val isPlex       = viewModel.importIsPlex
 
     // Auto-close: once import completes, navigate away after a short pause so the
     // user can see the "Import Complete" confirmation without needing to press Done.
@@ -758,7 +1032,7 @@ private fun PlaylistImportProgressScreen(
                     modifier = Modifier.padding(vertical = 20.dp, horizontal = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (!isJellyfin) {
+                    if (!isJellyfin && !isPlex) {
                         ImportProgressRow(
                             icon = Icons.Default.Tv,
                             label = "Live Channels",
@@ -778,7 +1052,7 @@ private fun PlaylistImportProgressScreen(
                             unit = "programmes"
                         )
                     }
-                    if (isXtream || isJellyfin) {
+                    if (isXtream || isJellyfin || isPlex) {
                         ImportProgressRow(
                             icon = Icons.Default.Movie,
                             label = "Movies",
@@ -796,7 +1070,7 @@ private fun PlaylistImportProgressScreen(
                             unit = "series"
                         )
                     }
-                    if (isJellyfin) {
+                    if (isJellyfin || isPlex) {
                         ImportProgressRow(
                             icon = Icons.Default.MusicNote,
                             label = "Music",

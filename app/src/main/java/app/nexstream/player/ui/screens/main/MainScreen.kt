@@ -80,6 +80,11 @@ import app.nexstream.player.ui.screens.reminders.RemindersScreen
 import app.nexstream.player.ui.theme.LocalUiStyle
 import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getStartRouteFlow
+import app.nexstream.player.ui.screens.player.ExternalPlayerManager
+import app.nexstream.player.ui.theme.getExtPlayerLiveTvFlow
+import app.nexstream.player.ui.theme.getExtPlayerMoviesFlow
+import app.nexstream.player.ui.theme.getExtPlayerSeriesFlow
+import app.nexstream.player.ui.theme.getExtPlayerCatchupFlow
 import kotlinx.coroutines.flow.first
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.screens.main.hasCategoryPanel
@@ -603,11 +608,28 @@ fun MainScreen(
             ), isBookmarked
         )
     }
+    val extPlayerMovies  by context.getExtPlayerMoviesFlow().collectAsState(initial = "nexstream")
+    val extPlayerSeries  by context.getExtPlayerSeriesFlow().collectAsState(initial = "nexstream")
+    val extPlayerCatchup by context.getExtPlayerCatchupFlow().collectAsState(initial = "nexstream")
+    val extPlayerLiveTv  by context.getExtPlayerLiveTvFlow().collectAsState(initial = "nexstream")
+
     val sharedOnPlayerLaunch: (String, String?, String?, String?, Long, String?, String?, String?) -> Unit = { url, movieId, episodeId, seriesId, startPos, title, subtitle, description ->
-        currentChannelUrl = url; currentMovieId = movieId; currentEpisodeId = episodeId
-        currentSeriesId = seriesId; currentStartPosition = startPos
-        currentNowPlayingTitle = title; currentNowPlayingSubtitle = subtitle
-        currentNowPlayingDescription = description; showPlayer = true
+        val isMovie  = movieId != null && movieId != "catchup" && episodeId == null
+        val isSeries = episodeId != null
+        val extPkg = when {
+            isMovie  -> extPlayerMovies
+            isSeries -> extPlayerSeries
+            else     -> "nexstream"
+        }
+        if (extPkg != "nexstream" && extPkg.isNotEmpty() &&
+            ExternalPlayerManager.launch(context, extPkg, url, title)) {
+            // launched externally — nothing to do
+        } else {
+            currentChannelUrl = url; currentMovieId = movieId; currentEpisodeId = episodeId
+            currentSeriesId = seriesId; currentStartPosition = startPos
+            currentNowPlayingTitle = title; currentNowPlayingSubtitle = subtitle
+            currentNowPlayingDescription = description; showPlayer = true
+        }
     }
     val sharedOnPlayerBack: (AppRoute) -> Unit = { fromRoute ->
         playerClosedFromRoute = fromRoute; showPlayer = false
@@ -632,10 +654,15 @@ fun MainScreen(
         }
     }
     val sharedOnCatchUpPlay: (String, String, String?, String?, Long) -> Unit = { url, name, subtitle, description, durationMs ->
-        currentChannelUrl = url; currentNowPlayingTitle = name
-        currentNowPlayingSubtitle = subtitle; currentNowPlayingDescription = description
-        currentMovieId = "catchup"; currentEpisodeId = null; currentSeriesId = null
-        currentStartPosition = 0L; currentCatchupDuration = durationMs; showPlayer = true
+        if (extPlayerCatchup != "nexstream" && extPlayerCatchup.isNotEmpty() &&
+            ExternalPlayerManager.launch(context, extPlayerCatchup, url, name)) {
+            // launched externally
+        } else {
+            currentChannelUrl = url; currentNowPlayingTitle = name
+            currentNowPlayingSubtitle = subtitle; currentNowPlayingDescription = description
+            currentMovieId = "catchup"; currentEpisodeId = null; currentSeriesId = null
+            currentStartPosition = 0L; currentCatchupDuration = durationMs; showPlayer = true
+        }
     }
     val sharedOnZoneContent: () -> Unit = { zone = Zone.CONTENT }
     val sharedOnSearchChannelPlay: (String, String) -> Unit = { url, name ->
