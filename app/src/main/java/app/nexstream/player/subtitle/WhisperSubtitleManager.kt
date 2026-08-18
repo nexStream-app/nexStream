@@ -68,6 +68,9 @@ class WhisperSubtitleManager @Inject constructor(
 
     fun setInitialPrompt(prompt: String?) { initialPrompt = prompt }
 
+    @Volatile private var detectedLanguage: String? = null
+    fun setDetectedLanguage(lang: String?) { detectedLanguage = lang }
+
     fun setLiveTvContext(epgTitle: String?, epgDescription: String?) {
         liveTvEpgTitle = epgTitle
         liveTvEpgDesc  = epgDescription
@@ -161,7 +164,12 @@ class WhisperSubtitleManager @Inject constructor(
                 .addFormDataPart("model", model)
                 .addFormDataPart("temperature", "0")
                 .addFormDataPart("response_format", "json")
-                .apply { if (!translate) addFormDataPart("language", "en") }
+                .apply {
+                    // Use detected language if available; otherwise default to English.
+                    // For live TV with auto-detect enabled, detectedLanguage may be non-English.
+                    val lang = detectedLanguage?.takeIf { it.isNotBlank() } ?: if (translate) null else "en"
+                    if (lang != null) addFormDataPart("language", lang)
+                }
                 .apply { if (!prompt.isNullOrBlank()) addFormDataPart("prompt", prompt) }
                 .build()
             val request = Request.Builder()
@@ -209,7 +217,8 @@ class WhisperSubtitleManager @Inject constructor(
     private fun buildLiveTvPrompt(): String {
         val translate = _translateToEnglish.value
         // In translate mode, don't bias toward English — let Whisper auto-detect the source language.
-        val parts = mutableListOf(if (translate) "Live TV broadcast." else "Live TV broadcast. Clear English speech.")
+        val isEnglish = detectedLanguage == null || detectedLanguage == "en"
+        val parts = mutableListOf(if (translate || !isEnglish) "Live TV broadcast." else "Live TV broadcast. Clear English speech.")
         val title = liveTvEpgTitle
         val desc  = liveTvEpgDesc
         if (!title.isNullOrBlank()) parts.add("Programme: $title.")

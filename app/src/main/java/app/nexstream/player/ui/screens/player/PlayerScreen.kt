@@ -169,8 +169,10 @@ fun PlayerScreen(
             whisperEnabled && (movieId != null || episodeId != null) -> ccActive = true
         }
     }
-    // Drive whisper manager from the session state
-    LaunchedEffect(ccActive) {
+    // Drive whisper manager from the session state.
+    // channelUrl is a key so that channel switches re-arm the processor even when ccActive hasn't changed
+    // (onDispose calls setEnabled(false)/deactivate(); without channelUrl this LaunchedEffect wouldn't re-fire).
+    LaunchedEffect(ccActive, channelUrl) {
         whisperTapProcessor.setEnabled(ccActive)
         if (ccActive) {
             // Ensure translate preference is applied at activation time, not just on pref change.
@@ -197,6 +199,10 @@ fun PlayerScreen(
     // Audio language detection (live TV only) — resets on channel change
     var audioLangDetected        by remember(channelUrl) { mutableStateOf<String?>(null) }
     var audioLangPromptDismissed by remember(channelUrl) { mutableStateOf(false) }
+
+    LaunchedEffect(audioLangDetected) {
+        whisperManager.setDetectedLanguage(audioLangDetected)
+    }
 
     // D-pad: two zones — ICONS row and CONTROLS row (below), then SLIDER
     var dpadZone     by remember { mutableStateOf(DpadZone.CONTROLS) }
