@@ -490,6 +490,12 @@ private fun PlexTab(
     val pinCode  = viewModel.plexPinCode
     val servers  = viewModel.plexServers
 
+    val clipboardManager = LocalClipboardManager.current
+    var pinCopied by remember { mutableStateOf(false) }
+    LaunchedEffect(pinCopied) {
+        if (pinCopied) { kotlinx.coroutines.delay(2000); pinCopied = false }
+    }
+
     when (pinState) {
         AddPlaylistViewModel.PlexPinState.IDLE -> {
             var connectFocused by remember { mutableStateOf(false) }
@@ -551,6 +557,21 @@ private fun PlexTab(
                         letterSpacing = 8.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    OutlinedButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(pinCode ?: ""))
+                            pinCopied = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            if (pinCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (pinCopied) "Copied!" else "Copy PIN")
+                    }
                     Text(
                         "Visit app.plex.tv/desktop on any device and sign in to link your account",
                         style = MaterialTheme.typography.bodySmall,
