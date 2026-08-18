@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,15 +25,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.data.local.entity.ChannelEntity
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.MovieEntity
+import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
@@ -43,9 +51,14 @@ import app.nexstream.player.ui.screens.movies.ModernMovieDetailsDialog
 import app.nexstream.player.ui.screens.series.SeriesDetailsDialog
 import app.nexstream.player.ui.components.TvKeyboardSheet
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalUiStyle
 import app.nexstream.player.ui.theme.UiStyle
 import androidx.compose.material3.HorizontalDivider
+import coil.compose.AsyncImage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SearchScreen(
@@ -82,6 +95,13 @@ fun SearchScreen(
     var searchSeriesSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
     var searchSeriesLoading  by remember { mutableStateOf(false) }
 
+    data class ProgramDialogState(
+        val channel: ChannelEntity,
+        val currentProgram: ProgramEntity?,
+        val nextProgram: ProgramEntity?
+    )
+    var programDialogState by remember { mutableStateOf<ProgramDialogState?>(null) }
+
     LaunchedEffect(searchMovieDialog) {
         val m = searchMovieDialog ?: run { searchMovieUpdated = null; searchMovieReady = false; return@LaunchedEffect }
         searchMovieReady = false
@@ -114,10 +134,15 @@ fun SearchScreen(
     val wrappedChannelClick: (String, String) -> Unit = { _, name ->
         onGoToEpgForChannel(name)
     }
-    val handleProgrammeClick: (app.nexstream.player.data.local.entity.ProgramEntity) -> Unit = { prog ->
+    val handleProgrammeClick: (ProgramEntity) -> Unit = { prog ->
         scope.launch {
             val ch = viewModel.getChannelByEpgId(prog.channelId)
-            if (ch != null) onGoToEpgForChannel(ch.name)
+            if (ch != null) {
+                val epgId = ch.epgChannelId ?: ch.id
+                val current = viewModel.getCurrentProgram(epgId)
+                val next    = viewModel.getNextProgram(epgId)
+                programDialogState = ProgramDialogState(ch, current, next)
+            }
         }
     }
     val wrappedMovieClick: (MovieEntity) -> Unit = { movie ->
@@ -379,6 +404,17 @@ fun SearchScreen(
                     onChannelClick(streamUrl, "$seriesName — $episodeName")
                     searchSeriesDialog = null
                 }
+            )
+        }
+
+        programDialogState?.let { state ->
+            SearchChannelProgramDialog(
+                channel        = state.channel,
+                currentProgram = state.currentProgram,
+                nextProgram    = state.nextProgram,
+                onDismiss      = { programDialogState = null },
+                onWatch        = { onChannelClick(state.channel.streamUrl, state.channel.name); programDialogState = null },
+                onGoToEpg      = { onGoToEpgForChannel(state.channel.name); programDialogState = null }
             )
         }
 
@@ -701,6 +737,224 @@ private fun SearchPanelGrid(
                 onFocused = {},
                 onClick = gi.onClick
             )
+        }
+    }
+}
+
+// ── Programme channel dialog ───────────────────────────────────────────────────
+
+private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+private fun fmtTime(ms: Long) = timeFormat.format(Date(ms))
+
+@Composable
+private fun SearchChannelProgramDialog(
+    channel: ChannelEntity,
+    currentProgram: ProgramEntity?,
+    nextProgram: ProgramEntity?,
+    onDismiss: () -> Unit,
+    onWatch: () -> Unit,
+    onGoToEpg: () -> Unit
+) {
+    val accent = LocalNsAccent.current
+    // Button order: 0=Close 1=EPG 2=Watch
+    var selectedButton by remember { mutableIntStateOf(2) }
+    val dialogFocus    = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        try { dialogFocus.requestFocus() } catch (_: Exception) {}
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.92f).wrapContentHeight(),
+            shape    = RoundedCornerShape(16.dp),
+            color    = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 220.dp)
+                    .focusRequester(dialogFocus)
+                    .focusable()
+                    .onKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (e.key) {
+                            Key.DirectionLeft  -> { selectedButton = (selectedButton - 1 + 3) % 3; true }
+                            Key.DirectionRight -> { selectedButton = (selectedButton + 1) % 3; true }
+                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                                when (selectedButton) { 0 -> onDismiss(); 1 -> onGoToEpg(); 2 -> onWatch() }
+                                true
+                            }
+                            Key.Back -> { onDismiss(); true }
+                            else -> false
+                        }
+                    }
+            ) {
+                // Backdrop: channel logo
+                if (!channel.logoUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model              = channel.logoUrl,
+                        contentDescription = null,
+                        modifier           = Modifier.fillMaxWidth().height(180.dp),
+                        contentScale       = ContentScale.Fit,
+                        alignment          = Alignment.Center
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth().height(180.dp).background(Color(0xFF1A1A2E)))
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(180.dp).background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.Black.copy(alpha = 0.15f),
+                                0.6f to Color.Black.copy(alpha = 0.75f),
+                                1.0f to Color.Black.copy(alpha = 0.97f),
+                            )
+                        )
+                    )
+                )
+
+                // Close button top-right
+                Box(modifier = Modifier.align(Alignment.TopEnd).padding(10.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selectedButton == 0) accent else Color.Black.copy(alpha = 0.55f),
+                        modifier = Modifier.clickable(onClick = onDismiss)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Close, null, Modifier.size(13.dp), tint = Color.White)
+                            Text("Close", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                        }
+                    }
+                }
+
+                // Bottom content
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Channel name
+                    Text(
+                        text       = channel.name,
+                        style      = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color      = Color.White,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis
+                    )
+
+                    // Current programme
+                    if (currentProgram != null) {
+                        ProgramRow(
+                            label   = "Now",
+                            program = currentProgram,
+                            accent  = accent
+                        )
+                    }
+
+                    // Up next
+                    if (nextProgram != null) {
+                        ProgramRow(
+                            label   = "Next",
+                            program = nextProgram,
+                            accent  = null
+                        )
+                    }
+
+                    Spacer(Modifier.height(2.dp))
+
+                    // Action buttons
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment     = Alignment.CenterVertically
+                    ) {
+                        // EPG button
+                        ProgramDialogPill(
+                            icon       = Icons.Default.CalendarToday,
+                            label      = "Go to EPG",
+                            isSelected = selectedButton == 1,
+                            accent     = accent,
+                            onClick    = onGoToEpg
+                        )
+                        Spacer(Modifier.weight(1f))
+                        // Watch Live
+                        ProgramDialogPill(
+                            icon       = Icons.Default.PlayArrow,
+                            label      = "Watch Live",
+                            isSelected = selectedButton == 2,
+                            accent     = accent,
+                            onClick    = onWatch
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgramRow(label: String, program: ProgramEntity, accent: androidx.compose.ui.graphics.Color?) {
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = (accent ?: Color.White.copy(alpha = 0.2f)).let { if (accent != null) it.copy(alpha = 0.85f) else it }
+        ) {
+            Text(
+                label,
+                style    = MaterialTheme.typography.labelSmall,
+                color    = Color.White,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+        Text(
+            text     = "${fmtTime(program.startTime)}–${fmtTime(program.endTime)}  ${program.title}",
+            style    = MaterialTheme.typography.bodySmall,
+            color    = Color.White.copy(alpha = if (accent != null) 1f else 0.65f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ProgramDialogPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    accent: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape    = RoundedCornerShape(50.dp),
+        color    = if (isSelected) accent else Color.White.copy(alpha = 0.15f),
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, modifier = Modifier.size(16.dp), tint = Color.White)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Medium)
         }
     }
 }

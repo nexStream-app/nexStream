@@ -355,6 +355,12 @@ class SearchViewModel @Inject constructor(
     suspend fun getChannelByEpgId(epgChannelId: String): ChannelEntity? =
         repository.getChannelByEpgId(epgChannelId)
 
+    suspend fun getCurrentProgram(epgChannelId: String): ProgramEntity? =
+        repository.getCurrentProgram(epgChannelId).firstOrNull()
+
+    suspend fun getNextProgram(epgChannelId: String): ProgramEntity? =
+        repository.getNextProgram(epgChannelId).firstOrNull()
+
     suspend fun getSeriesById(id: String): app.nexstream.player.data.local.entity.SeriesEntity? =
         repository.getSeriesById(id)
 
