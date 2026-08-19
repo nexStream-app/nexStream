@@ -1,6 +1,11 @@
 package app.nexstream.player.service
 
+import app.nexstream.player.R
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import app.nexstream.player.data.profile.ProfileManager
@@ -93,6 +98,11 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
                     }
                 }
             }
+            "admin_broadcast" -> {
+                val title = message.notification?.title ?: message.data["title"] ?: "nexStream"
+                val body  = message.notification?.body  ?: message.data["body"]  ?: ""
+                showAdminNotification(title, body)
+            }
             "playlist_assigned" -> {
                 val d = message.data
                 val playlistType = d["playlist_type"] ?: run {
@@ -116,6 +126,24 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
                 )
             }
         }
+    }
+
+    private fun showAdminNotification(title: String, body: String) {
+        val channelId = "nexstream_admin"
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannel(
+                NotificationChannel(channelId, "Announcements", NotificationManager.IMPORTANCE_DEFAULT)
+            )
+        }
+        val notif = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .build()
+        nm.notify(System.currentTimeMillis().toInt(), notif)
     }
 
     override fun onNewToken(token: String) {

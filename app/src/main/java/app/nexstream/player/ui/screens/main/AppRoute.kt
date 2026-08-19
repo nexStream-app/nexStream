@@ -19,6 +19,7 @@ sealed interface AppRoute {
     data object Downloads   : AppRoute
     data object Picks       : AppRoute
     data object Music       : AppRoute
+    data object LocalFiles  : AppRoute
 
     // ── Settings sub-destinations ─────────────────────────────────────────────
     data object Settings             : AppRoute
@@ -51,6 +52,7 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
     AppRoute.Downloads                                -> AppRoute.Downloads
     AppRoute.Picks                                    -> AppRoute.Picks
     AppRoute.Music                                    -> AppRoute.Music
+    AppRoute.LocalFiles                               -> AppRoute.LocalFiles
     AppRoute.Settings,
     AppRoute.SettingsPlaylists,
     AppRoute.SettingsAppearance,
@@ -71,7 +73,8 @@ val AppRoute.hasCategoryPanel: Boolean
             this == AppRoute.Series || this == AppRoute.CatchUp || this.isSettings ||
             this == AppRoute.Recent || this == AppRoute.Search ||
             this == AppRoute.MyList || this == AppRoute.Reminders ||
-            this == AppRoute.Downloads || this == AppRoute.Picks || this == AppRoute.Music
+            this == AppRoute.Downloads || this == AppRoute.Picks || this == AppRoute.Music ||
+            this == AppRoute.LocalFiles
 
 /** True for routes in the settings sub-tree. */
 val AppRoute.isSettings: Boolean

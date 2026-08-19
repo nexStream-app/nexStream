@@ -71,6 +71,7 @@ import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.screens.recentlywatched.RecentlyWatchedScreen
 import app.nexstream.player.ui.screens.home.HomePageViewModel
 import app.nexstream.player.ui.screens.home.ModernHomeScreen
+import app.nexstream.player.ui.screens.localfiles.LocalFilesScreen
 import app.nexstream.player.ui.screens.music.MusicScreen
 import app.nexstream.player.ui.screens.music.MusicViewModel
 import app.nexstream.player.ui.screens.picks.PickItem
@@ -104,8 +105,9 @@ private fun String?.asAppRoute(): AppRoute = when (this) {
     "Search"    -> AppRoute.Search
     "MyList"    -> AppRoute.MyList
     "Reminders" -> AppRoute.Reminders
-    "Downloads" -> AppRoute.Downloads
-    else        -> AppRoute.Guide
+    "Downloads"   -> AppRoute.Downloads
+    "LocalFiles"  -> AppRoute.LocalFiles
+    else          -> AppRoute.Guide
 }
 
 @Composable
@@ -2065,6 +2067,13 @@ private fun MainContentArea(
                 selectedCategory = selectedMusicCategory,
                 onBack           = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
                 isContentFocused = zone == Zone.CONTENT,
+            )
+            AppRoute.LocalFiles -> LocalFilesScreen(
+                firstItemFocusRequester = contentFR,
+                onBack  = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
+                onPlayFile = { filePath, title ->
+                    onPlayerLaunch(filePath, null, null, null, 0L, title, null, null)
+                }
             )
             else -> Unit
         }

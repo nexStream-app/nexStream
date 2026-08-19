@@ -8,7 +8,7 @@ import android.net.Uri
 object ExternalPlayerManager {
     data class PlayerOption(val id: String, val displayName: String)
 
-    val NEXSTREAM = PlayerOption("nexstream", "NexStream (built-in)")
+    val NEXSTREAM = PlayerOption("nexstream", "nexStream (built-in)")
 
     val KNOWN_PLAYERS = listOf(
         PlayerOption("org.videolan.vlc",           "VLC"),
