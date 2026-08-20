@@ -14,16 +14,36 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nexstream.player.service.AdminMessage
+import app.nexstream.player.service.AdminNotificationManager
+import app.nexstream.player.ui.theme.getAdminNotificationsEnabledFlow
+import kotlinx.coroutines.delay
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,12 +98,14 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var licenceManager: LicenceManager
     @Inject lateinit var syncManager: WatchlistSyncManager
     @Inject lateinit var profileSyncManager: ProfileSyncManager
+    @Inject lateinit var adminNotificationManager: AdminNotificationManager
 
     private val themeViewModel: ThemeViewModel by viewModels()
 
     private val reminderOverlayData = mutableStateOf<ReminderOverlayData?>(null)
     private val pendingPlayUrl      = mutableStateOf<String?>(null)
     private val pendingPlayName     = mutableStateOf<String?>(null)
+    private val adminMessageState   = mutableStateOf<AdminMessage?>(null)
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op — user chose */ }
@@ -161,6 +183,7 @@ class MainActivity : ComponentActivity() {
             NexStreamThemeProvider(themeViewModel = themeViewModel) {
                 var accessState by remember { mutableStateOf(AppAccessState.LOADING) }
                 val overlayData by reminderOverlayData
+                val ctx = LocalContext.current
 
                 // Read app name from theme - works for both default and reseller
                 val themes  by themeViewModel.themes.collectAsState()
@@ -172,6 +195,19 @@ class MainActivity : ComponentActivity() {
                         trialManager.checkAccessState(licenceManager.getDeviceId())
                     }
                     accessState = checkDeferred.await()
+                }
+
+                // Show in-app admin broadcast banners if enabled for the active profile
+                LaunchedEffect(Unit) {
+                    adminNotificationManager.messages.collect { msg ->
+                        val profileId = profileManager.activeProfile.value?.id ?: "default"
+                        val enabled = ctx.getAdminNotificationsEnabledFlow(profileId).first()
+                        if (enabled && !isInPipMode.value) {
+                            adminMessageState.value = msg
+                            delay(8_000)
+                            if (adminMessageState.value == msg) adminMessageState.value = null
+                        }
+                    }
                 }
 
                 // After licence confirmed, sync profiles + watchlist (key not available on startup).
@@ -273,6 +309,51 @@ class MainActivity : ComponentActivity() {
                                 pendingPlayName.value = channelName
                             }
                         )
+                    }
+
+                    val adminMsg by adminMessageState
+                    AnimatedVisibility(
+                        visible = adminMsg != null,
+                        enter   = slideInVertically { -it } + fadeIn(),
+                        exit    = slideOutVertically { -it } + fadeOut(),
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    ) {
+                        adminMsg?.let { msg ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.97f))
+                                    .padding(start = 20.dp, top = 14.dp, bottom = 14.dp, end = 8.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Column(modifier = Modifier.padding(end = 40.dp)) {
+                                    Text(
+                                        text       = msg.title,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    if (msg.body.isNotBlank()) {
+                                        Text(
+                                            text  = msg.body,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick  = { adminMessageState.value = null },
+                                    modifier = Modifier.align(Alignment.CenterEnd)
+                                ) {
+                                    Icon(
+                                        imageVector        = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint               = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

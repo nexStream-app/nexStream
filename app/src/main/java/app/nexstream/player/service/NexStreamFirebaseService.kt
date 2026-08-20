@@ -38,6 +38,7 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
     @Inject lateinit var licenceManager: LicenceManager
     @Inject lateinit var trialManager: TrialManager
     @Inject lateinit var themeManager: ThemeManager
+    @Inject lateinit var adminNotificationManager: AdminNotificationManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -101,6 +102,7 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
             "admin_broadcast" -> {
                 val title = message.notification?.title ?: message.data["title"] ?: "nexStream"
                 val body  = message.notification?.body  ?: message.data["body"]  ?: ""
+                adminNotificationManager.emit(AdminMessage(title, body))
                 showAdminNotification(title, body)
             }
             "playlist_assigned" -> {

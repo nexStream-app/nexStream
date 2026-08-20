@@ -46,11 +46,14 @@ import app.nexstream.player.ui.theme.saveExtPlayerLiveTv
 import app.nexstream.player.ui.theme.saveExtPlayerMovies
 import app.nexstream.player.ui.theme.saveExtPlayerSeries
 import app.nexstream.player.ui.theme.saveExtPlayerCatchup
+import app.nexstream.player.ui.theme.getAdminNotificationsEnabledFlow
+import app.nexstream.player.ui.theme.saveAdminNotificationsEnabled
 import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerSettingsScreen(
     firstItemFocusRequester: FocusRequester? = null,
+    profileId: String = "default",
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -66,6 +69,8 @@ fun PlayerSettingsScreen(
     val whisperAutoStartLive by context.getWhisperAutostartLiveFlow().collectAsState(initial = false)
     val autoUpdateEnabled    by context.getAutoUpdateEnabledFlow().collectAsState(initial = false)
     val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
+
+    val adminNotifsEnabled by context.getAdminNotificationsEnabledFlow(profileId).collectAsState(initial = true)
 
     val extPlayerLiveTv by context.getExtPlayerLiveTvFlow().collectAsState(initial = "nexstream")
     val extPlayerMovies  by context.getExtPlayerMoviesFlow().collectAsState(initial = "nexstream")
@@ -330,6 +335,21 @@ fun PlayerSettingsScreen(
                 )
             }
 
+
+            // ── Notifications ─────────────────────────────────────────────────
+            SettingsSectionContainer(
+                title = "Notifications",
+                icon = Icons.Default.Notifications,
+                uiStyle = uiStyle
+            ) {
+                SettingsToggle(
+                    label = "Admin Announcements",
+                    description = "Show in-app banners for announcements from the nexStream team. These appear as a banner over the current screen when the app is open.",
+                    checked = adminNotifsEnabled,
+                    uiStyle = uiStyle,
+                    onToggle = { scope.launch { context.saveAdminNotificationsEnabled(profileId, !adminNotifsEnabled) } }
+                )
+            }
 
             // ── Formats ───────────────────────────────────────────────────────
             SettingsSectionContainer(

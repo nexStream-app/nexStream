@@ -343,6 +343,18 @@ fun PlayerScreen(
         if (pos > 0) player?.seekTo(pos)
     }
 
+    // Resume movie/episode from last saved position when launched without an explicit start position.
+    // Handles the case where a theme sync restarts the player with startPosition = 0.
+    LaunchedEffect(player, movieId, episodeId) {
+        if (player == null || startPosition > 0L) return@LaunchedEffect
+        val resumePos = when {
+            movieId != null && movieId != "catchup" -> viewModel.getMovieResumePosition(movieId, profileId)
+            episodeId != null -> viewModel.getEpisodeResumePosition(episodeId, profileId)
+            else -> return@LaunchedEffect
+        }
+        if (resumePos > 0L) player?.seekTo(resumePos)
+    }
+
     // ── LoadControl builder ───────────────────────────────────────────────────
     fun buildLoadControl(): DefaultLoadControl =
         if (smartBuffer && (isCatchup || isVod)) {

@@ -170,3 +170,16 @@ suspend fun Context.applySyncedThemePrefs(settings: Map<String, Any?>) {
         // theme_mode, font_scale, font_weight are per-profile — not applied from device-level settings
     }
 }
+
+// ── Per-profile notification preferences ─────────────────────────────────────
+
+val Context.notificationPrefsDataStore: DataStore<Preferences> by preferencesDataStore("notification_prefs")
+
+private fun adminNotifsKey(profileId: String) = booleanPreferencesKey("admin_notifs_$profileId")
+
+fun Context.getAdminNotificationsEnabledFlow(profileId: String): Flow<Boolean> =
+    notificationPrefsDataStore.data.map { it[adminNotifsKey(profileId)] ?: true }
+
+suspend fun Context.saveAdminNotificationsEnabled(profileId: String, enabled: Boolean) {
+    notificationPrefsDataStore.edit { it[adminNotifsKey(profileId)] = enabled }
+}

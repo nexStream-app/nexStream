@@ -2034,7 +2034,7 @@ private fun MainContentArea(
                     )
                 }
             }
-            AppRoute.SettingsPlayer     -> app.nexstream.player.ui.screens.settings.PlayerSettingsScreen(firstItemFocusRequester = contentFR)
+            AppRoute.SettingsPlayer     -> app.nexstream.player.ui.screens.settings.PlayerSettingsScreen(firstItemFocusRequester = contentFR, profileId = activeProfileId)
             AppRoute.SettingsSyncSettings -> app.nexstream.player.ui.screens.settings.SyncSettingsScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsAccount    -> app.nexstream.player.ui.screens.settings.AccountScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsAbout      -> app.nexstream.player.ui.screens.settings.AboutScreen(firstItemFocusRequester = contentFR)
