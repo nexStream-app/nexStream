@@ -419,7 +419,14 @@ fun ModernMovieDetailsDialog(
         properties       = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
     ) {
         val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        androidx.compose.runtime.LaunchedEffect(Unit) { dialogWindow?.setDimAmount(0.85f) }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            dialogWindow?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow?.setDimAmount(0.95f)
+        }
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+            contentAlignment = Alignment.Center,
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
@@ -875,6 +882,7 @@ function onYouTubeIframeAPIReady(){
                 }
             }
         }
+        } // end outer scrim Box
     }
 
 }

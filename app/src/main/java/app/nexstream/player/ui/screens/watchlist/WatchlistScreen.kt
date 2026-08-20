@@ -87,6 +87,7 @@ fun WatchlistScreen(
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     val allItems by viewModel.allItems.collectAsState()
+    val progressMap by viewModel.progressMap.collectAsState()
     var dialogItem by remember { mutableStateOf<WatchlistEntity?>(null) }
 
     var movieDialogEntity    by remember { mutableStateOf<MovieEntity?>(null) }
@@ -202,6 +203,7 @@ fun WatchlistScreen(
                 firstItemFocusRequester = firstItemFR,
                 onItemClick             = { dialogItem = it },
                 onRequestSidebarFocus   = onRequestSidebarFocus,
+                progressMap             = progressMap,
             )
         } else {
         Column(modifier = Modifier.fillMaxSize()) {

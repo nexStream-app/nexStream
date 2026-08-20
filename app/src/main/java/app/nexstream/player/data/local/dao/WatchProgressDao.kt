@@ -47,5 +47,8 @@ interface WatchProgressDao {
     @Query("DELETE FROM watch_progress WHERE profileId = :profileId")
     suspend fun clearAllForProfile(profileId: String)
 
+    @Query("SELECT * FROM watch_progress WHERE profileId = :profileId AND positionMs > 0 AND durationMs > 0")
+    fun getAllProgressWithDuration(profileId: String): Flow<List<WatchProgressEntity>>
+
     data class WatchedCountRow(val seriesId: String, val count: Int)
 }

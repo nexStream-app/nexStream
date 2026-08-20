@@ -89,6 +89,12 @@ class WatchProgressRepository @Inject constructor(
     fun getProgressItemIds(profileId: String): Flow<Set<String>> =
         dao.getAllProgressItemIds(profileId).map { it.toSet() }
 
+    // Map of itemId → progress fraction (0f..0.97f) — used for progress bars on cards
+    fun getProgressFractions(profileId: String): Flow<Map<String, Float>> =
+        dao.getAllProgressWithDuration(profileId).map { items ->
+            items.associate { it.itemId to (it.positionMs.toFloat() / it.durationMs.toFloat()).coerceIn(0f, 0.97f) }
+        }
+
     // Watched episode counts per series — used for series grid badge
     fun getWatchedCountsForProfile(profileId: String): Flow<Map<String, Int>> =
         dao.getAllWatchedCountsForProfile(profileId).map { rows ->

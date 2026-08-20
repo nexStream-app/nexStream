@@ -9,24 +9,28 @@ import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
+import app.nexstream.player.data.repository.WatchProgressRepository
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.toSet
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlinx.coroutines.flow.flatMapLatest
 
 @HiltViewModel
 class WatchlistViewModel @Inject constructor(
     private val repository: PlaylistRepository,
     private val syncManager: WatchlistSyncManager,
+    private val progressRepository: WatchProgressRepository,
     val profileManager: ProfileManager
 ) : ViewModel() {
 
@@ -50,6 +54,14 @@ class WatchlistViewModel @Inject constructor(
                 .map { items -> items.map { it.id }.toSet() }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val progressMap: StateFlow<Map<String, Float>> = profileManager.activeProfile
+        .flatMapLatest { profile ->
+            if (profile == null) flowOf(emptyMap())
+            else progressRepository.getProgressFractions(profile.id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         viewModelScope.launch {

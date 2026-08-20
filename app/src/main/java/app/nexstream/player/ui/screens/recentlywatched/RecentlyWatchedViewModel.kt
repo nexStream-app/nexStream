@@ -40,6 +40,14 @@ class RecentlyWatchedViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val progressMap: StateFlow<Map<String, Float>> = profileManager.activeProfile
+        .flatMapLatest { profile ->
+            if (profile == null) flowOf(emptyMap())
+            else progressRepository.getProgressFractions(profile.id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     init {
         viewModelScope.launch { repository.pruneStaleAndBlockedRecentItems() }
     }

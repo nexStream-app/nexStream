@@ -50,6 +50,7 @@ fun ModernMyListContent(
     onItemClick: (WatchlistEntity) -> Unit,
     modifier: Modifier = Modifier,
     onRequestSidebarFocus: () -> Unit = {},
+    progressMap: Map<String, Float> = emptyMap(),
 ) {
     val background    = LocalNsBackground.current
     val accent        = LocalNsAccent.current
@@ -126,6 +127,7 @@ fun ModernMyListContent(
                     MyListCard(
                         item             = ch,
                         defaultIcon      = Icons.Default.Tv,
+                        progressFraction = 0f,
                         accent           = accent,
                         surface          = surface,
                         textPrimary      = textPrimary,
@@ -143,6 +145,7 @@ fun ModernMyListContent(
                     MyListCard(
                         item             = movie,
                         defaultIcon      = Icons.Default.Movie,
+                        progressFraction = progressMap[movie.id] ?: 0f,
                         accent           = accent,
                         surface          = surface,
                         textPrimary      = textPrimary,
@@ -160,12 +163,13 @@ fun ModernMyListContent(
                     MyListCard(
                         item             = ser,
                         defaultIcon      = Icons.Default.VideoLibrary,
+                        progressFraction = 0f,
                         accent           = accent,
                         surface          = surface,
                         textPrimary      = textPrimary,
                         focusRequester   = if (idx == 0 && channels.isEmpty() && movies.isEmpty()) firstItemFocusRequester else null,
                         onDirectionLeft  = if (idx == 0) onRequestSidebarFocus else null,
-                        onClick        = { onItemClick(ser) },
+                        onClick          = { onItemClick(ser) },
                     )
                 }
             }
@@ -186,15 +190,20 @@ fun ModernMyListContent(
                     WatchlistType.SERIES  -> Icons.Default.VideoLibrary
                     WatchlistType.MUSIC   -> Icons.Default.Album
                 }
+                val progressFraction = when (item.type) {
+                    WatchlistType.MOVIE -> progressMap[item.id] ?: 0f
+                    else                -> 0f
+                }
                 MyListCard(
-                    item            = item,
-                    defaultIcon     = icon,
-                    accent          = accent,
-                    surface         = surface,
-                    textPrimary     = textPrimary,
-                    focusRequester  = if (idx == 0) firstItemFocusRequester else null,
-                    onDirectionLeft = if (idx == 0) onRequestSidebarFocus else null,
-                    onClick         = { onItemClick(item) },
+                    item             = item,
+                    defaultIcon      = icon,
+                    progressFraction = progressFraction,
+                    accent           = accent,
+                    surface          = surface,
+                    textPrimary      = textPrimary,
+                    focusRequester   = if (idx == 0) firstItemFocusRequester else null,
+                    onDirectionLeft  = if (idx == 0) onRequestSidebarFocus else null,
+                    onClick          = { onItemClick(item) },
                 )
             }
         }
@@ -209,6 +218,7 @@ fun ModernMyListContent(
 private fun MyListCard(
     item: WatchlistEntity,
     defaultIcon: ImageVector,
+    progressFraction: Float,
     accent: Color,
     surface: Color,
     textPrimary: Color,
@@ -273,6 +283,23 @@ private fun MyListCard(
                         )
                     )
             )
+            // Progress bar
+            if (progressFraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressFraction)
+                            .fillMaxHeight()
+                            .background(accent)
+                    )
+                }
+            }
         }
         Text(
             text     = item.name,

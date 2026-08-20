@@ -67,7 +67,7 @@ fun RecentlyWatchedScreen(
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     val items by viewModel.recentlyWatched.collectAsState()
-    val progressItemIds by viewModel.progressItemIds.collectAsState()
+    val progressMap by viewModel.progressMap.collectAsState()
     var dialogItem by remember { mutableStateOf<RecentlyWatchedEntity?>(null) }
 
     var movieDialogEntity    by remember { mutableStateOf<MovieEntity?>(null) }
@@ -77,6 +77,7 @@ fun RecentlyWatchedScreen(
     var seriesDialogEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
     var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
     var seriesDialogLoading  by remember { mutableStateOf(false) }
+    var dialogEntityLoading  by remember { mutableStateOf(false) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
@@ -87,6 +88,7 @@ fun RecentlyWatchedScreen(
         seriesDialogEpisodes = emptyList()
         seriesDialogSeasons  = emptyList()
         if (item == null) return@LaunchedEffect
+        if (item.type != RecentlyWatchedType.CHANNEL) dialogEntityLoading = true
         when (item.type) {
             RecentlyWatchedType.MOVIE -> {
                 val movieId = item.movieId ?: item.id
@@ -98,7 +100,7 @@ fun RecentlyWatchedScreen(
                 }
             }
             RecentlyWatchedType.EPISODE -> {
-                val seriesId = item.seriesId ?: return@LaunchedEffect
+                val seriesId = item.seriesId ?: run { dialogEntityLoading = false; return@LaunchedEffect }
                 val s = viewModel.getSeriesById(seriesId)
                 seriesDialogEntity = s
                 if (s != null) {
@@ -118,6 +120,7 @@ fun RecentlyWatchedScreen(
             }
             else -> {}
         }
+        dialogEntityLoading = false
     }
 
     var searchQuery    by remember { mutableStateOf("") }
@@ -165,7 +168,7 @@ fun RecentlyWatchedScreen(
                 allItems                = items,
                 filteredItems           = filteredItems,
                 selectedType            = selectedType,
-                progressItemIds         = progressItemIds,
+                progressMap             = progressMap,
                 firstItemFocusRequester = firstItemFR,
                 onItemClick             = { dialogItem = it },
             )
@@ -330,7 +333,7 @@ fun RecentlyWatchedScreen(
     }
 
     val selectedRecent = dialogItem
-    if (selectedRecent != null) {
+    if (selectedRecent != null && !dialogEntityLoading) {
         val movie  = movieDialogEntity
         val series = seriesDialogEntity
 
@@ -437,6 +440,11 @@ internal fun ClearHistoryConfirmDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
     ) {
+        val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        LaunchedEffect(Unit) {
+            dialogWindow?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow?.setDimAmount(0.95f)
+        }
         Surface(
             modifier = Modifier.fillMaxWidth(0.48f),
             shape    = RoundedCornerShape(16.dp),

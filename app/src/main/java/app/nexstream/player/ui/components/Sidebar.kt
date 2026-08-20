@@ -374,7 +374,6 @@ private fun MainMenu(
     val catchupFocus     = remember { FocusRequester() }
     val picksFocus       = remember { FocusRequester() }
     val musicFocus       = remember { FocusRequester() }
-    val localFilesFocus  = remember { FocusRequester() }
     val searchFocus      = remember { FocusRequester() }
     val mylistFocus      = remember { FocusRequester() }
     val downloadsFocus   = remember { FocusRequester() }
@@ -394,7 +393,6 @@ private fun MainMenu(
                 AppRoute.CatchUp     -> catchupFocus.requestFocus()
                 AppRoute.Picks       -> picksFocus.requestFocus()
                 AppRoute.Music       -> musicFocus.requestFocus()
-                AppRoute.LocalFiles  -> localFilesFocus.requestFocus()
                 AppRoute.Search      -> searchFocus.requestFocus()
                 AppRoute.MyList      -> mylistFocus.requestFocus()
                 AppRoute.Downloads   -> downloadsFocus.requestFocus()
@@ -444,7 +442,6 @@ private fun MainMenu(
             if (hasJellyfinPlaylist) {
                 put("Music", MenuEntry(Icons.Default.MusicNote,    "Music",     AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
             }
-            put("LocalFiles", MenuEntry(Icons.Default.FolderOpen,  "Local Files", AppRoute.LocalFiles, localFilesFocus, hasSubPanel = false, onReopenPanel = { onReopenPanel(AppRoute.LocalFiles) }))
             put("Search",   MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
             put("MyList",   MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
             put("Settings", MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings, settingsFocus))

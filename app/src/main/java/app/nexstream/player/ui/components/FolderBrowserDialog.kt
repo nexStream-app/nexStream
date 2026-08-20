@@ -1,6 +1,7 @@
 package app.nexstream.player.ui.components
 
 import android.os.Environment
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -100,6 +101,15 @@ fun FolderBrowserDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
     ) {
+        val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        LaunchedEffect(Unit) {
+            dialogWindow?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow?.setDimAmount(0.95f)
+        }
+        BackHandler {
+            if (currentDir != null) navigateUp()
+            else onDismiss()
+        }
         Surface(
             modifier = Modifier.fillMaxWidth(0.82f).fillMaxHeight(0.80f),
             shape = RoundedCornerShape(16.dp),
@@ -126,7 +136,10 @@ fun FolderBrowserDialog(
                             Key.DirectionRight -> {
                                 entries.getOrNull(selectedIndex)?.first?.let { navigateInto(it) }; true
                             }
-                            Key.DirectionLeft, Key.Back -> {
+                            Key.DirectionLeft -> {
+                                if (currentDir != null) navigateUp() else onDismiss(); true
+                            }
+                            Key.Back -> {
                                 if (currentDir != null) navigateUp() else onDismiss(); true
                             }
                             else -> false

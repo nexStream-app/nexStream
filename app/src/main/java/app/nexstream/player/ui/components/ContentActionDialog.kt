@@ -61,6 +61,11 @@ fun ContentActionDialog(
             dismissOnClickOutside    = true
         )
     ) {
+        val dialogWindow = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        LaunchedEffect(Unit) {
+            dialogWindow?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialogWindow?.setDimAmount(0.95f)
+        }
         Surface(
             modifier       = Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.90f),
             shape          = RoundedCornerShape(16.dp),

@@ -46,7 +46,7 @@ fun ModernRecentlyWatchedContent(
     allItems: List<RecentlyWatchedEntity>,
     filteredItems: List<RecentlyWatchedEntity>,
     selectedType: String?,
-    progressItemIds: Set<String>,
+    progressMap: Map<String, Float>,
     firstItemFocusRequester: FocusRequester,
     onItemClick: (RecentlyWatchedEntity) -> Unit,
     modifier: Modifier = Modifier,
@@ -123,14 +123,15 @@ fun ModernRecentlyWatchedContent(
                 }
                 itemsIndexed(channels, key = { _, it -> "ch_${it.id}" }) { idx, ch ->
                     RecentCard(
-                        item            = ch,
-                        defaultIcon     = Icons.Default.Tv,
-                        hasProgress     = false,
-                        accent          = accent,
-                        surface         = surface,
-                        textPrimary     = textPrimary,
-                        focusRequester  = if (idx == 0) firstItemFocusRequester else null,
-                        onClick         = { onItemClick(ch) },
+                        item             = ch,
+                        defaultIcon      = Icons.Default.Tv,
+                        hasProgress      = false,
+                        progressFraction = 0f,
+                        accent           = accent,
+                        surface          = surface,
+                        textPrimary      = textPrimary,
+                        focusRequester   = if (idx == 0) firstItemFocusRequester else null,
+                        onClick          = { onItemClick(ch) },
                     )
                 }
             }
@@ -140,14 +141,15 @@ fun ModernRecentlyWatchedContent(
                 }
                 itemsIndexed(movies, key = { _, it -> "mov_${it.id}" }) { idx, movie ->
                     RecentCard(
-                        item           = movie,
-                        defaultIcon    = Icons.Default.Movie,
-                        hasProgress    = movie.movieId != null && movie.movieId in progressItemIds,
-                        accent         = accent,
-                        surface        = surface,
-                        textPrimary    = textPrimary,
-                        focusRequester = if (idx == 0 && channels.isEmpty()) firstItemFocusRequester else null,
-                        onClick        = { onItemClick(movie) },
+                        item             = movie,
+                        defaultIcon      = Icons.Default.Movie,
+                        hasProgress      = movie.movieId != null && movie.movieId in progressMap,
+                        progressFraction = progressMap[movie.movieId ?: ""] ?: 0f,
+                        accent           = accent,
+                        surface          = surface,
+                        textPrimary      = textPrimary,
+                        focusRequester   = if (idx == 0 && channels.isEmpty()) firstItemFocusRequester else null,
+                        onClick          = { onItemClick(movie) },
                     )
                 }
             }
@@ -157,14 +159,15 @@ fun ModernRecentlyWatchedContent(
                 }
                 itemsIndexed(episodes, key = { _, it -> "ep_${it.id}" }) { idx, ep ->
                     RecentCard(
-                        item           = ep,
-                        defaultIcon    = Icons.Default.VideoLibrary,
-                        hasProgress    = ep.episodeId != null && ep.episodeId in progressItemIds,
-                        accent         = accent,
-                        surface        = surface,
-                        textPrimary    = textPrimary,
-                        focusRequester = if (idx == 0 && channels.isEmpty() && movies.isEmpty()) firstItemFocusRequester else null,
-                        onClick        = { onItemClick(ep) },
+                        item             = ep,
+                        defaultIcon      = Icons.Default.VideoLibrary,
+                        hasProgress      = ep.episodeId != null && ep.episodeId in progressMap,
+                        progressFraction = progressMap[ep.episodeId ?: ""] ?: 0f,
+                        accent           = accent,
+                        surface          = surface,
+                        textPrimary      = textPrimary,
+                        focusRequester   = if (idx == 0 && channels.isEmpty() && movies.isEmpty()) firstItemFocusRequester else null,
+                        onClick          = { onItemClick(ep) },
                     )
                 }
             }
@@ -184,19 +187,25 @@ fun ModernRecentlyWatchedContent(
                     RecentlyWatchedType.EPISODE -> Icons.Default.VideoLibrary
                 }
                 val hasProgress = when (item.type) {
-                    RecentlyWatchedType.MOVIE   -> item.movieId != null && item.movieId in progressItemIds
-                    RecentlyWatchedType.EPISODE -> item.episodeId != null && item.episodeId in progressItemIds
+                    RecentlyWatchedType.MOVIE   -> item.movieId != null && item.movieId in progressMap
+                    RecentlyWatchedType.EPISODE -> item.episodeId != null && item.episodeId in progressMap
                     else                        -> false
                 }
+                val progressFraction = when (item.type) {
+                    RecentlyWatchedType.MOVIE   -> progressMap[item.movieId ?: ""] ?: 0f
+                    RecentlyWatchedType.EPISODE -> progressMap[item.episodeId ?: ""] ?: 0f
+                    else                        -> 0f
+                }
                 RecentCard(
-                    item           = item,
-                    defaultIcon    = icon,
-                    hasProgress    = hasProgress,
-                    accent         = accent,
-                    surface        = surface,
-                    textPrimary    = textPrimary,
-                    focusRequester = if (idx == 0) firstItemFocusRequester else null,
-                    onClick        = { onItemClick(item) },
+                    item             = item,
+                    defaultIcon      = icon,
+                    hasProgress      = hasProgress,
+                    progressFraction = progressFraction,
+                    accent           = accent,
+                    surface          = surface,
+                    textPrimary      = textPrimary,
+                    focusRequester   = if (idx == 0) firstItemFocusRequester else null,
+                    onClick          = { onItemClick(item) },
                 )
             }
         }
@@ -212,6 +221,7 @@ private fun RecentCard(
     item: RecentlyWatchedEntity,
     defaultIcon: ImageVector,
     hasProgress: Boolean,
+    progressFraction: Float,
     accent: Color,
     surface: Color,
     textPrimary: Color,
@@ -287,16 +297,22 @@ private fun RecentCard(
                         .padding(start = 6.dp, bottom = 6.dp),
                 )
             }
-            // Progress dot — top-right accent circle
-            if (hasProgress) {
+            // Progress bar — bottom of image
+            if (hasProgress && progressFraction > 0f) {
                 Box(
                     modifier = Modifier
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .align(Alignment.TopEnd)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(accent)
-                )
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressFraction)
+                            .fillMaxHeight()
+                            .background(accent)
+                    )
+                }
             }
         }
         Text(
