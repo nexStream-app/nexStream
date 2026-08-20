@@ -21,6 +21,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
@@ -71,7 +72,7 @@ fun ModernCategoryStrip(
 
     Column(modifier = modifier.fillMaxWidth().background(background)) {
         Row(
-            modifier          = Modifier.fillMaxWidth(),
+            modifier          = Modifier.fillMaxWidth().height(56.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
         if (showLeadingLogo) {
@@ -112,10 +113,12 @@ fun ModernCategoryStrip(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text       = "← Back",
-                            fontSize   = (12f * fontScale).sp,
+                            text     = "← Back",
+                            fontSize = (12f * fontScale).sp,
                             fontWeight = fontWeight,
-                            color      = if (isFocused) accent else textPrimary.copy(alpha = 0.55f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color    = if (isFocused) accent else textPrimary.copy(alpha = 0.55f),
                         )
                     }
                 }
@@ -169,6 +172,8 @@ fun ModernCategoryStrip(
                         text       = label,
                         fontSize   = (12f * fontScale).sp,
                         fontWeight = fontWeight,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis,
                         color      = when {
                             isSelected      -> background
                             isFocused.value -> accent

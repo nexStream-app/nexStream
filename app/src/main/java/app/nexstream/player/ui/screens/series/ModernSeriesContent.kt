@@ -81,7 +81,7 @@ fun ModernSeriesContent(
     LazyVerticalGrid(
         columns               = GridCells.Adaptive(minSize = 130.dp),
         modifier              = Modifier.fillMaxSize().background(background),
-        contentPadding        = PaddingValues(bottom = 32.dp),
+        contentPadding        = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp),
         verticalArrangement   = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

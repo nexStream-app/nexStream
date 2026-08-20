@@ -312,8 +312,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val adminMsg by adminMessageState
+                    val playerActive by isPlayerActive
                     AnimatedVisibility(
-                        visible = adminMsg != null,
+                        visible = adminMsg != null && !playerActive,
                         enter   = slideInVertically { -it } + fadeIn(),
                         exit    = slideOutVertically { -it } + fadeOut(),
                         modifier = Modifier.align(Alignment.TopCenter)
