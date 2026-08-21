@@ -168,7 +168,18 @@ fun SeriesDetailsDialog(
     val accent     = LocalNsAccent.current
     val background = LocalNsBackground.current
 
-    var selectedSeason by remember(seasons) { mutableStateOf(seasons.firstOrNull() ?: 1) }
+    var selectedSeason by remember(seasons, initialFocusEpisodeId, episodes, episodeProgressMap) {
+        val targetSeason = if (initialFocusEpisodeId != null)
+            episodes.firstOrNull { it.id == initialFocusEpisodeId }?.seasonNum
+        else
+            episodes
+                .filter { (episodeProgressMap[it.id] ?: 0L) > 0L }
+                .maxWithOrNull(compareBy({ it.seasonNum }, { it.episodeNum }))
+                ?.seasonNum
+        val season = (if (targetSeason != null && targetSeason in seasons) targetSeason else null)
+            ?: seasons.firstOrNull() ?: 1
+        mutableStateOf(season)
+    }
     var seasonDropdownExpanded by remember { mutableStateOf(false) }
 
     val episodesForSeason = remember(episodes, selectedSeason) {
