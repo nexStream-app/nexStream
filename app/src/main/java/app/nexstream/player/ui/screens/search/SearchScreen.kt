@@ -336,6 +336,7 @@ fun SearchScreen(
                     onMovieClick = wrappedMovieClick,
                     onSeriesClick = wrappedSeriesClick,
                     query = query,
+                    onPersonClick = handlePersonClick,
                     onCastMovieClick = handleCastMovieClick,
                     onCastSeriesClick = handleCastSeriesClick,
                     onProgrammeClick = handleProgrammeClick
@@ -668,6 +669,7 @@ private fun SearchPanelGrid(
     onMovieClick: (MovieEntity) -> Unit,
     onSeriesClick: (SeriesEntity) -> Unit,
     query: String,
+    onPersonClick: (PersonResult) -> Unit = {},
     onCastMovieClick: (MovieEntity) -> Unit = {},
     onCastSeriesClick: (SeriesEntity) -> Unit = {},
     onProgrammeClick: (app.nexstream.player.data.local.entity.ProgramEntity) -> Unit = {}
@@ -698,10 +700,8 @@ private fun SearchPanelGrid(
             "Series" -> results.series.map { s ->
                 GridItem(s.id, s.name, s.posterUrl, if (s.seasonCount > 0) "${s.seasonCount}S" else null, Icons.Default.VideoLibrary) { onSeriesClick(s) }
             }
-            "People" -> results.peopleMovies.map { m ->
-                GridItem("pm_${m.id}", m.name, m.posterUrl, "MOVIE", Icons.Default.Movie) { onCastMovieClick(m) }
-            } + results.peopleSeries.map { s ->
-                GridItem("ps_${s.id}", s.name, s.posterUrl, "SERIES", Icons.Default.VideoLibrary) { onCastSeriesClick(s) }
+            "People" -> results.people.map { p ->
+                GridItem("p_${p.name}", p.name, p.imageUrl, null, Icons.Default.Person) { onPersonClick(p) }
             }
         else -> emptyList()
     }

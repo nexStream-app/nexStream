@@ -25,18 +25,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nexstream.player.data.local.entity.ChannelEntity
+import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.ui.theme.LocalNsAccent
 import coil.compose.AsyncImage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ChannelDetailsDialog(
     channel: ChannelEntity,
+    currentProgram: ProgramEntity? = null,
+    nextProgram: ProgramEntity? = null,
     isBookmarked: Boolean = true,
     onDismiss: () -> Unit,
     onWatch: () -> Unit,
     onToggleWatchlist: () -> Unit = {},
     onGoToEpg: (() -> Unit)? = null
 ) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val accent = LocalNsAccent.current
 
     // Button indices: 0=Close, 1=MyList, 2=Watch, 3=GoToEpg
@@ -83,10 +90,11 @@ fun ChannelDetailsDialog(
                         }
                     }
             ) {
-                // ── Backdrop ──────────────────────────────────────────────────
-                if (!channel.logoUrl.isNullOrEmpty()) {
+                // ── Backdrop — programme image preferred over channel logo ────
+                val backdropUrl = currentProgram?.icon?.takeIf { it.isNotEmpty() } ?: channel.logoUrl
+                if (!backdropUrl.isNullOrEmpty()) {
                     AsyncImage(
-                        model              = channel.logoUrl,
+                        model              = backdropUrl,
                         contentDescription = null,
                         modifier           = Modifier.fillMaxSize(),
                         contentScale       = ContentScale.Crop,
@@ -94,6 +102,20 @@ fun ChannelDetailsDialog(
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                }
+                // Channel logo inset — top-left when programme image is backdrop
+                if (currentProgram?.icon?.isNotEmpty() == true && !channel.logoUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model              = channel.logoUrl,
+                        contentDescription = null,
+                        modifier           = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(14.dp)
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                        contentScale       = ContentScale.Fit
+                    )
                 }
 
                 Box(
@@ -135,7 +157,7 @@ fun ChannelDetailsDialog(
                         .padding(horizontal = 20.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Channel name + metadata
+                    // Channel name
                     Text(
                         text       = channel.name,
                         style      = MaterialTheme.typography.titleMedium,
@@ -144,6 +166,26 @@ fun ChannelDetailsDialog(
                         maxLines   = 2,
                         overflow   = TextOverflow.Ellipsis
                     )
+
+                    // Current programme
+                    if (currentProgram != null) {
+                        ChannelProgramRow(
+                            label   = "Now",
+                            program = currentProgram,
+                            accent  = accent,
+                            tf      = timeFormat,
+                        )
+                    }
+
+                    // Next programme
+                    if (nextProgram != null) {
+                        ChannelProgramRow(
+                            label   = "Next",
+                            program = nextProgram,
+                            accent  = null,
+                            tf      = timeFormat,
+                        )
+                    }
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -216,6 +258,38 @@ fun ChannelDetailsDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ChannelProgramRow(
+    label: String,
+    program: ProgramEntity,
+    accent: androidx.compose.ui.graphics.Color?,
+    tf: SimpleDateFormat,
+) {
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = (accent ?: Color.White.copy(alpha = 0.2f)).let { if (accent != null) it.copy(alpha = 0.85f) else it }
+        ) {
+            Text(
+                label,
+                style    = MaterialTheme.typography.labelSmall,
+                color    = Color.White,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+        Text(
+            text     = "${tf.format(Date(program.startTime))}–${tf.format(Date(program.endTime))}  ${program.title}",
+            style    = MaterialTheme.typography.bodySmall,
+            color    = Color.White.copy(alpha = if (accent != null) 0.95f else 0.65f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

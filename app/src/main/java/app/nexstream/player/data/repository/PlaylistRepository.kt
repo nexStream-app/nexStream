@@ -1717,6 +1717,15 @@ class PlaylistRepository @Inject constructor(
             }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getNextProgrammeForChannelUrl(channelUrl: String): Flow<ProgramEntity?> {
+        return database.channelDao().getChannelByStreamUrl(channelUrl)
+            .flatMapLatest { channel ->
+                if (channel?.epgChannelId.isNullOrEmpty()) flowOf(null)
+                else getNextProgram(channel!!.epgChannelId!!)
+            }
+    }
+
     fun searchPrograms(query: String): Flow<List<ProgramEntity>> =
         database.programDao().searchPrograms(query, System.currentTimeMillis())
 

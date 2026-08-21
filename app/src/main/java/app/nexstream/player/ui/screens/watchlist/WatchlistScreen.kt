@@ -97,7 +97,9 @@ fun WatchlistScreen(
     var seriesDialogEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
     var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
     var seriesDialogLoading  by remember { mutableStateOf(false) }
-    var channelDialogEntity  by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
+    var channelDialogEntity      by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
+    var channelCurrentProgram    by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProgramEntity?>(null) }
+    var channelNextProgram       by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProgramEntity?>(null) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
@@ -108,6 +110,8 @@ fun WatchlistScreen(
         seriesDialogEpisodes = emptyList()
         seriesDialogSeasons  = emptyList()
         channelDialogEntity  = null
+        channelCurrentProgram = null
+        channelNextProgram    = null
         if (item == null) return@LaunchedEffect
         when (item.type) {
             WatchlistType.MOVIE -> {
@@ -137,7 +141,13 @@ fun WatchlistScreen(
                 }
             }
             WatchlistType.CHANNEL -> {
-                channelDialogEntity = viewModel.getChannelById(item.id)
+                val ch = viewModel.getChannelById(item.id)
+                channelDialogEntity = ch
+                if (ch != null) {
+                    val epgId = ch.epgChannelId ?: ch.id
+                    channelCurrentProgram = viewModel.getCurrentProgram(epgId)
+                    channelNextProgram    = viewModel.getNextProgram(epgId)
+                }
             }
             else -> {}
         }
@@ -425,20 +435,22 @@ fun WatchlistScreen(
             selectedItem.type == WatchlistType.CHANNEL && channelDialogEntity != null -> {
                 val ch = channelDialogEntity!!
                 ChannelDetailsDialog(
-                    channel      = ch,
-                    isBookmarked = true,
-                    onDismiss    = { dialogItem = null },
+                    channel        = ch,
+                    currentProgram = channelCurrentProgram,
+                    nextProgram    = channelNextProgram,
+                    isBookmarked   = true,
+                    onDismiss    = { channelCurrentProgram = null; channelNextProgram = null; dialogItem = null },
                     onWatch      = {
                         onChannelClick(ch.streamUrl, ch.name)
-                        dialogItem = null
+                        channelCurrentProgram = null; channelNextProgram = null; dialogItem = null
                     },
                     onToggleWatchlist = {
                         viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
-                        dialogItem = null
+                        channelCurrentProgram = null; channelNextProgram = null; dialogItem = null
                     },
                     onGoToEpg = {
                         onGoToEpgForChannel(ch.name)
-                        dialogItem = null
+                        channelCurrentProgram = null; channelNextProgram = null; dialogItem = null
                     }
                 )
             }

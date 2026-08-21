@@ -131,4 +131,7 @@ class PlayerViewModel @Inject constructor(
 
     fun getCurrentProgrammeForUrl(channelUrl: String): Flow<ProgramEntity?> =
         repository.getCurrentProgrammeForChannelUrl(channelUrl)
+
+    fun getNextProgrammeForUrl(channelUrl: String): Flow<ProgramEntity?> =
+        repository.getNextProgrammeForChannelUrl(channelUrl)
 }

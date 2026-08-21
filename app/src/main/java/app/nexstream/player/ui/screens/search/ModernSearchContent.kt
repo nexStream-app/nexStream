@@ -180,6 +180,7 @@ fun ModernSearchContent(
                     onChannelClick    = onChannelClick,
                     onMovieClick      = onMovieClick,
                     onSeriesClick     = onSeriesClick,
+                    onPersonClick     = onPersonClick,
                     onCastMovieClick  = onCastMovieClick,
                     onCastSeriesClick = onCastSeriesClick,
                     onProgrammeClick  = onProgrammeClick,
@@ -408,6 +409,7 @@ private fun ModernSearchPanelGrid(
     onChannelClick: (String, String) -> Unit,
     onMovieClick: (MovieEntity) -> Unit,
     onSeriesClick: (SeriesEntity) -> Unit,
+    onPersonClick: (PersonResult) -> Unit = {},
     onCastMovieClick: (MovieEntity) -> Unit = {},
     onCastSeriesClick: (SeriesEntity) -> Unit = {},
     onProgrammeClick: (app.nexstream.player.data.local.entity.ProgramEntity) -> Unit = {},
@@ -435,10 +437,8 @@ private fun ModernSearchPanelGrid(
         "Series"  -> results.series.map { s ->
             GridItem(s.id, s.name, s.posterUrl, if (s.seasonCount > 0) "${s.seasonCount}S" else null, Icons.Default.VideoLibrary) { onSeriesClick(s) }
         }
-        "People"  -> results.peopleMovies.map { m ->
-            GridItem("pm_${m.id}", m.name, m.posterUrl, "MOVIE", Icons.Default.Movie) { onCastMovieClick(m) }
-        } + results.peopleSeries.map { s ->
-            GridItem("ps_${s.id}", s.name, s.posterUrl, "SERIES", Icons.Default.VideoLibrary) { onCastSeriesClick(s) }
+        "People"  -> results.people.map { p ->
+            GridItem("p_${p.name}", p.name, p.imageUrl, null, Icons.Default.Person) { onPersonClick(p) }
         }
         else -> emptyList()
     }
@@ -446,9 +446,10 @@ private fun ModernSearchPanelGrid(
     if (gridItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text     = when (selectedType) {
-                    "People" -> "Search by director or cast member name"
-                    else     -> "No results for \"$query\""
+                text     = when {
+                    selectedType == "People" && query.isBlank() -> "Search by director or cast member name"
+                    selectedType == "People" -> "No people found for \"$query\""
+                    else -> "No results for \"$query\""
                 },
                 fontSize = 14.sp,
                 color    = textSecondary,

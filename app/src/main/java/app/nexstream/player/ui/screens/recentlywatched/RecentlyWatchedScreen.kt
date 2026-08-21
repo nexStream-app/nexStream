@@ -33,12 +33,14 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.MovieEntity
+import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
 import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.ui.components.ContentActionDialog
 import app.nexstream.player.ui.screens.movies.ModernMovieDetailsDialog
 import app.nexstream.player.ui.screens.series.SeriesDetailsDialog
+import app.nexstream.player.ui.screens.watchlist.ChannelDetailsDialog
 import app.nexstream.player.ui.components.ContentCard
 import app.nexstream.player.ui.components.TvKeyboardSheet
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
@@ -78,6 +80,9 @@ fun RecentlyWatchedScreen(
     var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
     var seriesDialogLoading  by remember { mutableStateOf(false) }
     var dialogEntityLoading  by remember { mutableStateOf(false) }
+    var channelDialogEntity  by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
+    var channelCurrentProgram by remember { mutableStateOf<ProgramEntity?>(null) }
+    var channelNextProgram    by remember { mutableStateOf<ProgramEntity?>(null) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
@@ -87,6 +92,9 @@ fun RecentlyWatchedScreen(
         seriesDialogUpdated  = null
         seriesDialogEpisodes = emptyList()
         seriesDialogSeasons  = emptyList()
+        channelDialogEntity  = null
+        channelCurrentProgram = null
+        channelNextProgram    = null
         if (item == null) return@LaunchedEffect
         if (item.type != RecentlyWatchedType.CHANNEL) dialogEntityLoading = true
         when (item.type) {
@@ -118,7 +126,15 @@ fun RecentlyWatchedScreen(
                     seriesDialogLoading = false
                 }
             }
-            else -> {}
+            RecentlyWatchedType.CHANNEL -> {
+                val ch = viewModel.getChannelById(item.id)
+                channelDialogEntity = ch
+                if (ch != null) {
+                    val epgId = ch.epgChannelId ?: ch.id
+                    channelCurrentProgram = viewModel.getCurrentProgram(epgId)
+                    channelNextProgram    = viewModel.getNextProgram(epgId)
+                }
+            }
         }
         dialogEntityLoading = false
     }
@@ -375,6 +391,24 @@ fun RecentlyWatchedScreen(
                     onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
                         onLaunchPlayer(streamUrl, null, episodeId, seriesId, startPos, seriesName, "S${seasonNum}E${episodeNum} - $episodeName")
                         seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
+                    }
+                )
+            }
+            selectedRecent.type == RecentlyWatchedType.CHANNEL && channelDialogEntity != null -> {
+                val ch = channelDialogEntity!!
+                ChannelDetailsDialog(
+                    channel        = ch,
+                    currentProgram = channelCurrentProgram,
+                    nextProgram    = channelNextProgram,
+                    isBookmarked   = false,
+                    onDismiss      = { channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null },
+                    onWatch        = {
+                        onChannelClick(ch.streamUrl, ch.name)
+                        channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null
+                    },
+                    onGoToEpg      = {
+                        onGoToEpgForChannel(ch.name)
+                        channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null
                     }
                 )
             }

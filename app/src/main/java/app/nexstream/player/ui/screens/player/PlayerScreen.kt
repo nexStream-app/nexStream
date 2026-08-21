@@ -271,6 +271,7 @@ fun PlayerScreen(
     var currentProgramme            by remember { mutableStateOf<String?>(null) }
     var currentProgrammeTime        by remember { mutableStateOf<String?>(null) }
     var currentProgrammeDescription by remember { mutableStateOf<String?>(null) }
+    var nextProgramme               by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(channelUrl) {
         if (movieId == null && episodeId == null) {
@@ -283,6 +284,14 @@ fun PlayerScreen(
                 } else {
                     currentProgramme = null; currentProgrammeTime = null; currentProgrammeDescription = null
                 }
+            }
+        }
+    }
+
+    LaunchedEffect(channelUrl) {
+        if (movieId == null && episodeId == null) {
+            viewModel.getNextProgrammeForUrl(channelUrl).collectLatest { programme ->
+                nextProgramme = programme?.title
             }
         }
     }
@@ -1234,6 +1243,32 @@ fun PlayerScreen(
                                 color    = controlText.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(top = 4.dp)
                             )
+                        }
+                        if (nowPlayingSubtitle == null && nextProgramme != null) {
+                            Row(
+                                modifier          = Modifier.padding(top = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = controlText.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text     = "Up Next",
+                                        style    = MaterialTheme.typography.labelSmall,
+                                        color    = controlText.copy(alpha = 0.75f),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    text     = nextProgramme!!,
+                                    style    = MaterialTheme.typography.bodyMedium,
+                                    color    = controlText.copy(alpha = 0.65f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         // Genre pill row (movies)
                         if (movieId != null && movieId != "catchup" && !movieGenre.isNullOrBlank()) {
