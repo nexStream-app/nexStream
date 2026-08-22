@@ -26,13 +26,11 @@ import app.nexstream.player.ui.components.FolderBrowserDialog
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
-import app.nexstream.player.ui.theme.getAutoUpdateEnabledFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
 import app.nexstream.player.ui.theme.getWhisperSubtitlesFlow
 import app.nexstream.player.ui.theme.getWhisperAutostartLiveFlow
 import app.nexstream.player.ui.theme.getAutoLangDetectFlow
 import app.nexstream.player.ui.theme.saveAutoFrameRate
-import app.nexstream.player.ui.theme.saveAutoUpdateEnabled
 import app.nexstream.player.ui.theme.saveSmartBuffer
 import app.nexstream.player.ui.theme.saveWhisperSubtitles
 import app.nexstream.player.ui.theme.saveWhisperAutostartLive
@@ -67,7 +65,6 @@ fun PlayerSettingsScreen(
     val smartBuffer          by context.getSmartBufferFlow().collectAsState(initial = true)
     val whisperSubtitles     by context.getWhisperSubtitlesFlow().collectAsState(initial = false)
     val whisperAutoStartLive by context.getWhisperAutostartLiveFlow().collectAsState(initial = false)
-    val autoUpdateEnabled    by context.getAutoUpdateEnabledFlow().collectAsState(initial = false)
     val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
 
     val adminNotifsEnabled by context.getAdminNotificationsEnabledFlow(profileId).collectAsState(initial = true)
@@ -286,21 +283,6 @@ fun PlayerSettingsScreen(
                     uiStyle = uiStyle,
                     onClick = { showStoragePicker = true },
                     showDivider = false,
-                )
-            }
-
-            // ── Updates ───────────────────────────────────────────────────────
-            SettingsSectionContainer(
-                title = "Updates",
-                icon = Icons.Default.SystemUpdate,
-                uiStyle = uiStyle
-            ) {
-                SettingsToggle(
-                    label = "Auto Update",
-                    description = "Automatically check for and install app updates on startup. Off by default.",
-                    checked = autoUpdateEnabled,
-                    uiStyle = uiStyle,
-                    onToggle = { scope.launch { context.saveAutoUpdateEnabled(!autoUpdateEnabled) } }
                 )
             }
 

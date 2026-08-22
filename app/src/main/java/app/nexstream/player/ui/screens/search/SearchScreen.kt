@@ -520,8 +520,8 @@ private fun SearchAllResults(
         results.movies.isNotEmpty()      -> "movies"
         results.series.isNotEmpty()      -> "series"
         results.people.isNotEmpty()      -> "people"
-        results.peopleMovies.isNotEmpty()-> "pmovies"
-        else                             -> "pseries"
+        results.peopleMovies.isNotEmpty() || results.peopleSeries.isNotEmpty() -> "pcast"
+        else                             -> ""
     }
     val bgColor = MaterialTheme.colorScheme.background
 
@@ -641,11 +641,12 @@ private fun SearchAllResults(
                 }
             }
         }
-        if (results.peopleMovies.isNotEmpty()) {
-            stickyHeader(key = "header_pmovies") {
-                SearchSectionHeader("Movies by cast/director (${results.peopleMovies.size})", bgColor, isFirst = firstSection == "pmovies")
+        if (results.peopleMovies.isNotEmpty() || results.peopleSeries.isNotEmpty()) {
+            val castTotal = results.peopleMovies.size + results.peopleSeries.size
+            stickyHeader(key = "header_pcast") {
+                SearchSectionHeader("By cast/director ($castTotal)", bgColor, isFirst = firstSection == "pcast")
             }
-            item(key = "section_pmovies") {
+            item(key = "section_pcast") {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 4.dp)
@@ -655,29 +656,17 @@ private fun SearchAllResults(
                             name = movie.name,
                             posterUrl = movie.posterUrl,
                             defaultIcon = Icons.Default.Movie,
-                            focusRequester = if (firstSection == "pmovies" && idx == 0) firstFR else null,
+                            focusRequester = if (firstSection == "pcast" && idx == 0) firstFR else null,
                             onFocused = {},
                             onClick = { onCastMovieClick(movie) }
                         )
                     }
-                }
-            }
-        }
-        if (results.peopleSeries.isNotEmpty()) {
-            stickyHeader(key = "header_pseries") {
-                SearchSectionHeader("Series by cast/director (${results.peopleSeries.size})", bgColor, isFirst = firstSection == "pseries")
-            }
-            item(key = "section_pseries") {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 4.dp)
-                ) {
                     itemsIndexed(results.peopleSeries, key = { _, s -> "sps_${s.id}" }) { idx, s ->
                         ContentCard(
                             name = s.name,
                             posterUrl = s.posterUrl,
                             defaultIcon = Icons.Default.VideoLibrary,
-                            focusRequester = if (firstSection == "pseries" && idx == 0) firstFR else null,
+                            focusRequester = if (firstSection == "pcast" && results.peopleMovies.isEmpty() && idx == 0) firstFR else null,
                             onFocused = {},
                             onClick = { onCastSeriesClick(s) }
                         )

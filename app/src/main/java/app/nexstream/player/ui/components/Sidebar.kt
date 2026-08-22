@@ -1266,7 +1266,7 @@ private fun SettingsPanel(
             add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,   appearanceFR))
             add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups, channelGroupsFR))
             add(SettingsEntry("Player",         AppRoute.SettingsPlayer,       playerFR))
-            if (showSyncSettings) add(SettingsEntry("Sync", AppRoute.SettingsSyncSettings, syncFR))
+            if (showSyncSettings) add(SettingsEntry("Sync and Update", AppRoute.SettingsSyncSettings, syncFR))
             add(SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR))
             add(SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR))
             add(SettingsEntry("Profiles",     AppRoute.SettingsProfiles,   profilesFR))

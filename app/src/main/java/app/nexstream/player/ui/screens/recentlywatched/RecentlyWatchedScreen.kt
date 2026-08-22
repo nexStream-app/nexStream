@@ -68,6 +68,7 @@ fun RecentlyWatchedScreen(
     viewModel: RecentlyWatchedViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val nsTheme = LocalNexStreamTheme.current
     val sTheme = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
@@ -86,13 +87,14 @@ fun RecentlyWatchedScreen(
     var seriesDialogSeasons     by remember { mutableStateOf<List<Int>>(emptyList()) }
     var seriesDialogLoading     by remember { mutableStateOf(false) }
     var seriesDialogProgressMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-    var dialogEntityLoading     by remember { mutableStateOf(false) }
+    var dialogLoadedForItem     by remember { mutableStateOf<String?>(null) }
     var channelDialogEntity     by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
     var channelCurrentProgram   by remember { mutableStateOf<ProgramEntity?>(null) }
     var channelNextProgram      by remember { mutableStateOf<ProgramEntity?>(null) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
+        dialogLoadedForItem     = null
         movieDialogEntity       = null
         movieDialogUpdated      = null
         movieResumePosition     = 0L
@@ -105,7 +107,6 @@ fun RecentlyWatchedScreen(
         channelCurrentProgram   = null
         channelNextProgram      = null
         if (item == null) return@LaunchedEffect
-        if (item.type != RecentlyWatchedType.CHANNEL) dialogEntityLoading = true
         when (item.type) {
             RecentlyWatchedType.MOVIE -> {
                 val movieId = item.movieId ?: item.id
@@ -147,7 +148,7 @@ fun RecentlyWatchedScreen(
                 }
             }
         }
-        dialogEntityLoading = false
+        dialogLoadedForItem = item.id
     }
 
     var searchQuery    by remember { mutableStateOf("") }
@@ -360,7 +361,7 @@ fun RecentlyWatchedScreen(
     }
 
     val selectedRecent = dialogItem
-    if (selectedRecent != null && !dialogEntityLoading) {
+    if (selectedRecent != null && dialogLoadedForItem == selectedRecent.id) {
         val movie  = movieDialogEntity
         val series = seriesDialogEntity
 
@@ -399,6 +400,7 @@ fun RecentlyWatchedScreen(
             selectedRecent.type == RecentlyWatchedType.EPISODE && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
                 val isSeriesBookmarked = displaySeries.id in watchlistIds
+                val recentProfileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default"
                 SeriesDetailsDialog(
                     series             = displaySeries,
                     episodes           = seriesDialogEpisodes,
@@ -406,6 +408,9 @@ fun RecentlyWatchedScreen(
                     episodeProgressMap = seriesDialogProgressMap,
                     isLoading          = seriesDialogLoading,
                     isBookmarked       = isSeriesBookmarked,
+                    onDownloadEpisode  = { url, title ->
+                        app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, url, title, recentProfileId)
+                    },
                     onDismiss          = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
                     onToggleWatchlist  = {
                         watchlistViewModel.toggleWatchlist(

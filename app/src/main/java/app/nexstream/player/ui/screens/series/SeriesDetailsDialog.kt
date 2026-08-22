@@ -1033,7 +1033,6 @@ function onYouTubeIframeAPIReady(){
                                     .onFocusChanged { fs ->
                                         if (fs.isFocused && inGrid) {
                                             focusedGridIndex = index
-                                            infoBarState = InfoBarState.Idle
                                         }
                                     }
                                     .clickable {

@@ -28,6 +28,8 @@ import app.nexstream.player.data.sync.ProfileSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
+import app.nexstream.player.ui.theme.getAutoUpdateEnabledFlow
+import app.nexstream.player.ui.theme.saveAutoUpdateEnabled
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,9 +171,11 @@ fun SyncSettingsScreen(
     val uiStyle  = rememberUiStyle()
 
     val uiState by viewModel.uiState.collectAsState()
+    val autoUpdateEnabled by context.getAutoUpdateEnabledFlow().collectAsState(initial = false)
 
     val firstFR   = firstItemFocusRequester ?: remember { FocusRequester() }
     val syncBtnFR = remember { FocusRequester() }
+    val scope     = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiStyle != UiStyle.MODERN) {
@@ -179,7 +183,7 @@ fun SyncSettingsScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Sync", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text("Sync and Update", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -191,15 +195,26 @@ fun SyncSettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // ── Auto Update ───────────────────────────────────────────────────
+            SettingsSectionContainer(title = "Updates", icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
+                SettingsToggle(
+                    label          = "Auto Update",
+                    description    = "Automatically check for and install app updates on startup. Off by default.",
+                    checked        = autoUpdateEnabled,
+                    uiStyle        = uiStyle,
+                    focusRequester = firstFR,
+                    onToggle       = { scope.launch { context.saveAutoUpdateEnabled(!autoUpdateEnabled) } },
+                )
+            }
+
             // ── Cloud Sync section ────────────────────────────────────────────
             SettingsSectionContainer(title = "Cloud Sync", icon = Icons.Default.Cloud, uiStyle = uiStyle) {
                 SettingsToggle(
-                    label          = "Cloud Sync",
-                    description    = "Sync data to nexstream.uk across your devices. Turn off to keep all data on this device only.",
-                    checked        = uiState.syncCloudEnabled,
-                    uiStyle        = uiStyle,
-                    onToggle       = { viewModel.setSyncCloudEnabled(!uiState.syncCloudEnabled, context) },
-                    focusRequester = firstFR,
+                    label       = "Cloud Sync",
+                    description = "Sync data to nexstream.uk across your devices. Turn off to keep all data on this device only.",
+                    checked     = uiState.syncCloudEnabled,
+                    uiStyle     = uiStyle,
+                    onToggle    = { viewModel.setSyncCloudEnabled(!uiState.syncCloudEnabled, context) },
                 )
 
                 if (uiState.syncCloudEnabled) {
