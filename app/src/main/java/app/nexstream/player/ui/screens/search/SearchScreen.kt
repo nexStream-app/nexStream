@@ -713,10 +713,10 @@ private fun SearchPanelGrid(
                     onProgrammeClick(prog)
                 }
             }
-            "Movies" -> results.movies.map { m ->
+            "Movies" -> (results.movies + results.peopleMovies).distinctBy { it.id }.map { m ->
                 GridItem(m.id, m.name, m.posterUrl, null, Icons.Default.Movie) { onMovieClick(m) }
             }
-            "Series" -> results.series.map { s ->
+            "Series" -> (results.series + results.peopleSeries).distinctBy { it.id }.map { s ->
                 GridItem(s.id, s.name, s.posterUrl, if (s.seasonCount > 0) "${s.seasonCount}S" else null, Icons.Default.VideoLibrary) { onSeriesClick(s) }
             }
             "People" -> results.people.map { p ->

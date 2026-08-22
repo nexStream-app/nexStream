@@ -3,6 +3,10 @@ package app.nexstream.player.ui.screens.playlist
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.content.pm.PackageManager
+import android.os.Environment
+import android.provider.DocumentsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -58,6 +62,27 @@ import org.json.JSONObject
 import java.net.URL
 import javax.inject.Inject
 import androidx.compose.ui.input.key.*
+
+private fun treeUriToPath(context: android.content.Context, uri: android.net.Uri): String? = try {
+    val docId = DocumentsContract.getTreeDocumentId(uri)
+    val split = docId.split(":")
+    val type = split[0]
+    val rel  = split.getOrElse(1) { "" }
+    when {
+        type.equals("primary", ignoreCase = true) ->
+            Environment.getExternalStorageDirectory().path + if (rel.isNotEmpty()) "/$rel" else ""
+        type.equals("home", ignoreCase = true) ->
+            Environment.getExternalStorageDirectory().path + if (rel.isNotEmpty()) "/$rel" else ""
+        else -> {
+            context.getExternalFilesDirs(null)
+                .filterNotNull()
+                .firstOrNull { it.absolutePath.contains("/$type/") }
+                ?.absolutePath
+                ?.substringBefore("/$type/")
+                ?.let { base -> "$base/$type" + if (rel.isNotEmpty()) "/$rel" else "" }
+        }
+    }
+} catch (_: Exception) { null }
 
 // -- Device type detection -----------------------------------------------------
 
@@ -345,6 +370,15 @@ fun AddPlaylistScreen(
     var deviceSubfolders by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
 
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val path = treeUriToPath(context, uri) ?: uri.toString()
+            devicePath = path
+        }
+    }
+
     val importStarted = viewModel.importStarted
     if (importStarted) {
         PlaylistImportProgressScreen(viewModel = viewModel, onDone = onBack)
@@ -451,6 +485,7 @@ fun AddPlaylistScreen(
                     deviceLabel       = deviceLabel,
                     includeSubfolders = deviceSubfolders,
                     onIncludeSubfoldersChange = { deviceSubfolders = it },
+                    onPickFolder       = if (!isTv) ({ folderPickerLauncher.launch(null) }) else null,
                     onPathFocusSelect  = { openKeyboard("devicePath",  devicePath)  },
                     onLabelFocusSelect = { openKeyboard("deviceLabel", deviceLabel) },
                     onPathChange       = { devicePath  = it },
@@ -924,6 +959,7 @@ private fun DeviceTab(
     deviceLabel: String,
     includeSubfolders: Boolean,
     onIncludeSubfoldersChange: (Boolean) -> Unit,
+    onPickFolder: (() -> Unit)? = null,
     onPathFocusSelect: () -> Unit,
     onLabelFocusSelect: () -> Unit,
     onPathChange: (String) -> Unit,
@@ -938,14 +974,39 @@ private fun DeviceTab(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(Modifier.height(4.dp))
-    InputField(
-        isTv          = isTv,
-        label         = "Folder Path",
-        value         = devicePath,
-        placeholder   = "/sdcard/Movies",
-        onValueChange = onPathChange,
-        onFocusSelect = onPathFocusSelect
-    )
+    if (onPickFolder != null) {
+        // Mobile: system folder picker button
+        OutlinedButton(
+            onClick  = onPickFolder,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (devicePath.isBlank()) "Select Folder"
+                       else devicePath.substringAfterLast('/').ifEmpty { devicePath },
+                maxLines = 1
+            )
+        }
+        if (devicePath.isNotBlank()) {
+            Text(
+                text  = devicePath,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+    } else {
+        // TV: keyboard-based path input
+        InputField(
+            isTv          = isTv,
+            label         = "Folder Path",
+            value         = devicePath,
+            placeholder   = "/sdcard/Movies",
+            onValueChange = onPathChange,
+            onFocusSelect = onPathFocusSelect
+        )
+    }
     InputField(
         isTv          = isTv,
         label         = "Label (optional)",
@@ -966,7 +1027,7 @@ private fun DeviceTab(
     }
     FormButtons(
         isLoading    = false,
-        errorMessage = if (devicePath.isBlank()) null else null,
+        errorMessage = null,
         isValid      = devicePath.isNotBlank(),
         onBack       = onCancel,
         cancelLabel  = cancelLabel,

@@ -1276,17 +1276,17 @@ private fun SettingsPanel(
 
     val entries = remember(showSyncSettings) {
         buildList {
-            add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,    playlistsFR))
-            add(SettingsEntry("Sports Guide",   AppRoute.SettingsSports,       sportsFR))
-            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,   appearanceFR))
-            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups, channelGroupsFR))
-            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,       playerFR))
+            add(SettingsEntry("About",          AppRoute.SettingsAbout,          aboutFR))
+            add(SettingsEntry("Account",        AppRoute.SettingsAccount,        accountFR))
+            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,     appearanceFR))
+            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups,  channelGroupsFR))
+            add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
+            add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
+            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))
+            add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,      playlistsFR))
+            add(SettingsEntry("Profiles",       AppRoute.SettingsProfiles,       profilesFR))
+            add(SettingsEntry("Sports Guide",   AppRoute.SettingsSports,         sportsFR))
             if (showSyncSettings) add(SettingsEntry("Sync and Update", AppRoute.SettingsSyncSettings, syncFR))
-            add(SettingsEntry("Licence",      AppRoute.SettingsLicence,    licenceFR))
-            add(SettingsEntry("Account",      AppRoute.SettingsAccount,    accountFR))
-            add(SettingsEntry("Profiles",     AppRoute.SettingsProfiles,   profilesFR))
-            add(SettingsEntry("Navigation",   AppRoute.SettingsNavigation, navigationFR))
-            add(SettingsEntry("About",        AppRoute.SettingsAbout,      aboutFR))
         }
     }
 

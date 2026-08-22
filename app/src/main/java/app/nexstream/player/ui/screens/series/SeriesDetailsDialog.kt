@@ -882,26 +882,38 @@ function onYouTubeIframeAPIReady(){
                             }
                         }
                         is InfoBarState.ResumeChoice -> {
+                            val ep = focusedEpisode
                             Row(
                                 modifier              = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment     = Alignment.CenterVertically,
                             ) {
-                                OverlayButton("↺  Start Over", overlayButton == 0) {}
-                                OverlayButton("▶  Resume",    overlayButton == 1) {}
+                                OverlayButton("↺  Start Over", overlayButton == 0) {
+                                    if (ep != null) { overlayButton = 0; playEp(ep, fromStart = true) }
+                                }
+                                OverlayButton("▶  Resume",    overlayButton == 1) {
+                                    if (ep != null) { overlayButton = 1; playEp(ep, fromStart = false) }
+                                }
                                 if (onDownloadEpisode != null)
-                                    OverlayButton("⬇  Download", overlayButton == 2) {}
+                                    OverlayButton("⬇  Download", overlayButton == 2) {
+                                        if (ep != null) { overlayButton = 2; startDownloadFlow(ep) }
+                                    }
                             }
                         }
                         is InfoBarState.PlayChoice -> {
+                            val ep = focusedEpisode
                             Row(
                                 modifier              = Modifier.align(Alignment.Center),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment     = Alignment.CenterVertically,
                             ) {
-                                OverlayButton("▶  Play", overlayButton == 0) {}
+                                OverlayButton("▶  Play", overlayButton == 0) {
+                                    if (ep != null) { overlayButton = 0; playEp(ep, fromStart = true) }
+                                }
                                 if (onDownloadEpisode != null)
-                                    OverlayButton("⬇  Download", overlayButton == 1) {}
+                                    OverlayButton("⬇  Download", overlayButton == 1) {
+                                        if (ep != null) { overlayButton = 1; startDownloadFlow(ep) }
+                                    }
                             }
                         }
                         is InfoBarState.CheckingSize -> {
@@ -930,8 +942,15 @@ function onYouTubeIframeAPIReady(){
                                     },
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OverlayButton("Cancel",   overlayButton == 0) {}
-                                    OverlayButton("Download", overlayButton == 1, enabled = !state.notEnough) {}
+                                    OverlayButton("Cancel",   overlayButton == 0) { infoBarState = InfoBarState.Idle }
+                                    OverlayButton("Download", overlayButton == 1, enabled = !state.notEnough) {
+                                        val ep = focusedEpisode
+                                        if (state.lowAfter) infoBarState = InfoBarState.LowSpaceWarning
+                                        else if (!state.notEnough && ep != null) {
+                                            onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum} E${ep.episodeNum}")
+                                            infoBarState = InfoBarState.Idle
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -949,8 +968,12 @@ function onYouTubeIframeAPIReady(){
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OverlayButton("Cancel",          overlayButton == 0) {}
-                                    OverlayButton("Continue Anyway", overlayButton == 1) {}
+                                    OverlayButton("Cancel",          overlayButton == 0) { infoBarState = InfoBarState.Idle }
+                                    OverlayButton("Continue Anyway", overlayButton == 1) {
+                                        val ep = focusedEpisode
+                                        if (ep != null) onDownloadEpisode?.invoke(ep.streamUrl, "${series.name} S${ep.seasonNum} E${ep.episodeNum}")
+                                        infoBarState = InfoBarState.Idle
+                                    }
                                 }
                             }
                         }

@@ -237,69 +237,35 @@ fun PeopleDetailsDialog(
                     )
                 }
 
-                // Known for section — two rows: Movies and TV/Series
+                // Known for section — single alphabetical row
                 if (!isLoading && detail?.knownForCredits?.isNotEmpty() == true) {
-                    val movieCredits = remember(detail) { detail.knownForCredits.filter { it.mediaType != "tv" } }
-                    val tvCredits    = remember(detail) { detail.knownForCredits.filter { it.mediaType == "tv" } }
+                    val allCredits = remember(detail) { detail.knownForCredits.sortedBy { it.title } }
 
                     Column(
                         modifier            = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (movieCredits.isNotEmpty()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text       = "Movies (${movieCredits.size})",
-                                    fontSize   = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color      = accent,
-                                    modifier   = Modifier.padding(start = 28.dp)
+                        Text(
+                            text       = "Known for (${allCredits.size})",
+                            fontSize   = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = accent,
+                            modifier   = Modifier.padding(start = 28.dp)
+                        )
+                        LazyRow(
+                            contentPadding        = PaddingValues(horizontal = 28.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier              = Modifier.fillMaxWidth()
+                        ) {
+                            itemsIndexed(allCredits, key = { idx, credit -> "${credit.id}_$idx" }) { idx, credit ->
+                                ContentCard(
+                                    name           = credit.title,
+                                    posterUrl      = credit.posterUrl,
+                                    defaultIcon    = if (credit.mediaType == "tv") Icons.Default.Tv else Icons.Default.Movie,
+                                    focusRequester = if (idx == 0) creditsFR else null,
+                                    onFocused      = { if (zone != 1) zone = 1 },
+                                    onClick        = { onCreditClick(credit.localMovie, credit.localSeries) }
                                 )
-                                LazyRow(
-                                    contentPadding        = PaddingValues(horizontal = 28.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    modifier              = Modifier.fillMaxWidth()
-                                ) {
-                                    itemsIndexed(movieCredits, key = { idx, credit -> "mov_${credit.id}_$idx" }) { idx, credit ->
-                                        ContentCard(
-                                            name           = credit.title,
-                                            posterUrl      = credit.posterUrl,
-                                            defaultIcon    = Icons.Default.Movie,
-                                            focusRequester = if (idx == 0) creditsFR else null,
-                                            onFocused      = { if (zone != 1) zone = 1 },
-                                            onClick        = { onCreditClick(credit.localMovie, credit.localSeries) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (tvCredits.isNotEmpty()) {
-                            val tvFR = remember { FocusRequester() }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text       = "Series (${tvCredits.size})",
-                                    fontSize   = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color      = accent,
-                                    modifier   = Modifier.padding(start = 28.dp)
-                                )
-                                LazyRow(
-                                    contentPadding        = PaddingValues(horizontal = 28.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    modifier              = Modifier.fillMaxWidth()
-                                ) {
-                                    itemsIndexed(tvCredits, key = { idx, credit -> "tv_${credit.id}_$idx" }) { idx, credit ->
-                                        ContentCard(
-                                            name           = credit.title,
-                                            posterUrl      = credit.posterUrl,
-                                            badge          = "TV",
-                                            defaultIcon    = Icons.Default.Tv,
-                                            focusRequester = if (idx == 0 && movieCredits.isEmpty()) creditsFR else if (idx == 0) tvFR else null,
-                                            onFocused      = { if (zone != 1) zone = 1 },
-                                            onClick        = { onCreditClick(credit.localMovie, credit.localSeries) }
-                                        )
-                                    }
-                                }
                             }
                         }
                         Spacer(Modifier.height(4.dp))

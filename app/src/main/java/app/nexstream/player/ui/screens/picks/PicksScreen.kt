@@ -656,21 +656,22 @@ private fun PickCard(
                 .padding(6.dp)
         )
 
-        // Type badge
-        Surface(
-            modifier  = Modifier.align(Alignment.TopStart).padding(4.dp),
-            shape     = RoundedCornerShape(4.dp),
-            color     = if (pick.mediaType == "movie") primary.copy(alpha = 0.85f)
-                        else MaterialTheme.colorScheme.secondary.copy(alpha = 0.85f),
-            tonalElevation = 0.dp
-        ) {
-            Text(
-                text     = if (pick.mediaType == "movie") "MOVIE" else "TV",
-                style    = MaterialTheme.typography.labelSmall,
-                color    = MaterialTheme.colorScheme.onPrimary,
-                fontSize = 8.sp,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-            )
+        // Type badge — TV only, movie badge removed
+        if (pick.mediaType != "movie") {
+            Surface(
+                modifier  = Modifier.align(Alignment.TopStart).padding(4.dp),
+                shape     = RoundedCornerShape(4.dp),
+                color     = MaterialTheme.colorScheme.secondary.copy(alpha = 0.85f),
+                tonalElevation = 0.dp
+            ) {
+                Text(
+                    text     = "TV",
+                    style    = MaterialTheme.typography.labelSmall,
+                    color    = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = 8.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }
