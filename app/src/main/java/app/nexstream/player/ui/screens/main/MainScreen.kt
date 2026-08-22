@@ -73,6 +73,8 @@ import app.nexstream.player.ui.screens.home.HomePageViewModel
 import app.nexstream.player.ui.screens.home.ModernHomeScreen
 import app.nexstream.player.ui.screens.music.MusicScreen
 import app.nexstream.player.ui.screens.music.MusicViewModel
+import app.nexstream.player.ui.screens.device.DeviceScreen
+import app.nexstream.player.ui.screens.device.DeviceViewModel
 import app.nexstream.player.ui.screens.picks.PickItem
 import app.nexstream.player.ui.screens.picks.PicksScreen
 import app.nexstream.player.ui.screens.picks.PicksViewModel
@@ -122,6 +124,7 @@ fun MainScreen(
     watchlistViewModel: WatchlistViewModel = hiltViewModel(),
     homePageViewModel: HomePageViewModel = hiltViewModel(),
     musicViewModel: MusicViewModel = hiltViewModel(),
+    deviceViewModel: DeviceViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val uiStyle = LocalUiStyle.current
@@ -235,6 +238,9 @@ fun MainScreen(
     val vodRestricted     = accessState == AppAccessState.TRIAL_EXPIRED
     val xtreamPlaylist = remember(settingsPlaylists) { settingsPlaylists.firstOrNull { it.type == "XTREAM" } }
     val hasJellyfinPlaylist = remember(settingsPlaylists) { settingsPlaylists.any { it.type == "JELLYFIN" } }
+    val hasDeviceFolders by deviceViewModel.hasDeviceFolders.collectAsState()
+    val deviceDates      by deviceViewModel.deviceDates.collectAsState()
+    var selectedDeviceDate by rememberSaveable { mutableStateOf<String?>(null) }
     val musicArtists by musicViewModel.artists.collectAsState()
     val musicCategories = remember(musicArtists) {
         buildList { add("Queue"); addAll(musicArtists) }
@@ -760,6 +766,7 @@ fun MainScreen(
                 selectedRecentType = selectedRecentType, showRecentSearch = showRecentSearch,
                 showRecentClearConfirm = showRecentClearConfirm, selectedPicksCategory = selectedPicksCategory,
                 selectedMusicCategory = selectedMusicCategory,
+                selectedDeviceDate    = selectedDeviceDate,
                 hasJellyfinPlaylist = hasJellyfinPlaylist,
                 currentChannelUrl = currentChannelUrl, currentMovieId = currentMovieId,
                 currentEpisodeId = currentEpisodeId, currentSeriesId = currentSeriesId,
@@ -870,6 +877,10 @@ fun MainScreen(
                 sportsCategories      = sportsCategories,
                 selectedSportsCategory = selectedSportsCategory,
                 hasJellyfinPlaylist   = hasJellyfinPlaylist,
+                hasDeviceFolders      = hasDeviceFolders,
+                deviceDates           = deviceDates,
+                selectedDeviceDate    = selectedDeviceDate,
+                onDeviceDateSelected  = { selectedDeviceDate = it },
                 musicCategories       = musicCategories,
                 selectedMusicCategory = selectedMusicCategory,
                 onMusicCategorySelected = { cat ->
@@ -1226,6 +1237,10 @@ private fun ClassicMainLayout(
     sportsCategories: List<String>,
     selectedSportsCategory: String?,
     hasJellyfinPlaylist: Boolean,
+    hasDeviceFolders: Boolean,
+    deviceDates: List<String>,
+    selectedDeviceDate: String?,
+    onDeviceDateSelected: (String?) -> Unit,
     musicCategories: List<String>,
     selectedMusicCategory: String?,
     onMusicCategorySelected: (String?) -> Unit,
@@ -1497,6 +1512,10 @@ private fun ClassicMainLayout(
                 selectedSportsCategory   = selectedSportsCategory,
                 onSportsCategorySelected = { onSelectSportCategory(it) },
                 hasJellyfinPlaylist      = hasJellyfinPlaylist,
+                hasDeviceFolders         = hasDeviceFolders,
+                deviceDates              = deviceDates,
+                selectedDeviceDate       = selectedDeviceDate,
+                onDeviceDateSelected     = onDeviceDateSelected,
                 musicCategories          = musicCategories,
                 selectedMusicCategory    = selectedMusicCategory,
                 onMusicCategorySelected  = onMusicCategorySelected,
@@ -1557,6 +1576,7 @@ private fun ClassicMainLayout(
             showRecentClearConfirm = showRecentClearConfirm,
             selectedPicksCategory = selectedPicksCategory,
             selectedMusicCategory = selectedMusicCategory,
+            selectedDeviceDate    = selectedDeviceDate,
             hasJellyfinPlaylist   = hasJellyfinPlaylist,
             showPlayer            = showPlayer,
             currentChannelUrl     = currentChannelUrl,
@@ -1728,6 +1748,7 @@ private fun MainContentArea(
     showRecentClearConfirm: Boolean,
     selectedPicksCategory: String?,
     selectedMusicCategory: String?,
+    selectedDeviceDate: String?,
     hasJellyfinPlaylist: Boolean,
     // Player state
     showPlayer: Boolean,
@@ -2066,6 +2087,12 @@ private fun MainContentArea(
                 onBack           = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
                 isContentFocused = zone == Zone.CONTENT,
             )
+            AppRoute.Device -> DeviceScreen(
+                selectedDateKey         = selectedDeviceDate,
+                firstItemFocusRequester = contentFR,
+                isContentFocused        = zone == Zone.CONTENT,
+                onPlayerLaunch          = onPlayerLaunch,
+            )
             else -> Unit
         }
 
@@ -2152,6 +2179,7 @@ private fun ModernMainLayout(
     showRecentClearConfirm: Boolean,
     selectedPicksCategory: String?,
     selectedMusicCategory: String?,
+    selectedDeviceDate: String?,
     hasJellyfinPlaylist: Boolean,
     currentChannelUrl: String,
     currentMovieId: String?,
@@ -2357,6 +2385,7 @@ private fun ModernMainLayout(
             showRecentClearConfirm = showRecentClearConfirm,
             selectedPicksCategory = selectedPicksCategory,
             selectedMusicCategory = selectedMusicCategory,
+            selectedDeviceDate    = selectedDeviceDate,
             hasJellyfinPlaylist   = hasJellyfinPlaylist,
             showPlayer            = showPlayer,
             currentChannelUrl     = currentChannelUrl,

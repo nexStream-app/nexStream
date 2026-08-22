@@ -40,6 +40,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nexstream.player.data.local.dao.DeviceFolderDao
+import app.nexstream.player.data.local.entity.DeviceFolderEntity
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.license.LicenceManager
 import app.nexstream.player.ui.components.TvKeyboard
@@ -91,7 +93,8 @@ sealed class MacPollState {
 @HiltViewModel
 class AddPlaylistViewModel @Inject constructor(
     private val repository: PlaylistRepository,
-    private val licenceManager: LicenceManager
+    private val licenceManager: LicenceManager,
+    private val deviceFolderDao: DeviceFolderDao,
 ) : ViewModel() {
 
     var isLoading        by mutableStateOf(false); private set
@@ -271,6 +274,19 @@ class AddPlaylistViewModel @Inject constructor(
         }
     }
 
+    fun addDeviceFolder(path: String, label: String, includeSubfolders: Boolean) {
+        viewModelScope.launch {
+            val id = java.util.UUID.randomUUID().toString()
+            deviceFolderDao.insert(DeviceFolderEntity(
+                id                = id,
+                path              = path.trim(),
+                label             = label.trim().ifEmpty { path.trim().substringAfterLast('/') },
+                includeSubfolders = includeSubfolders,
+                createdAt         = System.currentTimeMillis(),
+            ))
+        }
+    }
+
     fun addPlexServer() {
         val server = plexSelectedServer ?: return
         val token  = plexToken ?: return
@@ -324,6 +340,9 @@ fun AddPlaylistScreen(
     var jfHost     by remember { mutableStateOf("") }
     var jfUsername by remember { mutableStateOf("") }
     var jfPassword by remember { mutableStateOf("") }
+    var devicePath  by remember { mutableStateOf("") }
+    var deviceLabel by remember { mutableStateOf("") }
+    var deviceSubfolders by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
 
     val importStarted = viewModel.importStarted
@@ -343,9 +362,11 @@ fun AddPlaylistScreen(
             "password"   -> password   = keyboardValue
             "m3uName"    -> m3uName    = keyboardValue
             "m3uUrl"     -> m3uUrl     = keyboardValue
-            "jfHost"     -> jfHost     = keyboardValue
-            "jfUsername" -> jfUsername = keyboardValue
-            "jfPassword" -> jfPassword = keyboardValue
+            "jfHost"      -> jfHost       = keyboardValue
+            "jfUsername"  -> jfUsername   = keyboardValue
+            "jfPassword"  -> jfPassword   = keyboardValue
+            "devicePath"  -> devicePath   = keyboardValue
+            "deviceLabel" -> deviceLabel  = keyboardValue
         }
         showKeyboard = false
     }
@@ -357,7 +378,7 @@ fun AddPlaylistScreen(
 
         // -- Tabs + forms ------------------------------------------------------
         TabRow(selectedTabIndex = selectedTab) {
-            listOf("Xtream Codes", "M3U URL", "Jellyfin", "Plex").forEachIndexed { i, title ->
+            listOf("Xtream Codes", "M3U URL", "Jellyfin", "Plex", "Device").forEachIndexed { i, title ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i },
                     text = { Text(title, fontSize = 13.sp) })
             }
@@ -416,12 +437,30 @@ fun AddPlaylistScreen(
                     onBack = onCancel, cancelLabel = cancelLabel,
                     onSubmit = { viewModel.addJellyfinPlaylist(jfHost, jfUsername, jfPassword) }
                 )
-            } else {
+            } else if (selectedTab == 3) {
                 PlexTab(
                     viewModel = viewModel,
                     deviceId  = deviceId,
                     onCancel  = onCancel,
                     cancelLabel = cancelLabel
+                )
+            } else {
+                DeviceTab(
+                    isTv              = isTv,
+                    devicePath        = devicePath,
+                    deviceLabel       = deviceLabel,
+                    includeSubfolders = deviceSubfolders,
+                    onIncludeSubfoldersChange = { deviceSubfolders = it },
+                    onPathFocusSelect  = { openKeyboard("devicePath",  devicePath)  },
+                    onLabelFocusSelect = { openKeyboard("deviceLabel", deviceLabel) },
+                    onPathChange       = { devicePath  = it },
+                    onLabelChange      = { deviceLabel = it },
+                    onCancel           = onCancel,
+                    cancelLabel        = cancelLabel,
+                    onSubmit           = {
+                        viewModel.addDeviceFolder(devicePath, deviceLabel, deviceSubfolders)
+                        onCancel()
+                    },
                 )
             }
 
@@ -874,6 +913,65 @@ private fun QrDialog(deviceId: String, onDismiss: () -> Unit, onPlaylistDetected
             }
         }
     }
+}
+
+// -- Device tab ----------------------------------------------------------------
+
+@Composable
+private fun DeviceTab(
+    isTv: Boolean,
+    devicePath: String,
+    deviceLabel: String,
+    includeSubfolders: Boolean,
+    onIncludeSubfoldersChange: (Boolean) -> Unit,
+    onPathFocusSelect: () -> Unit,
+    onLabelFocusSelect: () -> Unit,
+    onPathChange: (String) -> Unit,
+    onLabelChange: (String) -> Unit,
+    onCancel: () -> Unit,
+    cancelLabel: String,
+    onSubmit: () -> Unit,
+) {
+    Text(
+        "Add a local folder on this device to browse video files.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(Modifier.height(4.dp))
+    InputField(
+        isTv          = isTv,
+        label         = "Folder Path",
+        value         = devicePath,
+        placeholder   = "/sdcard/Movies",
+        onValueChange = onPathChange,
+        onFocusSelect = onPathFocusSelect
+    )
+    InputField(
+        isTv          = isTv,
+        label         = "Label (optional)",
+        value         = deviceLabel,
+        placeholder   = "My Videos",
+        onValueChange = onLabelChange,
+        onFocusSelect = onLabelFocusSelect
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text("Include subfolders", style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = includeSubfolders, onCheckedChange = onIncludeSubfoldersChange)
+    }
+    FormButtons(
+        isLoading    = false,
+        errorMessage = if (devicePath.isBlank()) null else null,
+        isValid      = devicePath.isNotBlank(),
+        onBack       = onCancel,
+        cancelLabel  = cancelLabel,
+        onSubmit     = onSubmit
+    )
 }
 
 // -- InputField ----------------------------------------------------------------

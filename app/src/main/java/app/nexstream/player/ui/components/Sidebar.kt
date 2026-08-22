@@ -125,12 +125,16 @@ fun Sidebar(
     onMusicCategorySelected: (String?) -> Unit = {},
     showSyncSettings: Boolean = true,
     channelGroups: List<ChannelGroupEntity> = emptyList(),
+    hasDeviceFolders: Boolean = false,
+    deviceDates: List<String> = emptyList(),
+    selectedDeviceDate: String? = null,
+    onDeviceDateSelected: (String?) -> Unit = {},
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
     val gTheme  = nsTheme.global
 
-    val categories = remember(expandedRoute, guideCategories, movieCategories, seriesCategories, picksCategories, sportsCategories, musicCategories, hasJellyfinPlaylist) {
+    val categories = remember(expandedRoute, guideCategories, movieCategories, seriesCategories, picksCategories, sportsCategories, musicCategories, hasJellyfinPlaylist, deviceDates) {
         when (expandedRoute) {
             AppRoute.Home      -> sportsCategories
             AppRoute.Guide     -> guideCategories
@@ -147,6 +151,7 @@ fun Sidebar(
             AppRoute.Downloads -> listOf("Active", "Completed", "Failed")
             AppRoute.Picks     -> picksCategories
             AppRoute.Music     -> musicCategories
+            AppRoute.Device    -> deviceDates
             else               -> emptyList()
         }
     }
@@ -163,6 +168,7 @@ fun Sidebar(
         AppRoute.Downloads -> selectedDownloadsType
         AppRoute.Picks     -> selectedPicksCategory
         AppRoute.Music     -> selectedMusicCategory
+        AppRoute.Device    -> selectedDeviceDate
         else               -> null
     }
     val onCategorySelected: (String?) -> Unit = when (expandedRoute) {
@@ -178,6 +184,7 @@ fun Sidebar(
         AppRoute.Downloads -> onDownloadsTypeSelected
         AppRoute.Picks     -> onPicksCategorySelected
         AppRoute.Music     -> onMusicCategorySelected
+        AppRoute.Device    -> onDeviceDateSelected
         else               -> ({})
     }
 
@@ -241,6 +248,7 @@ fun Sidebar(
                 trialDaysLeft      = trialDaysLeft,
                 vodRestricted      = vodRestricted,
                 hasJellyfinPlaylist = hasJellyfinPlaylist,
+                hasDeviceFolders    = hasDeviceFolders,
             )
         }
 
@@ -319,6 +327,7 @@ fun Sidebar(
                             AppRoute.MyList    -> "My List"
                             AppRoute.Downloads -> "Downloads"
                             AppRoute.Picks     -> "Picks"
+                            AppRoute.Device    -> "Device"
                             else               -> "Categories"
                         },
                         isAndroidTV           = isAndroidTV,
@@ -362,6 +371,7 @@ private fun MainMenu(
     trialDaysLeft: Int,
     vodRestricted: Boolean = false,
     hasJellyfinPlaylist: Boolean = false,
+    hasDeviceFolders: Boolean = false,
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme  = nsTheme.sidebar
@@ -374,6 +384,7 @@ private fun MainMenu(
     val catchupFocus     = remember { FocusRequester() }
     val picksFocus       = remember { FocusRequester() }
     val musicFocus       = remember { FocusRequester() }
+    val deviceFocus      = remember { FocusRequester() }
     val searchFocus      = remember { FocusRequester() }
     val mylistFocus      = remember { FocusRequester() }
     val downloadsFocus   = remember { FocusRequester() }
@@ -393,6 +404,7 @@ private fun MainMenu(
                 AppRoute.CatchUp     -> catchupFocus.requestFocus()
                 AppRoute.Picks       -> picksFocus.requestFocus()
                 AppRoute.Music       -> musicFocus.requestFocus()
+                AppRoute.Device      -> deviceFocus.requestFocus()
                 AppRoute.Search      -> searchFocus.requestFocus()
                 AppRoute.MyList      -> mylistFocus.requestFocus()
                 AppRoute.Downloads   -> downloadsFocus.requestFocus()
@@ -430,7 +442,7 @@ private fun MainMenu(
         storedHidden?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     }
 
-    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist) {
+    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders) {
         buildMap {
             put("Home",     MenuEntry(Icons.Default.SportsSoccer,  "Sports Today", AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) }))
             put("Recent",   MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
@@ -441,6 +453,9 @@ private fun MainMenu(
             put("Picks",    MenuEntry(Icons.Default.Stars,         "Picks",     AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) }))
             if (hasJellyfinPlaylist) {
                 put("Music", MenuEntry(Icons.Default.MusicNote,    "Music",     AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
+            }
+            if (hasDeviceFolders) {
+                put("Device", MenuEntry(Icons.Default.Folder,      "Device",    AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
             }
             put("Search",   MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
             put("MyList",   MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))

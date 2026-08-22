@@ -119,7 +119,7 @@ fun RecentlyWatchedScreen(
                 }
             }
             RecentlyWatchedType.EPISODE -> {
-                val seriesId = item.seriesId ?: run { dialogEntityLoading = false; return@LaunchedEffect }
+                val seriesId = item.seriesId ?: return@LaunchedEffect
                 val s = viewModel.getSeriesById(seriesId)
                 seriesDialogEntity = s
                 if (s != null) {

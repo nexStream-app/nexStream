@@ -177,7 +177,10 @@ object DatabaseModule {
                 NexStreamDatabase.MIGRATION_28_29,
                 NexStreamDatabase.MIGRATION_29_30,
                 NexStreamDatabase.MIGRATION_30_31,
-                NexStreamDatabase.MIGRATION_31_32
+                NexStreamDatabase.MIGRATION_31_32,
+                NexStreamDatabase.MIGRATION_32_33,
+                NexStreamDatabase.MIGRATION_33_34,
+                NexStreamDatabase.MIGRATION_34_35
             )
             .build()
     }
@@ -195,4 +198,5 @@ object DatabaseModule {
     @Provides fun provideMusicDao(db: NexStreamDatabase) = db.musicDao()
     @Provides @Singleton fun provideProfileAppearanceDao(db: NexStreamDatabase) = db.profileAppearanceDao()
     @Provides @Singleton fun provideChannelGroupDao(db: NexStreamDatabase) = db.channelGroupDao()
+    @Provides @Singleton fun provideDeviceFolderDao(db: NexStreamDatabase) = db.deviceFolderDao()
 }

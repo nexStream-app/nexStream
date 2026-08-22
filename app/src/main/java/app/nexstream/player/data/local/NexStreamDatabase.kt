@@ -10,6 +10,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.nexstream.player.data.local.dao.ChannelDao
 import app.nexstream.player.data.local.dao.ChannelGroupDao
+import app.nexstream.player.data.local.dao.DeviceFolderDao
 import app.nexstream.player.data.local.dao.MovieDao
 import app.nexstream.player.data.local.dao.MusicDao
 import app.nexstream.player.data.local.dao.PlaylistDao
@@ -25,6 +26,7 @@ import app.nexstream.player.data.local.dao.WatchProgressDao
 import app.nexstream.player.data.local.entity.ChannelEntity
 import app.nexstream.player.data.local.entity.ChannelGroupEntity
 import app.nexstream.player.data.local.entity.ChannelGroupMemberEntity
+import app.nexstream.player.data.local.entity.DeviceFolderEntity
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.MovieEntity
 import app.nexstream.player.data.local.entity.MusicTrackEntity
@@ -71,9 +73,10 @@ class RecentlyWatchedTypeConverters {
         MusicTrackEntity::class,
         ProfileAppearanceEntity::class,
         ChannelGroupEntity::class,
-        ChannelGroupMemberEntity::class
+        ChannelGroupMemberEntity::class,
+        DeviceFolderEntity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = false
 )
 abstract class NexStreamDatabase : RoomDatabase() {
@@ -91,6 +94,7 @@ abstract class NexStreamDatabase : RoomDatabase() {
     abstract fun musicDao(): MusicDao
     abstract fun profileAppearanceDao(): ProfileAppearanceDao
     abstract fun channelGroupDao(): ChannelGroupDao
+    abstract fun deviceFolderDao(): DeviceFolderDao
 
     companion object {
         val MIGRATION_5_6 = object : Migration(5, 6) {
@@ -340,6 +344,18 @@ abstract class NexStreamDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS device_folders (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    includeSubfolders INTEGER NOT NULL DEFAULT 0,
+                    createdAt INTEGER NOT NULL DEFAULT 0
+                )""")
+            }
+        }
+
         val MIGRATION_31_32 = object : Migration(31, 32) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Devices that ran the buggy MIGRATION_30_31 (which used IF NOT EXISTS
@@ -423,7 +439,7 @@ abstract class NexStreamDatabase : RoomDatabase() {
                     MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25,
                     MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
                     MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33,
-                    MIGRATION_33_34
+                    MIGRATION_33_34, MIGRATION_34_35
                 )
                 .build()
         }
