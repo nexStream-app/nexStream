@@ -376,13 +376,13 @@ class PosterItemView @JvmOverloads constructor(
     }
 
     private val continueBadge = TextView(context).apply {
-        text = "▶"
+        text = "👁"
         textSize = 9f
         setTextColor(0xFFFFFFFF.toInt())
         setPadding(dpToPx(5), dpToPx(3), dpToPx(5), dpToPx(3))
         layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).also {
-            it.gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            it.topMargin = dpToPx(6); it.leftMargin = dpToPx(6)
+            it.gravity = android.view.Gravity.TOP or android.view.Gravity.END
+            it.topMargin = dpToPx(6); it.rightMargin = dpToPx(6)
         }
         visibility = View.GONE
     }
@@ -530,9 +530,7 @@ class PosterItemView @JvmOverloads constructor(
                 cornerRadius = dpToPx(10).toFloat()
                 setColor(0xFFE65100.toInt())
             }
-            // Stack below continueBadge if both are showing
-            (ratingBadge.layoutParams as? LayoutParams)?.topMargin =
-                if (item.showProgressBadge) dpToPx(30) else dpToPx(6)
+            (ratingBadge.layoutParams as? LayoutParams)?.topMargin = dpToPx(6)
             ratingBadge.visibility = View.VISIBLE
         } else {
             ratingBadge.visibility = View.GONE

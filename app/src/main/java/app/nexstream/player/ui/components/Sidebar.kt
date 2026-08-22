@@ -216,7 +216,7 @@ fun Sidebar(
                 sidebarRefocusTick = sidebarRefocusTick,
                 showLabels         = true,
                 onNavigate         = { route ->
-                    val effectiveRoute = if (route == AppRoute.Settings) AppRoute.SettingsPlaylists else route
+                    val effectiveRoute = if (route == AppRoute.Settings) AppRoute.SettingsAbout else route
                     if (effectiveRoute.hasCategoryPanel) {
                         onPanelExpandedChange(true, effectiveRoute)
                         onNavigate(effectiveRoute)

@@ -332,29 +332,35 @@ fun PicksScreen(
     var dialogPick by remember { mutableStateOf<PickItem?>(null) }
 
     val entityWatchlistIds by watchlistViewModel.watchlistIds.collectAsState()
+    val context            = androidx.compose.ui.platform.LocalContext.current
     var pickMovieEntity    by remember { mutableStateOf<MovieEntity?>(null) }
     var pickMovieUpdated   by remember { mutableStateOf<MovieEntity?>(null) }
+    var pickMovieResumePos by remember { mutableStateOf(0L) }
     var pickSeriesEntity   by remember { mutableStateOf<SeriesEntity?>(null) }
     var pickSeriesUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
     var pickSeriesEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
     var pickSeriesSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
     var pickSeriesLoading  by remember { mutableStateOf(false) }
+    var pickSeriesProgressMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var pickEntityNotFound by remember { mutableStateOf(false) }
 
     LaunchedEffect(dialogPick) {
         val pick = dialogPick
         pickMovieEntity    = null
         pickMovieUpdated   = null
+        pickMovieResumePos = 0L
         pickSeriesEntity   = null
         pickSeriesUpdated  = null
         pickSeriesEpisodes = emptyList()
         pickSeriesSeasons  = emptyList()
+        pickSeriesProgressMap = emptyMap()
         pickEntityNotFound = false
         if (pick == null) return@LaunchedEffect
         if (pick.mediaType == "movie") {
             val (base, detailed) = viewModel.resolvePickMovie(pick)
             if (base != null) {
                 pickMovieEntity  = base
+                pickMovieResumePos = watchlistViewModel.getMoviePosition(base.id)
                 if (detailed != null) pickMovieUpdated = detailed
             } else {
                 pickEntityNotFound = true
@@ -363,9 +369,10 @@ fun PicksScreen(
             pickSeriesLoading = true
             val (base, updated, episodes) = viewModel.resolvePickSeries(pick)
             if (base != null) {
-                pickSeriesEntity   = base
-                pickSeriesEpisodes = episodes
-                pickSeriesSeasons  = episodes.map { it.seasonNum }.distinct().sorted()
+                pickSeriesEntity      = base
+                pickSeriesEpisodes    = episodes
+                pickSeriesSeasons     = episodes.map { it.seasonNum }.distinct().sorted()
+                pickSeriesProgressMap = watchlistViewModel.getEpisodeProgressMap(base.id)
                 if (updated != null) pickSeriesUpdated = updated
             } else {
                 pickEntityNotFound = true
@@ -479,19 +486,23 @@ fun PicksScreen(
             pickMovieEntity != null -> {
                 val displayMovie  = pickMovieUpdated ?: pickMovieEntity!!
                 val isBookmarked  = displayMovie.id in entityWatchlistIds
+                val activeProfile = watchlistViewModel.profileManager.activeProfile.value
                 ModernMovieDetailsDialog(
-                    movie          = displayMovie,
-                    isBookmarked   = isBookmarked,
-                    onDismiss      = { dialogPick = null },
-                    onPlay         = { startPos ->
+                    movie               = displayMovie,
+                    resumePosition      = pickMovieResumePos,
+                    isBookmarked        = isBookmarked,
+                    maxAgeRating        = activeProfile?.maxAgeRating,
+                    allowNr             = activeProfile?.allowNr ?: true,
+                    onDismiss           = { dialogPick = null },
+                    onPlay              = { startPos ->
                         onPlayerLaunch?.invoke(displayMovie.streamUrl, displayMovie.id, null, null, startPos, displayMovie.name, null, null)
                         dialogPick = null
                     },
-                    onToggleWatchlist = {
+                    onToggleWatchlist   = {
                         watchlistViewModel.toggleWatchlist(
                             WatchlistEntity(
                                 id        = displayMovie.id,
-                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                profileId = activeProfile?.id ?: "default",
                                 type      = WatchlistType.MOVIE,
                                 name      = displayMovie.name,
                                 posterUrl = displayMovie.posterUrl,
@@ -499,6 +510,10 @@ fun PicksScreen(
                             ),
                             isBookmarked
                         )
+                    },
+                    onDownload              = {
+                        app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, displayMovie.streamUrl, displayMovie.name, displayMovie.posterUrl, activeProfile?.id ?: "default")
+                        dialogPick = null
                     },
                     onFetchCertification    = { viewModel.fetchMovieCertification(displayMovie.id, displayMovie.name) },
                     onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
@@ -509,18 +524,22 @@ fun PicksScreen(
             pickSeriesEntity != null -> {
                 val displaySeries = pickSeriesUpdated ?: pickSeriesEntity!!
                 val isBookmarked  = displaySeries.id in entityWatchlistIds
+                val activeProfile = watchlistViewModel.profileManager.activeProfile.value
                 SeriesDetailsDialog(
-                    series        = displaySeries,
-                    episodes      = pickSeriesEpisodes,
-                    seasons       = pickSeriesSeasons,
-                    isLoading     = pickSeriesLoading,
-                    isBookmarked  = isBookmarked,
-                    onDismiss     = { dialogPick = null },
-                    onToggleWatchlist = {
+                    series             = displaySeries,
+                    episodes           = pickSeriesEpisodes,
+                    seasons            = pickSeriesSeasons,
+                    episodeProgressMap = pickSeriesProgressMap,
+                    isLoading          = pickSeriesLoading,
+                    isBookmarked       = isBookmarked,
+                    maxAgeRating       = activeProfile?.maxAgeRating,
+                    allowNr            = activeProfile?.allowNr ?: true,
+                    onDismiss          = { dialogPick = null },
+                    onToggleWatchlist  = {
                         watchlistViewModel.toggleWatchlist(
                             WatchlistEntity(
                                 id        = displaySeries.id,
-                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                profileId = activeProfile?.id ?: "default",
                                 type      = WatchlistType.SERIES,
                                 name      = displaySeries.name,
                                 posterUrl = displaySeries.posterUrl,
@@ -529,10 +548,12 @@ fun PicksScreen(
                             isBookmarked
                         )
                     },
+                    onDownloadEpisode   = { url, title ->
+                        app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, url, title, activeProfile?.id ?: "default")
+                    },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
                     onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
-                    onGoToSeries  = { onPickSelected?.invoke(pick); dialogPick = null },
                     onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
                         onPlayerLaunch?.invoke(streamUrl, null, episodeId, seriesId, startPos, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
                         dialogPick = null

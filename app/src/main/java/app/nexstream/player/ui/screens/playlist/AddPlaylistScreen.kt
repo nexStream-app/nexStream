@@ -485,7 +485,7 @@ fun AddPlaylistScreen(
                     deviceLabel       = deviceLabel,
                     includeSubfolders = deviceSubfolders,
                     onIncludeSubfoldersChange = { deviceSubfolders = it },
-                    onPickFolder       = if (!isTv) ({ folderPickerLauncher.launch(null) }) else null,
+                    onPickFolder       = { folderPickerLauncher.launch(null) },
                     onPathFocusSelect  = { openKeyboard("devicePath",  devicePath)  },
                     onLabelFocusSelect = { openKeyboard("deviceLabel", deviceLabel) },
                     onPathChange       = { devicePath  = it },

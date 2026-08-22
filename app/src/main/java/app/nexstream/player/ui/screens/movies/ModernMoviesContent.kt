@@ -11,6 +11,9 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -334,13 +337,11 @@ private fun RankedMoviePosterCard(
                 }
             }
             if (hasProgress) {
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .align(Alignment.TopEnd)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(accent)
+                Icon(
+                    imageVector        = Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint               = accent,
+                    modifier           = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp)
                 )
             }
         }
@@ -428,13 +429,11 @@ internal fun MoviesPortraitCard(
                 }
             }
             if (hasProgress) {
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .align(Alignment.TopEnd)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(accent)
+                Icon(
+                    imageVector        = Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint               = accent,
+                    modifier           = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp)
                 )
             }
         }

@@ -407,6 +407,10 @@ fun WatchlistScreen(
                         viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
                         movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
                     },
+                    onDownload = {
+                        app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, displayMovie.streamUrl, displayMovie.name, displayMovie.posterUrl, profileId)
+                        movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
+                    },
                     onFetchCertification    = { viewModel.fetchMovieCertification(displayMovie.id, displayMovie.name) },
                     onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
                     onFetchRtData           = { viewModel.fetchMovieRtData(displayMovie.id, displayMovie.name) },
@@ -429,10 +433,6 @@ fun WatchlistScreen(
                     onToggleWatchlist = {
                         viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
                         seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
-                    },
-                    onGoToSeries = {
-                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
-                        onGoToSeries(selectedItem.name)
                     },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },

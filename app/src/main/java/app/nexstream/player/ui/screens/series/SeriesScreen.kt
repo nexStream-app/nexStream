@@ -636,14 +636,14 @@ fun SeriesCard(
                     contentScale = ContentScale.Crop
                 )
                 if (isFocused) Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
-                // Continue badge — top left (play icon only)
+                // Watched indicator — top right (eye icon)
                 if (hasProgress) {
                     Surface(
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        Icon(Icons.Default.PlayCircle, null,
+                        Icon(Icons.Default.Visibility, null,
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp).size(10.dp))
                     }

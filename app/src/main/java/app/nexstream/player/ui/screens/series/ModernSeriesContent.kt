@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -497,15 +498,12 @@ private fun RankedSeriesPosterCard(
                     )
                 }
             }
-            // In-progress dot
             if (hasProgress) {
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .align(Alignment.TopStart)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(accent)
+                Icon(
+                    imageVector        = Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint               = accent,
+                    modifier           = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp)
                 )
             }
         }
@@ -593,15 +591,12 @@ internal fun SeriesPortraitCard(
                     )
                 }
             }
-            // In-progress dot — top-left
             if (hasProgress) {
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .align(Alignment.TopStart)
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(accent)
+                Icon(
+                    imageVector        = Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint               = accent,
+                    modifier           = Modifier.align(Alignment.TopEnd).padding(4.dp).size(12.dp)
                 )
             }
         }
