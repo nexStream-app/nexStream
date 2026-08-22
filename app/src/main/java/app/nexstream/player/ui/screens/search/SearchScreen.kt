@@ -44,6 +44,7 @@ import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.local.entity.WatchlistType
+import app.nexstream.player.ui.screens.watchlist.ChannelDetailsDialog
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import kotlinx.coroutines.launch
 import app.nexstream.player.ui.components.ContentCard
@@ -91,9 +92,11 @@ fun SearchScreen(
     var searchMovieReady    by remember { mutableStateOf(false) }
     var searchSeriesDialog   by remember { mutableStateOf<SeriesEntity?>(null) }
     var searchSeriesUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
-    var searchSeriesEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
-    var searchSeriesSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var searchSeriesLoading  by remember { mutableStateOf(false) }
+    var searchSeriesEpisodes    by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
+    var searchSeriesSeasons     by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var searchSeriesLoading     by remember { mutableStateOf(false) }
+    var searchSeriesProgressMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var searchMovieResumePos    by remember { mutableStateOf(0L) }
 
     data class ProgramDialogState(
         val channel: ChannelEntity,
@@ -103,20 +106,22 @@ fun SearchScreen(
     var programDialogState by remember { mutableStateOf<ProgramDialogState?>(null) }
 
     LaunchedEffect(searchMovieDialog) {
-        val m = searchMovieDialog ?: run { searchMovieUpdated = null; searchMovieReady = false; return@LaunchedEffect }
+        val m = searchMovieDialog ?: run { searchMovieUpdated = null; searchMovieReady = false; searchMovieResumePos = 0L; return@LaunchedEffect }
         searchMovieReady = false
         searchMovieUpdated = null
+        searchMovieResumePos = watchlistViewModel.getMoviePosition(m.id)
         val detailed = viewModel.loadMovieDetails(m)
         if (detailed != null) searchMovieUpdated = detailed
         searchMovieReady = true
     }
 
     LaunchedEffect(searchSeriesDialog) {
-        val s = searchSeriesDialog ?: run { searchSeriesUpdated = null; return@LaunchedEffect }
-        searchSeriesLoading  = true
-        searchSeriesEpisodes = emptyList()
-        searchSeriesSeasons  = emptyList()
-        searchSeriesUpdated  = null
+        val s = searchSeriesDialog ?: run { searchSeriesUpdated = null; searchSeriesProgressMap = emptyMap(); return@LaunchedEffect }
+        searchSeriesLoading     = true
+        searchSeriesEpisodes    = emptyList()
+        searchSeriesSeasons     = emptyList()
+        searchSeriesUpdated     = null
+        searchSeriesProgressMap = watchlistViewModel.getEpisodeProgressMap(s.id)
         val resolvedId = viewModel.resolveSeriesId(s.id)
         val localEps = viewModel.getLocalEpisodes(resolvedId)
         if (localEps.isNotEmpty()) {
@@ -131,8 +136,16 @@ fun SearchScreen(
         searchSeriesLoading = false
     }
 
-    val wrappedChannelClick: (String, String) -> Unit = { _, name ->
-        onGoToEpgForChannel(name)
+    val wrappedChannelClick: (String, String) -> Unit = { streamUrl, _ ->
+        val ch = results.channels.find { it.streamUrl == streamUrl }
+        if (ch != null) {
+            scope.launch {
+                val epgId = ch.epgChannelId ?: ch.id
+                val current = viewModel.getCurrentProgram(epgId)
+                val next    = viewModel.getNextProgram(epgId)
+                programDialogState = ProgramDialogState(ch, current, next)
+            }
+        }
     }
     val handleProgrammeClick: (ProgramEntity) -> Unit = { prog ->
         scope.launch {
@@ -351,9 +364,10 @@ fun SearchScreen(
             val isMovieBookmarked = movie.id in watchlistIds
             ModernMovieDetailsDialog(
                 movie                   = displayMovie,
+                resumePosition          = searchMovieResumePos,
                 isBookmarked            = isMovieBookmarked,
                 onDismiss               = { searchMovieDialog = null },
-                onPlay                  = { _ -> onMovieClick(displayMovie); searchMovieDialog = null },
+                onPlay                  = { startPos -> onMovieClick(displayMovie); searchMovieDialog = null },
                 onToggleWatchlist       = {
                     watchlistViewModel.toggleWatchlist(
                         WatchlistEntity(
@@ -378,11 +392,12 @@ fun SearchScreen(
             val displaySeries = searchSeriesUpdated ?: series
             val isSeriesBookmarked = series.id in watchlistIds
             SeriesDetailsDialog(
-                series                  = displaySeries,
-                episodes                = searchSeriesEpisodes,
-                seasons                 = searchSeriesSeasons,
-                isLoading               = searchSeriesLoading,
-                isBookmarked            = isSeriesBookmarked,
+                series             = displaySeries,
+                episodes           = searchSeriesEpisodes,
+                seasons            = searchSeriesSeasons,
+                episodeProgressMap = searchSeriesProgressMap,
+                isLoading          = searchSeriesLoading,
+                isBookmarked       = isSeriesBookmarked,
                 onDismiss               = { searchSeriesDialog = null },
                 onToggleWatchlist       = {
                     watchlistViewModel.toggleWatchlist(
@@ -409,13 +424,28 @@ fun SearchScreen(
         }
 
         programDialogState?.let { state ->
-            SearchChannelProgramDialog(
-                channel        = state.channel,
-                currentProgram = state.currentProgram,
-                nextProgram    = state.nextProgram,
-                onDismiss      = { programDialogState = null },
-                onWatch        = { onChannelClick(state.channel.streamUrl, state.channel.name); programDialogState = null },
-                onGoToEpg      = { onGoToEpgForChannel(state.channel.name); programDialogState = null }
+            val isChannelBookmarked = state.channel.id in watchlistIds
+            ChannelDetailsDialog(
+                channel           = state.channel,
+                currentProgram    = state.currentProgram,
+                nextProgram       = state.nextProgram,
+                isBookmarked      = isChannelBookmarked,
+                onDismiss         = { programDialogState = null },
+                onWatch           = { onChannelClick(state.channel.streamUrl, state.channel.name); programDialogState = null },
+                onToggleWatchlist = {
+                    watchlistViewModel.toggleWatchlist(
+                        WatchlistEntity(
+                            id        = state.channel.id,
+                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                            type      = WatchlistType.CHANNEL,
+                            name      = state.channel.name,
+                            posterUrl = state.channel.logoUrl,
+                            streamUrl = state.channel.streamUrl
+                        ),
+                        isChannelBookmarked
+                    )
+                },
+                onGoToEpg         = { onGoToEpgForChannel(state.channel.name); programDialogState = null }
             )
         }
 

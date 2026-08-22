@@ -119,4 +119,15 @@ class RecentlyWatchedViewModel @Inject constructor(
 
     suspend fun fetchSeriesTrailerUrl(seriesName: String) =
         repository.fetchTrailerUrlForSeries(seriesName)
+
+    private val activeProfileId: String
+        get() = profileManager.activeProfile.value?.id ?:
+        profileManager.profiles.value.firstOrNull { it.isDefault }?.id ?:
+        "default"
+
+    suspend fun getEpisodeProgressMap(seriesId: String): Map<String, Long> =
+        try { progressRepository.getEpisodeProgressForSeries(activeProfileId, seriesId).first() } catch (_: Exception) { emptyMap() }
+
+    suspend fun getMoviePosition(movieId: String): Long =
+        try { progressRepository.getMoviePosition(activeProfileId, movieId) } catch (_: Exception) { 0L }
 }

@@ -761,7 +761,7 @@ function onYouTubeIframeAPIReady(){
                         ) {
                             DialogActionPill(
                                 icon      = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                label     = if (isBookmarked) "Remove from My List" else "My List",
+                                label     = if (isBookmarked) "Remove" else "My List",
                                 selected  = !inGrid && selectedButton == 1,
                                 isPressed = pressedButton == 1,
                                 accent    = accent,
@@ -1039,12 +1039,7 @@ function onYouTubeIframeAPIReady(){
                                     .clickable {
                                         if (!isContentRestricted) {
                                             focusedGridIndex = index; inGrid = true
-                                            onPlayEpisode(
-                                                episode.streamUrl, episode.id,
-                                                if (hasProgress) episodePos else 0L,
-                                                series.id, series.name,
-                                                episode.seasonNum, episode.episodeNum, episode.name,
-                                            )
+                                            infoBarState = if (hasProgress) InfoBarState.ResumeChoice else InfoBarState.PlayChoice
                                         }
                                     }
                             ) {

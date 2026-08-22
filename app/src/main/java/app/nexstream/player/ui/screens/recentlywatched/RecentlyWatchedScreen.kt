@@ -37,10 +37,13 @@ import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
 import app.nexstream.player.data.local.entity.SeriesEntity
+import app.nexstream.player.data.local.entity.WatchlistEntity
+import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.ui.components.ContentActionDialog
 import app.nexstream.player.ui.screens.movies.ModernMovieDetailsDialog
 import app.nexstream.player.ui.screens.series.SeriesDetailsDialog
 import app.nexstream.player.ui.screens.watchlist.ChannelDetailsDialog
+import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.components.ContentCard
 import app.nexstream.player.ui.components.TvKeyboardSheet
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
@@ -62,7 +65,8 @@ fun RecentlyWatchedScreen(
     onClearDismissed: () -> Unit = {},
     firstItemFocusRequester: FocusRequester? = null,
     onLaunchPlayer: (url: String, movieId: String?, episodeId: String?, seriesId: String?, startPos: Long, title: String?, subtitle: String?) -> Unit = { _, _, _, _, _, _, _ -> },
-    viewModel: RecentlyWatchedViewModel = hiltViewModel()
+    viewModel: RecentlyWatchedViewModel = hiltViewModel(),
+    watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
     val nsTheme = LocalNexStreamTheme.current
     val sTheme = nsTheme.sidebar
@@ -70,31 +74,36 @@ fun RecentlyWatchedScreen(
 
     val items by viewModel.recentlyWatched.collectAsState()
     val progressMap by viewModel.progressMap.collectAsState()
+    val watchlistIds by watchlistViewModel.watchlistIds.collectAsState()
     var dialogItem by remember { mutableStateOf<RecentlyWatchedEntity?>(null) }
 
-    var movieDialogEntity    by remember { mutableStateOf<MovieEntity?>(null) }
-    var movieDialogUpdated   by remember { mutableStateOf<MovieEntity?>(null) }
-    var seriesDialogEntity   by remember { mutableStateOf<SeriesEntity?>(null) }
-    var seriesDialogUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
-    var seriesDialogEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
-    var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var seriesDialogLoading  by remember { mutableStateOf(false) }
-    var dialogEntityLoading  by remember { mutableStateOf(false) }
-    var channelDialogEntity  by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
-    var channelCurrentProgram by remember { mutableStateOf<ProgramEntity?>(null) }
-    var channelNextProgram    by remember { mutableStateOf<ProgramEntity?>(null) }
+    var movieDialogEntity       by remember { mutableStateOf<MovieEntity?>(null) }
+    var movieDialogUpdated      by remember { mutableStateOf<MovieEntity?>(null) }
+    var movieResumePosition     by remember { mutableStateOf(0L) }
+    var seriesDialogEntity      by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogUpdated     by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogEpisodes    by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
+    var seriesDialogSeasons     by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var seriesDialogLoading     by remember { mutableStateOf(false) }
+    var seriesDialogProgressMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var dialogEntityLoading     by remember { mutableStateOf(false) }
+    var channelDialogEntity     by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
+    var channelCurrentProgram   by remember { mutableStateOf<ProgramEntity?>(null) }
+    var channelNextProgram      by remember { mutableStateOf<ProgramEntity?>(null) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
-        movieDialogEntity    = null
-        movieDialogUpdated   = null
-        seriesDialogEntity   = null
-        seriesDialogUpdated  = null
-        seriesDialogEpisodes = emptyList()
-        seriesDialogSeasons  = emptyList()
-        channelDialogEntity  = null
-        channelCurrentProgram = null
-        channelNextProgram    = null
+        movieDialogEntity       = null
+        movieDialogUpdated      = null
+        movieResumePosition     = 0L
+        seriesDialogEntity      = null
+        seriesDialogUpdated     = null
+        seriesDialogEpisodes    = emptyList()
+        seriesDialogSeasons     = emptyList()
+        seriesDialogProgressMap = emptyMap()
+        channelDialogEntity     = null
+        channelCurrentProgram   = null
+        channelNextProgram      = null
         if (item == null) return@LaunchedEffect
         if (item.type != RecentlyWatchedType.CHANNEL) dialogEntityLoading = true
         when (item.type) {
@@ -103,6 +112,7 @@ fun RecentlyWatchedScreen(
                 val base = viewModel.getMovieById(movieId)
                 movieDialogEntity = base
                 if (base != null) {
+                    movieResumePosition = viewModel.getMoviePosition(base.id)
                     val detailed = viewModel.loadMovieDetails(base)
                     if (detailed != null) movieDialogUpdated = detailed
                 }
@@ -112,6 +122,7 @@ fun RecentlyWatchedScreen(
                 val s = viewModel.getSeriesById(seriesId)
                 seriesDialogEntity = s
                 if (s != null) {
+                    seriesDialogProgressMap = viewModel.getEpisodeProgressMap(s.id)
                     seriesDialogLoading = true
                     val localEps = viewModel.getLocalEpisodes(s.id)
                     if (localEps.isNotEmpty()) {
@@ -356,15 +367,28 @@ fun RecentlyWatchedScreen(
         when {
             selectedRecent.type == RecentlyWatchedType.MOVIE && movie != null -> {
                 val displayMovie = movieDialogUpdated ?: movie
-                val resumePos = displayMovie.lastPlayedPosition
+                val isMovieBookmarked = displayMovie.id in watchlistIds
                 ModernMovieDetailsDialog(
                     movie          = displayMovie,
-                    resumePosition = resumePos,
-                    isBookmarked   = false,
+                    resumePosition = movieResumePosition,
+                    isBookmarked   = isMovieBookmarked,
                     onDismiss      = { movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null },
                     onPlay         = { startPos ->
                         onLaunchPlayer(displayMovie.streamUrl, displayMovie.id, null, null, startPos, displayMovie.name, null)
                         movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
+                    },
+                    onToggleWatchlist = {
+                        watchlistViewModel.toggleWatchlist(
+                            WatchlistEntity(
+                                id        = displayMovie.id,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = WatchlistType.MOVIE,
+                                name      = displayMovie.name,
+                                posterUrl = displayMovie.posterUrl,
+                                streamUrl = displayMovie.streamUrl
+                            ),
+                            isMovieBookmarked
+                        )
                     },
                     onFetchCertification    = { viewModel.fetchMovieCertification(displayMovie.id, displayMovie.name) },
                     onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
@@ -374,13 +398,28 @@ fun RecentlyWatchedScreen(
             }
             selectedRecent.type == RecentlyWatchedType.EPISODE && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
+                val isSeriesBookmarked = displaySeries.id in watchlistIds
                 SeriesDetailsDialog(
-                    series        = displaySeries,
-                    episodes      = seriesDialogEpisodes,
-                    seasons       = seriesDialogSeasons,
-                    isLoading     = seriesDialogLoading,
-                    isBookmarked  = false,
-                    onDismiss     = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
+                    series             = displaySeries,
+                    episodes           = seriesDialogEpisodes,
+                    seasons            = seriesDialogSeasons,
+                    episodeProgressMap = seriesDialogProgressMap,
+                    isLoading          = seriesDialogLoading,
+                    isBookmarked       = isSeriesBookmarked,
+                    onDismiss          = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
+                    onToggleWatchlist  = {
+                        watchlistViewModel.toggleWatchlist(
+                            WatchlistEntity(
+                                id        = displaySeries.id,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = WatchlistType.SERIES,
+                                name      = displaySeries.name,
+                                posterUrl = displaySeries.posterUrl,
+                                streamUrl = null
+                            ),
+                            isSeriesBookmarked
+                        )
+                    },
                     onGoToSeries  = {
                         seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
                         onGoToSeries(selectedRecent.name)
@@ -396,15 +435,29 @@ fun RecentlyWatchedScreen(
             }
             selectedRecent.type == RecentlyWatchedType.CHANNEL && channelDialogEntity != null -> {
                 val ch = channelDialogEntity!!
+                val isChannelBookmarked = ch.id in watchlistIds
                 ChannelDetailsDialog(
                     channel        = ch,
                     currentProgram = channelCurrentProgram,
                     nextProgram    = channelNextProgram,
-                    isBookmarked   = false,
+                    isBookmarked   = isChannelBookmarked,
                     onDismiss      = { channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null },
                     onWatch        = {
                         onChannelClick(ch.streamUrl, ch.name)
                         channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null
+                    },
+                    onToggleWatchlist = {
+                        watchlistViewModel.toggleWatchlist(
+                            WatchlistEntity(
+                                id        = ch.id,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = WatchlistType.CHANNEL,
+                                name      = ch.name,
+                                posterUrl = ch.logoUrl,
+                                streamUrl = ch.streamUrl
+                            ),
+                            isChannelBookmarked
+                        )
                     },
                     onGoToEpg      = {
                         onGoToEpgForChannel(ch.name)

@@ -90,34 +90,41 @@ fun WatchlistScreen(
     val progressMap by viewModel.progressMap.collectAsState()
     var dialogItem by remember { mutableStateOf<WatchlistEntity?>(null) }
 
-    var movieDialogEntity    by remember { mutableStateOf<MovieEntity?>(null) }
-    var movieDialogUpdated   by remember { mutableStateOf<MovieEntity?>(null) }
-    var seriesDialogEntity   by remember { mutableStateOf<SeriesEntity?>(null) }
-    var seriesDialogUpdated  by remember { mutableStateOf<SeriesEntity?>(null) }
-    var seriesDialogEpisodes by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
-    var seriesDialogSeasons  by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var seriesDialogLoading  by remember { mutableStateOf(false) }
+    var movieDialogEntity      by remember { mutableStateOf<MovieEntity?>(null) }
+    var movieDialogUpdated     by remember { mutableStateOf<MovieEntity?>(null) }
+    var movieResumePosition    by remember { mutableStateOf(0L) }
+    var seriesDialogEntity     by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogUpdated    by remember { mutableStateOf<SeriesEntity?>(null) }
+    var seriesDialogEpisodes   by remember { mutableStateOf<List<EpisodeEntity>>(emptyList()) }
+    var seriesDialogSeasons    by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var seriesDialogLoading    by remember { mutableStateOf(false) }
+    var seriesDialogProgressMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var dialogEntityLoading    by remember { mutableStateOf(false) }
     var channelDialogEntity      by remember { mutableStateOf<app.nexstream.player.data.local.entity.ChannelEntity?>(null) }
     var channelCurrentProgram    by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProgramEntity?>(null) }
     var channelNextProgram       by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProgramEntity?>(null) }
 
     LaunchedEffect(dialogItem) {
         val item = dialogItem
-        movieDialogEntity    = null
-        movieDialogUpdated   = null
-        seriesDialogEntity   = null
-        seriesDialogUpdated  = null
-        seriesDialogEpisodes = emptyList()
-        seriesDialogSeasons  = emptyList()
-        channelDialogEntity  = null
-        channelCurrentProgram = null
-        channelNextProgram    = null
+        movieDialogEntity       = null
+        movieDialogUpdated      = null
+        movieResumePosition     = 0L
+        seriesDialogEntity      = null
+        seriesDialogUpdated     = null
+        seriesDialogEpisodes    = emptyList()
+        seriesDialogSeasons     = emptyList()
+        seriesDialogProgressMap = emptyMap()
+        channelDialogEntity     = null
+        channelCurrentProgram   = null
+        channelNextProgram      = null
         if (item == null) return@LaunchedEffect
+        if (item.type != WatchlistType.CHANNEL) dialogEntityLoading = true
         when (item.type) {
             WatchlistType.MOVIE -> {
                 val base = viewModel.getMovieById(item.id)
                 movieDialogEntity = base
                 if (base != null) {
+                    movieResumePosition = viewModel.getMoviePosition(base.id)
                     val detailed = viewModel.loadMovieDetails(base)
                     if (detailed != null) movieDialogUpdated = detailed
                 }
@@ -126,6 +133,7 @@ fun WatchlistScreen(
                 val s = viewModel.getSeriesById(item.id)
                 seriesDialogEntity = s
                 if (s != null) {
+                    seriesDialogProgressMap = viewModel.getEpisodeProgressMap(s.id)
                     seriesDialogLoading = true
                     val localEps = viewModel.getLocalEpisodes(s.id)
                     if (localEps.isNotEmpty()) {
@@ -151,6 +159,7 @@ fun WatchlistScreen(
             }
             else -> {}
         }
+        dialogEntityLoading = false
     }
 
     var searchQuery    by remember { mutableStateOf("") }
@@ -376,20 +385,17 @@ fun WatchlistScreen(
         )
     }
 
-    // Show full MovieDetailsDialog for movies, SeriesDetailsDialog for series,
-    // ContentActionDialog for channels/music or when entity not found in DB.
     val selectedItem = dialogItem
-    if (selectedItem != null) {
+    if (selectedItem != null && !dialogEntityLoading) {
         val movie = movieDialogEntity
         val series = seriesDialogEntity
 
         when {
             selectedItem.type == WatchlistType.MOVIE && movie != null -> {
                 val displayMovie = movieDialogUpdated ?: movie
-                val resumePos = displayMovie.lastPlayedPosition
                 ModernMovieDetailsDialog(
                     movie          = displayMovie,
-                    resumePosition = resumePos,
+                    resumePosition = movieResumePosition,
                     isBookmarked   = true,
                     onDismiss      = { movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null },
                     onPlay         = { startPos ->
@@ -409,11 +415,12 @@ fun WatchlistScreen(
             selectedItem.type == WatchlistType.SERIES && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
                 SeriesDetailsDialog(
-                    series        = displaySeries,
-                    episodes      = seriesDialogEpisodes,
-                    seasons       = seriesDialogSeasons,
-                    isLoading     = seriesDialogLoading,
-                    isBookmarked  = true,
+                    series              = displaySeries,
+                    episodes            = seriesDialogEpisodes,
+                    seasons             = seriesDialogSeasons,
+                    episodeProgressMap  = seriesDialogProgressMap,
+                    isLoading           = seriesDialogLoading,
+                    isBookmarked        = true,
                     onDismiss     = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
                     onToggleWatchlist = {
                         viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)

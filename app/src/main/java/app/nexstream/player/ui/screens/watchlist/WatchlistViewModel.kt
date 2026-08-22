@@ -114,6 +114,12 @@ class WatchlistViewModel @Inject constructor(
     suspend fun getNextProgram(epgId: String): app.nexstream.player.data.local.entity.ProgramEntity? =
         try { repository.getNextProgram(epgId).first() } catch (_: Exception) { null }
 
+    suspend fun getEpisodeProgressMap(seriesId: String): Map<String, Long> =
+        try { progressRepository.getEpisodeProgressForSeries(activeProfileId, seriesId).first() } catch (_: Exception) { emptyMap() }
+
+    suspend fun getMoviePosition(movieId: String): Long =
+        try { progressRepository.getMoviePosition(activeProfileId, movieId) } catch (_: Exception) { 0L }
+
     suspend fun getLocalEpisodes(seriesId: String): List<EpisodeEntity> =
         try { repository.getEpisodesForSeries(seriesId).first() } catch (_: Exception) { emptyList() }
 

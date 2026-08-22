@@ -788,7 +788,7 @@ function onYouTubeIframeAPIReady(){
                             }
                             // My List still accessible
                             MovieDialogPill(
-                                label      = if (isBookmarked) "Remove from My List" else "Add to My List",
+                                label      = if (isBookmarked) "Remove" else "My List",
                                 icon       = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                                 isSelected = selectedButton == 1,
                                 isPressed  = pressedButton == 1,
@@ -807,7 +807,7 @@ function onYouTubeIframeAPIReady(){
                         AnimatedVisibility(visible = !showTrailer, enter = fadeIn(tween(400)), exit = fadeOut(tween(400))) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 MovieDialogPill(
-                                    label      = if (isBookmarked) "Remove from My List" else "Add to My List",
+                                    label      = if (isBookmarked) "Remove" else "My List",
                                     icon       = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                                     isSelected = selectedButton == 1,
                                     isPressed  = pressedButton == 1,
