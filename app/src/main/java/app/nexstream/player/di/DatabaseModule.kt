@@ -195,6 +195,7 @@ object DatabaseModule {
     @Provides @Singleton fun provideProfileDao(db: NexStreamDatabase)      = db.profileDao()
     @Provides @Singleton fun provideWatchProgressDao(db: NexStreamDatabase) = db.watchProgressDao()
     @Provides @Singleton fun provideTmdbPosterDao(db: NexStreamDatabase) = db.tmdbPosterDao()
+    @Provides fun provideRecentlyWatchedDao(db: NexStreamDatabase) = db.recentlyWatchedDao()
     @Provides fun provideMusicDao(db: NexStreamDatabase) = db.musicDao()
     @Provides @Singleton fun provideProfileAppearanceDao(db: NexStreamDatabase) = db.profileAppearanceDao()
     @Provides @Singleton fun provideChannelGroupDao(db: NexStreamDatabase) = db.channelGroupDao()

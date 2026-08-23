@@ -10,6 +10,7 @@ import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
+import app.nexstream.player.data.sync.RecentlySyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +27,7 @@ class RecentlyWatchedViewModel @Inject constructor(
     private val repository: PlaylistRepository,
     private val progressRepository: WatchProgressRepository,
     val profileManager: ProfileManager,
+    private val recentlySyncManager: RecentlySyncManager,
 ) : ViewModel() {
 
     val recentlyWatched: StateFlow<List<RecentlyWatchedEntity>> =
@@ -49,7 +51,11 @@ class RecentlyWatchedViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
-        viewModelScope.launch { repository.pruneStaleAndBlockedRecentItems() }
+        viewModelScope.launch {
+            repository.pruneStaleAndBlockedRecentItems()
+            val pid = activeProfileId
+            recentlySyncManager.syncFromServer(pid)
+        }
     }
 
     fun delete(id: String) {

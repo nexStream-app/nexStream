@@ -54,6 +54,7 @@ import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.remote.JellyfinApiService
 import app.nexstream.player.data.remote.JellyfinAuthBody
 import app.nexstream.player.data.remote.XtreamAccountInfo
+import app.nexstream.player.data.sync.RecentlySyncManager
 import app.nexstream.player.license.LicencePreferences
 import app.nexstream.player.license.PlaylistCrypto
 import app.nexstream.player.data.remote.XtreamSeries
@@ -75,6 +76,7 @@ class PlaylistRepository @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val rtApiService: RtApiService,
     private val licencePreferences: LicencePreferences,
+    private val recentlySyncManager: RecentlySyncManager,
 ) {
     private val activeProfileId: String
         get() = profileManager.activeProfile.value?.id ?: "default"
@@ -1791,60 +1793,63 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun recordRecentlyWatchedChannel(channel: ChannelEntity) {
         withContext(Dispatchers.IO) {
-            database.recentlyWatchedDao().insert(
-                RecentlyWatchedEntity(
-                    id        = channel.id,
-                    profileId = activeProfileId,
-                    type      = RecentlyWatchedType.CHANNEL,
-                    name      = channel.name,
-                    subtitle  = null,
-                    streamUrl = channel.streamUrl,
-                    logoUrl   = channel.logoUrl
-                )
+            val entity = RecentlyWatchedEntity(
+                id        = channel.id,
+                profileId = activeProfileId,
+                type      = RecentlyWatchedType.CHANNEL,
+                name      = channel.name,
+                subtitle  = null,
+                streamUrl = channel.streamUrl,
+                logoUrl   = channel.logoUrl
             )
+            database.recentlyWatchedDao().insert(entity)
             database.recentlyWatchedDao().trimToLimit(activeProfileId)
+            recentlySyncManager.enqueuePushAdd(entity)
         }
     }
 
     suspend fun recordRecentlyWatchedMovie(movie: MovieEntity) {
         withContext(Dispatchers.IO) {
-            database.recentlyWatchedDao().insert(
-                RecentlyWatchedEntity(
-                    id        = movie.id,
-                    profileId = activeProfileId,
-                    type      = RecentlyWatchedType.MOVIE,
-                    name      = movie.name,
-                    subtitle  = null,
-                    streamUrl = movie.streamUrl,
-                    logoUrl   = movie.posterUrl,
-                    movieId   = movie.id
-                )
+            val entity = RecentlyWatchedEntity(
+                id        = movie.id,
+                profileId = activeProfileId,
+                type      = RecentlyWatchedType.MOVIE,
+                name      = movie.name,
+                subtitle  = null,
+                streamUrl = movie.streamUrl,
+                logoUrl   = movie.posterUrl,
+                movieId   = movie.id
             )
+            database.recentlyWatchedDao().insert(entity)
             database.recentlyWatchedDao().trimToLimit(activeProfileId)
+            recentlySyncManager.enqueuePushAdd(entity)
         }
     }
 
     suspend fun recordRecentlyWatchedEpisode(series: SeriesEntity, episode: EpisodeEntity) {
         withContext(Dispatchers.IO) {
-            database.recentlyWatchedDao().insert(
-                RecentlyWatchedEntity(
-                    id        = episode.id,
-                    profileId = activeProfileId,
-                    type      = RecentlyWatchedType.EPISODE,
-                    name      = series.name,
-                    subtitle  = "S${episode.seasonNum}E${episode.episodeNum} · ${episode.name}",
-                    streamUrl = episode.streamUrl,
-                    logoUrl   = series.posterUrl,
-                    seriesId  = series.id,
-                    episodeId = episode.id
-                )
+            val entity = RecentlyWatchedEntity(
+                id        = episode.id,
+                profileId = activeProfileId,
+                type      = RecentlyWatchedType.EPISODE,
+                name      = series.name,
+                subtitle  = "S${episode.seasonNum}E${episode.episodeNum} · ${episode.name}",
+                streamUrl = episode.streamUrl,
+                logoUrl   = series.posterUrl,
+                seriesId  = series.id,
+                episodeId = episode.id
             )
+            database.recentlyWatchedDao().insert(entity)
             database.recentlyWatchedDao().trimToLimit(activeProfileId)
+            recentlySyncManager.enqueuePushAdd(entity)
         }
     }
 
     suspend fun deleteRecentlyWatched(id: String) {
-        withContext(Dispatchers.IO) { database.recentlyWatchedDao().deleteById(id, activeProfileId) }
+        withContext(Dispatchers.IO) {
+            database.recentlyWatchedDao().deleteById(id, activeProfileId)
+            recentlySyncManager.enqueuePushRemove(id, activeProfileId)
+        }
     }
 
     suspend fun clearRecentlyWatched() {

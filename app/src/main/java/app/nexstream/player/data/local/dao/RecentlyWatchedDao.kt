@@ -10,6 +10,9 @@ interface RecentlyWatchedDao {
     @Query("SELECT * FROM recently_watched WHERE profileId = :profileId ORDER BY watchedAt DESC LIMIT 20")
     fun getRecentlyWatched(profileId: String): Flow<List<RecentlyWatchedEntity>>
 
+    @Query("SELECT * FROM recently_watched WHERE profileId = :profileId ORDER BY watchedAt DESC LIMIT 50")
+    suspend fun getRecentlyWatchedSuspend(profileId: String): List<RecentlyWatchedEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: RecentlyWatchedEntity)
 

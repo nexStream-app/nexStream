@@ -1,6 +1,7 @@
 package app.nexstream.player.di
 
 import android.content.Context
+import app.nexstream.player.data.remote.RecentlyWatchedApiService
 import app.nexstream.player.data.remote.RtApiService
 import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.data.remote.ThemeApiService
@@ -126,6 +127,16 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ProgressApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideRecentlyWatchedApiService(): RecentlyWatchedApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://nexstream.uk/api/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(RecentlyWatchedApiService::class.java)
     }
 
     @Provides
