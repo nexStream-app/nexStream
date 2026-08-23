@@ -12,6 +12,7 @@ import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.sync.ChannelGroupSyncManager
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.data.sync.ProgressSyncManager
 import app.nexstream.player.data.sync.RecentlySyncManager
 import app.nexstream.player.data.sync.SettingsSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
@@ -35,6 +36,7 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
     @Inject lateinit var profileSyncManager: ProfileSyncManager
     @Inject lateinit var watchlistSyncManager: WatchlistSyncManager
     @Inject lateinit var recentlySyncManager: RecentlySyncManager
+    @Inject lateinit var progressSyncManager: ProgressSyncManager
     @Inject lateinit var profileManager: ProfileManager
     @Inject lateinit var playlistRepository: PlaylistRepository
     @Inject lateinit var licenceManager: LicenceManager
@@ -73,6 +75,13 @@ class NexStreamFirebaseService : FirebaseMessagingService() {
                     val pid = profileManager.activeProfile.value?.id ?: return@launch
                     recentlySyncManager.syncFromServer(pid)
                     Log.d("FCM", "Recently watched sync triggered for profile $pid")
+                }
+            }
+            "progress_sync" -> {
+                scope.launch {
+                    val pid = profileManager.activeProfile.value?.id ?: return@launch
+                    progressSyncManager.pullFromServer(pid)
+                    Log.d("FCM", "Progress sync triggered for profile $pid")
                 }
             }
             "channel_group_sync" -> {
