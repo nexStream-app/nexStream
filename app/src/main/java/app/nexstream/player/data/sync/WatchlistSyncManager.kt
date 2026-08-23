@@ -124,24 +124,37 @@ class WatchlistSyncManager @Inject constructor(
                     Log.i(tag, "syncFromServer: $type → ${items.size} items from server")
                     var saved = 0; var skipped = 0
 
-                    // Upsert server items
-                    items.forEach { item ->
+                    // Fetch local items first so we can deduplicate by name (IDs differ across devices)
+                    val localItems  = dao.getItemsSuspendByProfileAndType(profileId, watchlistType)
+                    val localById   = localItems.associateBy { it.id }
+                    val localByName = localItems.associateBy { it.name.trim().lowercase() }
+
+                    // Map server items to entities
+                    val serverEntities = items.mapNotNull { item ->
                         val itemProfileId = resolveProfileId(item["profile_id"], profileId)
-                        val entity = mapServerItemToEntity(item, type, itemProfileId)
-                        if (entity != null) {
-                            dao.addToWatchlist(entity)
-                            saved++
+                        mapServerItemToEntity(item, type, itemProfileId).also { entity ->
+                            if (entity == null) Log.w(tag, "syncFromServer: $type — null entity for item=$item")
+                        }
+                    }
+
+                    // Upsert, guarding against cross-device ID divergence causing duplicates
+                    serverEntities.forEach { entity ->
+                        val nameKey = entity.name.trim().lowercase()
+                        if (localById.containsKey(entity.id) || !localByName.containsKey(nameKey)) {
+                            dao.addToWatchlist(entity); saved++
                         } else {
-                            Log.w(tag, "syncFromServer: $type — mapServerItemToEntity returned null for item=$item")
+                            Log.d(tag, "syncFromServer: $type — skipping '${entity.name}' (exists locally under different ID)")
                             skipped++
                         }
                     }
 
-                    // Remove local items not present on server (server is authoritative)
-                    val serverIds = items.mapNotNull { it[idField] }.toSet()
-                    val localItems = dao.getItemsSuspendByProfileAndType(profileId, watchlistType)
+                    // Remove local items absent from server by both ID and name
+                    val serverIds   = serverEntities.map { it.id }.toSet()
+                    val serverNames = serverEntities.map { it.name.trim().lowercase() }.toSet()
                     var deleted = 0
-                    localItems.filter { it.id !in serverIds }.forEach { stale ->
+                    localItems.filter { local ->
+                        local.id !in serverIds && local.name.trim().lowercase() !in serverNames
+                    }.forEach { stale ->
                         dao.removeFromWatchlist(stale.id, stale.profileId)
                         deleted++
                     }

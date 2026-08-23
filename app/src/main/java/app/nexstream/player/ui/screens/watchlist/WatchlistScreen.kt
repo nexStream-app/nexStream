@@ -89,6 +89,7 @@ fun WatchlistScreen(
 
     val allItems by viewModel.allItems.collectAsState()
     val progressMap by viewModel.progressMap.collectAsState()
+    val watchlistIds by viewModel.watchlistIds.collectAsState()
     var dialogItem by remember { mutableStateOf<WatchlistEntity?>(null) }
 
     var movieDialogEntity      by remember { mutableStateOf<MovieEntity?>(null) }
@@ -394,22 +395,29 @@ fun WatchlistScreen(
         when {
             selectedItem.type == WatchlistType.MOVIE && movie != null -> {
                 val displayMovie = movieDialogUpdated ?: movie
+                val isMovieBookmarked = displayMovie.id in watchlistIds
                 ModernMovieDetailsDialog(
                     movie          = displayMovie,
                     resumePosition = movieResumePosition,
-                    isBookmarked   = true,
+                    isBookmarked   = isMovieBookmarked,
                     onDismiss      = { movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null },
                     onPlay         = { startPos ->
                         onLaunchPlayer(displayMovie.streamUrl, displayMovie.id, null, null, startPos, displayMovie.name, null)
                         movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
                     },
                     onToggleWatchlist = {
-                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
-                        movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
-                    },
-                    onDownload = {
-                        app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, displayMovie.streamUrl, displayMovie.name, displayMovie.posterUrl, profileId)
-                        movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null
+                        viewModel.toggleWatchlist(
+                            WatchlistEntity(
+                                id        = displayMovie.id,
+                                profileId = viewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = WatchlistType.MOVIE,
+                                name      = displayMovie.name,
+                                posterUrl = displayMovie.posterUrl,
+                                streamUrl = displayMovie.streamUrl
+                            ),
+                            isMovieBookmarked
+                        )
+                        if (isMovieBookmarked) { movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null }
                     },
                     onFetchCertification    = { viewModel.fetchMovieCertification(displayMovie.id, displayMovie.name) },
                     onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
@@ -419,20 +427,35 @@ fun WatchlistScreen(
             }
             selectedItem.type == WatchlistType.SERIES && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
+                val isSeriesBookmarked = displaySeries.id in watchlistIds
                 SeriesDetailsDialog(
                     series              = displaySeries,
                     episodes            = seriesDialogEpisodes,
                     seasons             = seriesDialogSeasons,
                     episodeProgressMap  = seriesDialogProgressMap,
                     isLoading           = seriesDialogLoading,
-                    isBookmarked        = true,
+                    isBookmarked        = isSeriesBookmarked,
                     onDownloadEpisode   = { url, title ->
                         app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(context, url, title, profileId)
                     },
                     onDismiss     = { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
                     onToggleWatchlist = {
-                        viewModel.removeFromWatchlist(selectedItem.id, selectedItem.type)
+                        viewModel.toggleWatchlist(
+                            WatchlistEntity(
+                                id        = displaySeries.id,
+                                profileId = viewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = WatchlistType.SERIES,
+                                name      = displaySeries.name,
+                                posterUrl = displaySeries.posterUrl,
+                                streamUrl = null
+                            ),
+                            isSeriesBookmarked
+                        )
+                        if (isSeriesBookmarked) { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null }
+                    },
+                    onGoToSeries = {
                         seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
+                        onGoToSeries(selectedItem.name)
                     },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
