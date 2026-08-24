@@ -45,6 +45,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.text.CueGroup
@@ -190,6 +191,29 @@ fun PlayerScreen(
 
     // ── ExoPlayer subtitle cues → sidebar ─────────────────────────────────────
     var subtitleCueLines by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // ── Sleep timer ───────────────────────────────────────────────────────────
+    var sleepTimerEndsAt      by remember { mutableLongStateOf(0L) }
+    var sleepTimerDurationMs  by remember { mutableLongStateOf(0L) }
+    var showSleepTimerDialog  by remember { mutableStateOf(false) }
+
+    // ── Playback speed ────────────────────────────────────────────────────────
+    var playbackSpeed         by remember { mutableStateOf(1.0f) }
+    var showSpeedDialog       by remember { mutableStateOf(false) }
+
+    // ── Subtitle delay ────────────────────────────────────────────────────────
+    var subtitleDelayMs          by remember { mutableIntStateOf(0) }
+    var showSubtitleDelayDialog  by remember { mutableStateOf(false) }
+
+    // ── Stats overlay ─────────────────────────────────────────────────────────
+    var showStats         by remember { mutableStateOf(false) }
+    var videoCodecName    by remember { mutableStateOf<String?>(null) }
+    var audioCodecName    by remember { mutableStateOf<String?>(null) }
+    var bufferHealthMs    by remember { mutableLongStateOf(0L) }
+
+    // ── Series: "Still Watching?" after 3 consecutive episodes ────────────────
+    var episodesWatchedInRow    by remember(seriesId) { mutableIntStateOf(0) }
+    var showStillWatchingDialog by remember { mutableStateOf(false) }
 
     var showMediaSheet  by remember { mutableStateOf(false) }
     var showControls    by remember { mutableStateOf(true) }
@@ -673,6 +697,9 @@ fun PlayerScreen(
         }
     }
 
+    // Stable ref so onCues (inside DisposableEffect) always reads the latest delay value
+    val subtitleDelayRef = rememberUpdatedState(subtitleDelayMs)
+
     // ── Playback state ────────────────────────────────────────────────────────
     var isPlaying          by remember { mutableStateOf(true) }
     var isBuffering        by remember { mutableStateOf(false) }
@@ -769,7 +796,13 @@ fun PlayerScreen(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing; if (playing) autoRetryCount = 0 }
             @androidx.annotation.OptIn(UnstableApi::class)
             override fun onCues(cueGroup: CueGroup) {
-                subtitleCueLines = cueGroup.cues.mapNotNull { it.text?.toString() }.filter { it.isNotBlank() }
+                val lines = cueGroup.cues.mapNotNull { it.text?.toString() }.filter { it.isNotBlank() }
+                val delayMs = subtitleDelayRef.value.toLong()
+                if (delayMs <= 0L) {
+                    subtitleCueLines = lines
+                } else {
+                    scope.launch { delay(delayMs); subtitleCueLines = lines }
+                }
             }
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 if (size.width > 0) {
@@ -864,6 +897,45 @@ fun PlayerScreen(
         if (state == AppAccessState.TRIAL_EXPIRED) { player?.pause(); isTrialExpired = true }
     }
 
+    // ── Sleep timer countdown ─────────────────────────────────────────────────
+    LaunchedEffect(sleepTimerEndsAt) {
+        if (sleepTimerEndsAt <= 0L) return@LaunchedEffect
+        while (true) {
+            delay(5_000L)
+            if (System.currentTimeMillis() >= sleepTimerEndsAt) {
+                stopPlayback(); onBack(); break
+            }
+        }
+    }
+
+    // ── Playback speed apply ──────────────────────────────────────────────────
+    LaunchedEffect(playbackSpeed, player) {
+        player?.setPlaybackParameters(PlaybackParameters(playbackSpeed))
+    }
+
+    // ── Series "Still Watching?" after 3 consecutive episodes ─────────────────
+    LaunchedEffect(episodeId, seriesId) {
+        if (episodeId != null && seriesId != null) {
+            episodesWatchedInRow++
+            if (episodesWatchedInRow > 3) {
+                player?.pause()
+                showStillWatchingDialog = true
+                episodesWatchedInRow = 0
+            }
+        }
+    }
+
+    // ── Stats overlay polling ─────────────────────────────────────────────────
+    LaunchedEffect(showStats) {
+        while (showStats) {
+            val exo = player as? ExoPlayer
+            exo?.videoFormat?.sampleMimeType?.substringAfterLast('/')?.uppercase()?.let { videoCodecName = it }
+            exo?.audioFormat?.sampleMimeType?.substringAfterLast('/')?.uppercase()?.let { audioCodecName = it }
+            bufferHealthMs = ((player?.bufferedPosition ?: 0L) - (player?.currentPosition ?: 0L)).coerceAtLeast(0L)
+            delay(1_000L)
+        }
+    }
+
     // ── Cast connect/disconnect side-effects ──────────────────────────────────
     LaunchedEffect(isCasting) {
         if (isCasting) {
@@ -923,6 +995,14 @@ fun PlayerScreen(
             }
             // Subtitle position toggle — visible whenever subtitles are showing
             if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_pos")
+            // Subtitle delay — visible when subtitles are active
+            if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_delay")
+            // Sleep timer — live TV and catchup only
+            if (isLiveTV || isCatchup) add("sleep")
+            // Playback speed — VOD and episodes (content with a scrub bar)
+            if (hasScrubbing) add("speed")
+            // Stats overlay — always
+            add("stats")
         }
     }}
     LaunchedEffect(showControls, centreButtons) {
@@ -1007,6 +1087,10 @@ fun PlayerScreen(
                 "subtitles" -> showMediaSheet = true
                 "cc"        -> ccActive = !ccActive
                 "sub_pos"   -> subtitleAtTop = !subtitleAtTop
+                "sub_delay" -> showSubtitleDelayDialog = true
+                "sleep"     -> showSleepTimerDialog = true
+                "speed"     -> showSpeedDialog = true
+                "stats"     -> showStats = !showStats
                 else        -> Unit
             }
             DpadZone.SLIDER -> { /* seek already applied on L/R */ }
@@ -1827,6 +1911,116 @@ fun PlayerScreen(
                                         }
                                     }
                                 }
+
+                                // Subtitle delay button — visible when subtitles are active
+                                if (ccActive || subtitleCueLines.isNotEmpty()) {
+                                    val subDelayFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sub_delay"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                            .then(
+                                                if (subDelayFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { showSubtitleDelayDialog = true },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Timer,
+                                                contentDescription = "Subtitle Delay",
+                                                tint = if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Sleep timer button — live TV and catchup
+                                if (isLiveTV || isCatchup) {
+                                    val sleepFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sleep"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                            .then(
+                                                if (sleepFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { showSleepTimerDialog = true },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Snooze,
+                                                contentDescription = "Sleep Timer",
+                                                tint = if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Playback speed button — VOD and episodes
+                                if (hasScrubbing) {
+                                    val speedFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "speed"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                            .then(
+                                                if (speedFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { showSpeedDialog = true },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Speed,
+                                                contentDescription = "Playback Speed",
+                                                tint = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Stats overlay toggle — always visible
+                                val statsFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                        currentCentreButtons.getOrNull(currentCentreIndex) == "stats"
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(if (showStats) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                        .then(
+                                            if (statsFocused)
+                                                Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                            else Modifier
+                                        )
+                                ) {
+                                    IconButton(
+                                        onClick  = { showStats = !showStats },
+                                        modifier = Modifier.size(52.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.BarChart,
+                                            contentDescription = "Stats",
+                                            tint = if (showStats) MaterialTheme.colorScheme.primary else controlText,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     } // end Column (bottom panel)
@@ -1962,6 +2156,205 @@ fun PlayerScreen(
 
         // ── Trial expired ─────────────────────────────────────────────────────
         if (isTrialExpired) TrialExpiredScreen(onLicenceActivated = { isTrialExpired = false; player?.play() })
+
+        // ── Stats overlay (top-left, always on top) ───────────────────────────
+        AnimatedVisibility(
+            visible  = showStats,
+            enter    = fadeIn(animationSpec = tween(300)),
+            exit     = fadeOut(animationSpec = tween(300)),
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 64.dp, start = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    @Composable fun StatsRow(label: String, value: String) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Text(
+                                text  = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.width(72.dp)
+                            )
+                            androidx.compose.material3.Text(
+                                text  = value,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White
+                            )
+                        }
+                    }
+                    StatsRow("Video", videoCodecName ?: "—")
+                    StatsRow("Resolution", if (videoWidth > 0) "${videoWidth}×${videoHeight}" else "—")
+                    StatsRow("Bitrate", if (videoBitrateKbps > 0) "${videoBitrateKbps} kbps" else "—")
+                    StatsRow("Audio", audioCodecName ?: "—")
+                    StatsRow("Buffer", if (bufferHealthMs > 0L) "${bufferHealthMs / 1000}s" else "—")
+                }
+            }
+        }
+
+        // ── Sleep timer dialog ────────────────────────────────────────────────
+        if (showSleepTimerDialog) {
+            Dialog(onDismissRequest = { showSleepTimerDialog = false }) {
+                Card(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    shape    = RoundedCornerShape(16.dp),
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Sleep Timer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        listOf(
+                            0L            to "Off",
+                            30 * 60_000L  to "30 minutes",
+                            60 * 60_000L  to "60 minutes",
+                            90 * 60_000L  to "90 minutes"
+                        ).forEach { (ms, label) ->
+                            val isSelected = sleepTimerDurationMs == ms
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable {
+                                    sleepTimerDurationMs = ms
+                                    sleepTimerEndsAt     = if (ms > 0L) System.currentTimeMillis() + ms else 0L
+                                    showSleepTimerDialog = false
+                                },
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
+                                    if (isSelected) Icon(Icons.Default.Check, null,
+                                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Playback speed dialog ─────────────────────────────────────────────
+        if (showSpeedDialog) {
+            Dialog(onDismissRequest = { showSpeedDialog = false }) {
+                Card(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    shape    = RoundedCornerShape(16.dp),
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Playback Speed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        listOf(0.5f to "0.5×", 0.75f to "0.75×", 1.0f to "1× (Normal)", 1.25f to "1.25×", 1.5f to "1.5×", 2.0f to "2×").forEach { (speed, label) ->
+                            val isSelected = playbackSpeed == speed
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable {
+                                    playbackSpeed = speed; showSpeedDialog = false
+                                },
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
+                                    if (isSelected) Icon(Icons.Default.Check, null,
+                                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Subtitle delay dialog ─────────────────────────────────────────────
+        if (showSubtitleDelayDialog) {
+            Dialog(onDismissRequest = { showSubtitleDelayDialog = false }) {
+                Card(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    shape    = RoundedCornerShape(16.dp),
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Subtitle Delay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Delay subtitle display to fix sync. Increase if subtitles appear too early.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            IconButton(onClick = { subtitleDelayMs = (subtitleDelayMs - 100).coerceAtLeast(0) }) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                            }
+                            Text(
+                                text  = if (subtitleDelayMs == 0) "Off" else "+${subtitleDelayMs}ms",
+                                style = MaterialTheme.typography.headlineSmall,
+                                modifier = Modifier.width(90.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            IconButton(onClick = { subtitleDelayMs = (subtitleDelayMs + 100).coerceAtMost(5000) }) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase")
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TextButton(onClick = { subtitleDelayMs = 0 }) { Text("Reset") }
+                            Button(onClick = { showSubtitleDelayDialog = false }) { Text("Done") }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Still watching? (series: after 3 consecutive episodes) ────────────
+        if (showStillWatchingDialog) {
+            Dialog(
+                onDismissRequest = {},
+                properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+            ) {
+                Card(
+                    modifier = Modifier.widthIn(max = 360.dp),
+                    shape    = RoundedCornerShape(16.dp),
+                    colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.LiveTv, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                        Text("Still watching?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text("You've watched 3 episodes in a row.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = { showStillWatchingDialog = false; stopPlayback(); onBack() }) {
+                                Text("Stop")
+                            }
+                            Button(onClick = { showStillWatchingDialog = false; player?.play() }) {
+                                Text("Keep Watching")
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
     } // end root Box
 }

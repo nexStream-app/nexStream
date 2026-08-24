@@ -112,6 +112,9 @@ class EPGGridView @JvmOverloads constructor(
             }
         }
 
+    var epgOffsetMs: Long = 0L
+        set(value) { if (value == field) return; field = value; invalidate() }
+
     private val dp = context.resources.displayMetrics.density
 
     private val exo2Regular: Typeface by lazy {
@@ -450,7 +453,7 @@ class EPGGridView @JvmOverloads constructor(
         val cornerDayY = headerHeightPx / 2f - paintTextHeader.textSize / 4f
         canvas.drawText(cornerLabel, (channelColPx - cornerLabelW) / 2f, cornerDayY, paintTextHeader)
         paintTextHeader.typeface = savedTypeface
-        val timeNowStr = cornerTimeFmt.format(Date(System.currentTimeMillis()))
+        val timeNowStr = cornerTimeFmt.format(Date(System.currentTimeMillis() + epgOffsetMs))
         val timeNowW = paintTextHeader.measureText(timeNowStr)
         val cornerTimeY = cornerDayY + paintTextHeader.textSize + 2 * dp
         canvas.drawText(timeNowStr, (channelColPx - timeNowW) / 2f, cornerTimeY, paintTextHeader)
@@ -469,7 +472,7 @@ class EPGGridView @JvmOverloads constructor(
         for (i in firstSlot..lastSlot.coerceAtMost(totalMinutes / slotMinutes - 1)) {
             val slotTime = startOfWindow + i.toLong() * slotMinutes * 60_000L
             val xPx = channelColPx + i * slotPx - scrollX + 6 * dp
-            canvas.drawText(timeFmt.format(Date(slotTime)), xPx, yPx, paintTextHeader)
+            canvas.drawText(timeFmt.format(Date(slotTime + epgOffsetMs)), xPx, yPx, paintTextHeader)
         }
     }
 

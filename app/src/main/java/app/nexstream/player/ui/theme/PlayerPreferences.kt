@@ -190,6 +190,7 @@ suspend fun Context.collectSyncablePlayerPrefs(): Map<String, Any> {
         prefs[KEY_KEYBOARD_BOLD]?.let { put("keyboard_bold", it) }
         prefs[KEY_MOVIE_SORT_ORDER]?.let { put("movie_sort_order", it) }
         prefs[KEY_SERIES_SORT_ORDER]?.let { put("series_sort_order", it) }
+        prefs[KEY_EPG_TIME_OFFSET]?.let { put("epg_time_offset_hours", it) }
     }
 }
 
@@ -207,5 +208,17 @@ suspend fun Context.applySyncedPlayerPrefs(settings: Map<String, Any?>) {
         (settings["keyboard_bold"] as? Boolean)?.let { prefs[KEY_KEYBOARD_BOLD] = it }
         (settings["movie_sort_order"] as? String)?.let { prefs[KEY_MOVIE_SORT_ORDER] = it }
         (settings["series_sort_order"] as? String)?.let { prefs[KEY_SERIES_SORT_ORDER] = it }
+        (settings["epg_time_offset_hours"] as? Number)?.toInt()?.let { prefs[KEY_EPG_TIME_OFFSET] = it }
     }
+}
+
+// ── EPG timezone offset ───────────────────────────────────────────────────────
+
+private val KEY_EPG_TIME_OFFSET = androidx.datastore.preferences.core.intPreferencesKey("epg_time_offset_hours")
+
+fun Context.getEpgTimeOffsetFlow(): Flow<Int> =
+    playerPrefsDataStore.data.map { it[KEY_EPG_TIME_OFFSET] ?: 0 }
+
+suspend fun Context.saveEpgTimeOffset(hours: Int) {
+    playerPrefsDataStore.edit { it[KEY_EPG_TIME_OFFSET] = hours.coerceIn(-12, 12) }
 }

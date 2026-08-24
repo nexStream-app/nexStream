@@ -28,10 +28,19 @@ import app.nexstream.player.data.sync.ProfileSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import app.nexstream.player.ui.theme.applySyncedPlayerPrefs
+import app.nexstream.player.ui.theme.applySyncedThemePrefs
+import app.nexstream.player.ui.theme.collectSyncablePlayerPrefs
+import app.nexstream.player.ui.theme.collectSyncableThemePrefs
 import app.nexstream.player.ui.theme.getAutoUpdateEnabledFlow
 import app.nexstream.player.ui.theme.saveAutoUpdateEnabled
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -308,6 +317,100 @@ fun SyncSettingsScreen(
                             ProfileStatRow(stat)
                         }
                     }
+                }
+            }
+
+            // ── Backup & Restore ──────────────────────────────────────────────
+            var backupStatus by remember { mutableStateOf<String?>(null) }
+
+            val exportLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/json")
+            ) { uri ->
+                uri ?: return@rememberLauncherForActivityResult
+                scope.launch {
+                    try {
+                        val playerPrefs = withContext(Dispatchers.IO) { context.collectSyncablePlayerPrefs() }
+                        val themePrefs  = withContext(Dispatchers.IO) { context.collectSyncableThemePrefs() }
+                        val json = JSONObject().apply {
+                            put("version", 1)
+                            playerPrefs.forEach { (k, v) ->
+                                when (v) {
+                                    is Boolean -> put(k, v)
+                                    is Float   -> put(k, v.toDouble())
+                                    is Int     -> put(k, v)
+                                    is String  -> put(k, v)
+                                    else       -> put(k, v.toString())
+                                }
+                            }
+                            themePrefs.forEach { (k, v) ->
+                                when (v) {
+                                    is Boolean -> put(k, v)
+                                    is Float   -> put(k, v.toDouble())
+                                    is Int     -> put(k, v)
+                                    is String  -> put(k, v)
+                                    else       -> put(k, v.toString())
+                                }
+                            }
+                        }
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openOutputStream(uri)?.use { out ->
+                                out.write(json.toString(2).toByteArray())
+                            }
+                        }
+                        backupStatus = "Settings exported successfully"
+                    } catch (e: Exception) {
+                        backupStatus = "Export failed: ${e.message}"
+                    }
+                }
+            }
+
+            val importLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                uri ?: return@rememberLauncherForActivityResult
+                scope.launch {
+                    try {
+                        val jsonStr = withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                        } ?: return@launch
+                        val obj = JSONObject(jsonStr)
+                        val settingsMap = mutableMapOf<String, Any?>()
+                        for (key in obj.keys()) { settingsMap[key] = obj.get(key) }
+                        withContext(Dispatchers.IO) {
+                            context.applySyncedPlayerPrefs(settingsMap)
+                            context.applySyncedThemePrefs(settingsMap)
+                        }
+                        backupStatus = "Settings restored — restart the app for all changes to take effect"
+                    } catch (e: Exception) {
+                        backupStatus = "Import failed: ${e.message}"
+                    }
+                }
+            }
+
+            SettingsSectionContainer(title = "Backup & Restore", icon = Icons.Default.SaveAlt, uiStyle = uiStyle) {
+                val java8Date = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+                SettingsActionItem(
+                    label       = "Export Settings",
+                    description = "Save all player and appearance settings to a JSON file on this device.",
+                    value       = "",
+                    uiStyle     = uiStyle,
+                    onClick     = { exportLauncher.launch("nexstream_backup_$java8Date.json") }
+                )
+                SettingsActionItem(
+                    label       = "Import Settings",
+                    description = "Restore settings from a previously exported backup file.",
+                    value       = "",
+                    uiStyle     = uiStyle,
+                    onClick     = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    showDivider = false
+                )
+                backupStatus?.let { status ->
+                    Text(
+                        text     = status,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
             }
         }

@@ -46,6 +46,9 @@ import app.nexstream.player.ui.theme.saveExtPlayerSeries
 import app.nexstream.player.ui.theme.saveExtPlayerCatchup
 import app.nexstream.player.ui.theme.getAdminNotificationsEnabledFlow
 import app.nexstream.player.ui.theme.saveAdminNotificationsEnabled
+import app.nexstream.player.ui.theme.getEpgTimeOffsetFlow
+import app.nexstream.player.ui.theme.saveEpgTimeOffset
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.launch
 
 @Composable
@@ -68,6 +71,8 @@ fun PlayerSettingsScreen(
     val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
 
     val adminNotifsEnabled by context.getAdminNotificationsEnabledFlow(profileId).collectAsState(initial = true)
+    val epgTimeOffset      by context.getEpgTimeOffsetFlow().collectAsState(initial = 0)
+    var showEpgOffsetDialog by remember { mutableStateOf(false) }
 
     val extPlayerLiveTv by context.getExtPlayerLiveTvFlow().collectAsState(initial = "nexstream")
     val extPlayerMovies  by context.getExtPlayerMoviesFlow().collectAsState(initial = "nexstream")
@@ -333,6 +338,27 @@ fun PlayerSettingsScreen(
                 )
             }
 
+            // ── EPG ───────────────────────────────────────────────────────────
+            SettingsSectionContainer(
+                title = "EPG",
+                icon = Icons.Default.Schedule,
+                uiStyle = uiStyle
+            ) {
+                val offsetLabel = when {
+                    epgTimeOffset > 0 -> "+${epgTimeOffset}h"
+                    epgTimeOffset < 0 -> "${epgTimeOffset}h"
+                    else -> "Off"
+                }
+                SettingsActionItem(
+                    label       = "Time Zone Offset",
+                    description = "Shift EPG programme times if your provider uses a different time zone. Adjust by ±12 hours.",
+                    value       = offsetLabel,
+                    uiStyle     = uiStyle,
+                    onClick     = { showEpgOffsetDialog = true },
+                    showDivider = false
+                )
+            }
+
             // ── Formats ───────────────────────────────────────────────────────
             SettingsSectionContainer(
                 title = "Formats",
@@ -344,6 +370,48 @@ fun PlayerSettingsScreen(
                 SettingsInfoRow("Subtitles", "SRT, VTT, ASS, embedded, AI (Whisper)")
             }
         }
+    }
+
+    if (showEpgOffsetDialog) {
+        AlertDialog(
+            onDismissRequest = { showEpgOffsetDialog = false },
+            title            = { Text("EPG Time Zone Offset") },
+            text             = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Shift programme times to match your provider's schedule. Use a positive value if programmes appear early, negative if they appear late.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment    = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        IconButton(onClick = { scope.launch { context.saveEpgTimeOffset(epgTimeOffset - 1) } }) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                        }
+                        Text(
+                            text      = if (epgTimeOffset == 0) "0h (Off)" else if (epgTimeOffset > 0) "+${epgTimeOffset}h" else "${epgTimeOffset}h",
+                            style     = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center,
+                            modifier  = Modifier.width(80.dp)
+                        )
+                        IconButton(onClick = { scope.launch { context.saveEpgTimeOffset(epgTimeOffset + 1) } }) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showEpgOffsetDialog = false }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(onClick = { scope.launch { context.saveEpgTimeOffset(0) }; showEpgOffsetDialog = false }) { Text("Reset") }
+            }
+        )
     }
 }
 

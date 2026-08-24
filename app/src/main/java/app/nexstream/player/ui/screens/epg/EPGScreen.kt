@@ -22,6 +22,7 @@ import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalNsBackground
 import app.nexstream.player.ui.theme.getEpgMiniPlayerFlow
+import app.nexstream.player.ui.theme.getEpgTimeOffsetFlow
 import app.nexstream.player.ui.theme.getExtPlayerLiveTvFlow
 import app.nexstream.player.ui.screens.player.ExternalPlayerManager
 import androidx.compose.foundation.focusable
@@ -205,6 +206,7 @@ private fun EPGContent(
     val isTV = context.packageManager.hasSystemFeature("android.software.leanback")
 
     val epgMiniPlayerEnabled by context.getEpgMiniPlayerFlow().collectAsState(initial = true)
+    val epgTimeOffsetHours   by context.getEpgTimeOffsetFlow().collectAsState(initial = 0)
     val extPlayerLiveTv by context.getExtPlayerLiveTvFlow().collectAsState(initial = "nexstream")
 
     val miniExoPlayer = remember { ExoPlayer.Builder(context).build() }
@@ -556,6 +558,7 @@ private fun EPGContent(
                 view.textBold              = typography.weight != "normal"
                 view.channels              = channels
                 view.programsMap           = epgProgramsMap
+                view.epgOffsetMs           = epgTimeOffsetHours * 3_600_000L
                 view.reminderIds           = reminderIds
                 view.playerVisible         = showPlayer
                 view.recordingChannelUrls  = activeRecordingUrls
