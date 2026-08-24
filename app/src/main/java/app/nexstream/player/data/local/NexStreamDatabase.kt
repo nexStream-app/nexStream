@@ -76,7 +76,7 @@ class RecentlyWatchedTypeConverters {
         ChannelGroupMemberEntity::class,
         DeviceFolderEntity::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = false
 )
 abstract class NexStreamDatabase : RoomDatabase() {
@@ -344,6 +344,12 @@ abstract class NexStreamDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profile_appearance ADD COLUMN keyboard_bold INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         val MIGRATION_34_35 = object : Migration(34, 35) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""CREATE TABLE IF NOT EXISTS device_folders (
@@ -439,7 +445,7 @@ abstract class NexStreamDatabase : RoomDatabase() {
                     MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25,
                     MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
                     MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33,
-                    MIGRATION_33_34, MIGRATION_34_35
+                    MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36
                 )
                 .build()
         }

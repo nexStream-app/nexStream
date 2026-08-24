@@ -15,6 +15,7 @@ import app.nexstream.player.ui.theme.saveAspectRatio
 import app.nexstream.player.ui.theme.saveEpgMiniPlayer
 import app.nexstream.player.ui.theme.saveFontScale
 import app.nexstream.player.ui.theme.saveFontWeight
+import app.nexstream.player.ui.theme.saveKeyboardBold
 import app.nexstream.player.ui.theme.saveKeyboardFontScale
 import app.nexstream.player.ui.theme.saveThemeMode
 import app.nexstream.player.ui.theme.saveUiStyle
@@ -51,6 +52,11 @@ class AppearanceViewModel @Inject constructor(
     fun saveKeyboardFontScale(scale: Float) = viewModelScope.launch {
         context.saveKeyboardFontScale(scale)
         updateDb { copy(keyboardFontScale = scale) }
+    }
+
+    fun saveKeyboardBold(bold: Boolean) = viewModelScope.launch {
+        context.saveKeyboardBold(bold)
+        updateDb { copy(keyboardBold = bold) }
     }
 
     fun saveEpgMiniPlayer(enabled: Boolean) = viewModelScope.launch {

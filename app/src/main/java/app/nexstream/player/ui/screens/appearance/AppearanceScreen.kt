@@ -43,6 +43,7 @@ import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.getEpgMiniPlayerFlow
 import app.nexstream.player.ui.theme.getFontScaleFlow
 import app.nexstream.player.ui.theme.getFontWeightFlow
+import app.nexstream.player.ui.theme.getKeyboardBoldFlow
 import app.nexstream.player.ui.theme.getKeyboardFontScaleFlow
 import app.nexstream.player.ui.theme.getThemeModeFlow
 import app.nexstream.player.ui.theme.getUiStyleFlow
@@ -72,6 +73,7 @@ fun AppearanceScreen(
     val seriesAspectRatio by context.getAspectRatioFlow(AspectRatioType.SERIES).collectAsState(initial = AspectRatio.FIT)
     val epgMiniPlayer      by context.getEpgMiniPlayerFlow().collectAsState(initial = true)
     val keyboardFontScale  by context.getKeyboardFontScaleFlow().collectAsState(initial = 1.4f)
+    val keyboardBold       by context.getKeyboardBoldFlow().collectAsState(initial = true)
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiStyle != UiStyle.MODERN) {
@@ -605,6 +607,14 @@ fun AppearanceScreen(
                             }
                         }
                     }
+                    Spacer(Modifier.height(4.dp))
+                    SettingsToggle(
+                        label       = "Bold Keyboard Letters",
+                        description = "Always show keyboard keys in bold weight",
+                        checked     = keyboardBold,
+                        uiStyle     = uiStyle,
+                        onToggle    = { scope.launch { viewModel.saveKeyboardBold(!keyboardBold) } }
+                    )
                 }
             }
 

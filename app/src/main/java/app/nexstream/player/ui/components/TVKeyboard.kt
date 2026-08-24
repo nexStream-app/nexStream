@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nexstream.player.ui.theme.getKeyboardBoldFlow
 import app.nexstream.player.ui.theme.getKeyboardFontScaleFlow
 
 // ── Key model ─────────────────────────────────────────────────────────────────
@@ -375,7 +376,8 @@ private fun KbKeyButton(
     onClick:        () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val keyFontScale by LocalContext.current.getKeyboardFontScaleFlow().collectAsState(initial = 1.0f)
+    val keyFontScale by LocalContext.current.getKeyboardFontScaleFlow().collectAsState(initial = 1.4f)
+    val keyBold      by LocalContext.current.getKeyboardBoldFlow().collectAsState(initial = true)
 
     val label = when (key) {
         is KbKey.Char -> if (shifted) key.upper else key.lower
@@ -413,7 +415,7 @@ private fun KbKeyButton(
                     KbKey.Space, KbKey.Done, KbKey.Clear -> (9 * keyFontScale).sp
                     else -> (12 * keyFontScale).sp
                 },
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isFocused || keyBold) FontWeight.Bold else FontWeight.Normal,
                 color      = when {
                     isFocused && isAccent -> MaterialTheme.colorScheme.onPrimary
                     isFocused             -> MaterialTheme.colorScheme.onPrimaryContainer

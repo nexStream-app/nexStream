@@ -103,12 +103,20 @@ suspend fun Context.saveEpgMiniPlayer(enabled: Boolean) {
 }
 
 private val KEY_KEYBOARD_FONT_SCALE      = floatPreferencesKey("keyboard_font_scale")
+private val KEY_KEYBOARD_BOLD            = booleanPreferencesKey("keyboard_bold")
 
 fun Context.getKeyboardFontScaleFlow(): Flow<Float> =
     playerPrefsDataStore.data.map { it[KEY_KEYBOARD_FONT_SCALE] ?: 1.4f }
 
 suspend fun Context.saveKeyboardFontScale(scale: Float) {
     playerPrefsDataStore.edit { it[KEY_KEYBOARD_FONT_SCALE] = scale }
+}
+
+fun Context.getKeyboardBoldFlow(): Flow<Boolean> =
+    playerPrefsDataStore.data.map { it[KEY_KEYBOARD_BOLD] ?: true }
+
+suspend fun Context.saveKeyboardBold(bold: Boolean) {
+    playerPrefsDataStore.edit { it[KEY_KEYBOARD_BOLD] = bold }
 }
 
 private val KEY_MOVIE_SORT_ORDER         = stringPreferencesKey("movie_sort_order")
@@ -179,6 +187,7 @@ suspend fun Context.collectSyncablePlayerPrefs(): Map<String, Any> {
         prefs[KEY_DEDUPLICATE_CONTENT]?.let { put("deduplicate_content", it) }
         prefs[KEY_EPG_MINI_PLAYER]?.let { put("epg_mini_player", it) }
         prefs[KEY_KEYBOARD_FONT_SCALE]?.let { put("keyboard_font_scale", it) }
+        prefs[KEY_KEYBOARD_BOLD]?.let { put("keyboard_bold", it) }
         prefs[KEY_MOVIE_SORT_ORDER]?.let { put("movie_sort_order", it) }
         prefs[KEY_SERIES_SORT_ORDER]?.let { put("series_sort_order", it) }
     }
@@ -195,6 +204,7 @@ suspend fun Context.applySyncedPlayerPrefs(settings: Map<String, Any?>) {
         (settings["deduplicate_content"] as? Boolean)?.let { prefs[KEY_DEDUPLICATE_CONTENT] = it }
         (settings["epg_mini_player"] as? Boolean)?.let { prefs[KEY_EPG_MINI_PLAYER] = it }
         (settings["keyboard_font_scale"] as? Number)?.toFloat()?.let { prefs[KEY_KEYBOARD_FONT_SCALE] = it }
+        (settings["keyboard_bold"] as? Boolean)?.let { prefs[KEY_KEYBOARD_BOLD] = it }
         (settings["movie_sort_order"] as? String)?.let { prefs[KEY_MOVIE_SORT_ORDER] = it }
         (settings["series_sort_order"] as? String)?.let { prefs[KEY_SERIES_SORT_ORDER] = it }
     }

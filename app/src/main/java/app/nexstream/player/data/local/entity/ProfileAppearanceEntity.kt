@@ -16,5 +16,6 @@ data class ProfileAppearanceEntity(
     @ColumnInfo(name = "series_aspect_ratio") val seriesAspectRatio: String = "FIT",
     @ColumnInfo(name = "epg_mini_player")     val epgMiniPlayer: Boolean = true,
     @ColumnInfo(name = "keyboard_font_scale") val keyboardFontScale: Float = 1.0f,
+    @ColumnInfo(name = "keyboard_bold")       val keyboardBold: Boolean = true,
     @ColumnInfo(name = "updated_at")          val updatedAt: Long = System.currentTimeMillis()
 )
