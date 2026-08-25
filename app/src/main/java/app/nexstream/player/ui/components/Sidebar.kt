@@ -908,7 +908,7 @@ private fun CategoryPanel(
                     onClick               = { onCategorySelected(null) }
                 )
             }
-            items(categories, key = { it }) { cat ->
+            itemsIndexed(categories, key = { idx, cat -> "${idx}_${cat}" }) { _, cat ->
                 val fr = remember { FocusRequester() }
                 SideEffect { categoryFocusMap[cat] = fr }
                 PanelItem(

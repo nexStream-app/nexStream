@@ -113,7 +113,7 @@ fun ModernPicksContent(
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    itemsIndexed(visibleGroups, key = { _, g -> g.seedTitle }) { idx, group ->
+                    itemsIndexed(visibleGroups, key = { idx, g -> "${idx}_${g.seedTitle}" }) { idx, group ->
                         ModernPickGroupRow(
                             group                   = group,
                             accent                  = accent,

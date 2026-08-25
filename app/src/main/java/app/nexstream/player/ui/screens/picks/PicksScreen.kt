@@ -151,7 +151,7 @@ class PicksViewModel @Inject constructor(
                     if (picks.isNotEmpty()) {
                         mutex.withLock {
                             orderedResults.add(idx to PickGroup(cleanTitle(seed.name), picks))
-                            _groups.value = orderedResults.sortedBy { it.first }.map { it.second }
+                            _groups.value = orderedResults.sortedBy { it.first }.map { it.second }.distinctBy { it.seedTitle }
                         }
                     }
                 }
@@ -456,7 +456,7 @@ fun PicksScreen(
                     contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    itemsIndexed(visibleGroups, key = { _, group -> group.seedTitle }) { idx, group ->
+                    itemsIndexed(visibleGroups, key = { idx, group -> "${idx}_${group.seedTitle}" }) { idx, group ->
                         PickGroupRow(
                             group                    = group,
                             onContentFocused         = onContentFocused,
