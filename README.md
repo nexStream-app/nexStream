@@ -4,11 +4,12 @@
 
 # nexStream
 
-### The ultimate IPTV player for Android TV & Fire TV
+### IPTV and Media Player for all Android Devices
 
 [![Latest Release](https://img.shields.io/github/v/release/nexStream-app/nexStream?label=Download&color=4CAF50&style=for-the-badge&logo=android)](https://github.com/nexStream-app/nexStream/releases/latest)
-[![Platform](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Fire%20TV-FF6F00?style=for-the-badge&logo=android)](https://github.com/nexStream-app/nexStream/releases/latest)
-[![Price](https://img.shields.io/badge/Price-£3.99%2Fdevice-blue?style=for-the-badge)](https://nexstream.uk)
+[![Platform](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Fire%20TV%20%7C%20Phone%20%7C%20Tablet-FF6F00?style=for-the-badge&logo=android)](https://github.com/nexStream-app/nexStream/releases/latest)
+[![Annual](https://img.shields.io/badge/Annual-£2%2Fdevice%2Fyear-blue?style=for-the-badge)](https://nexstream.uk/buy.php)
+[![Lifetime](https://img.shields.io/badge/Lifetime-£5%2Fdevice-6A0DAD?style=for-the-badge)](https://nexstream.uk/buy.php)
 [![Website](https://img.shields.io/badge/Website-nexstream.uk-9C27B0?style=for-the-badge&logo=google-chrome&logoColor=white)](https://nexstream.uk)
 
 **[Download APK](https://github.com/nexStream-app/nexStream/releases/latest)** · **[Website](https://nexstream.uk)** · **[Get a Licence](https://nexstream.uk/buy.php)**
@@ -17,10 +18,10 @@
 
 ---
 
-nexStream is a premium IPTV and media player built from the ground up for **Android TV** and **Fire TV**. It supports IPTV playlists (M3U & Xtream Codes), Plex, Jellyfin, and local files — all in one polished, remote-friendly interface.
+nexStream is a premium IPTV and media player for **all Android devices** — Android TV, Fire TV, phones, and tablets. It supports IPTV playlists (M3U & Xtream Codes), Plex, Jellyfin, and local files — all in one polished interface. It works perfectly on Android phones and tablets as well as TV devices.
 
 > [!NOTE]
-> nexStream requires a valid licence key (£3.99 per device). A free trial is available. The app does **not** provide any content — bring your own IPTV subscription, Plex/Jellyfin server, or local files.
+> nexStream requires a valid licence key (£2/year or £5 lifetime per device). A free trial is available with no payment details required. The app does **not** provide any content — bring your own IPTV subscription, Plex/Jellyfin server, or local files.
 
 ---
 
@@ -138,13 +139,14 @@ Built-in translations for 10 languages — change in Settings or use System defa
 
 ## Supported Devices
 
+Works on **all Android devices** — TV boxes, sticks, phones, and tablets.
+
 | Device | Status |
 |--------|--------|
 | **Amazon Fire TV Stick** (all generations) | ✅ Fully supported |
 | **Amazon Fire TV Cube** | ✅ Fully supported |
 | **Android TV / Google TV** boxes and sticks | ✅ Fully supported |
-| **Allwinner TV boxes** | ✅ Tested and supported |
-| Android phones & tablets | ⚠️ Works but optimised for 10-foot TV UI |
+| **Android phones & tablets** | ✅ Fully supported |
 
 **Minimum:** Android 5.0 (API 21)
 
@@ -152,19 +154,30 @@ Built-in translations for 10 languages — change in Settings or use System defa
 
 ## Installation
 
-### From GitHub Releases (Sideload)
+### 🔥 Fire TV — Downloader App (Easiest)
 
-1. On your Fire TV / Android TV, enable **Apps from Unknown Sources** in Settings → My Fire TV → Developer Options
-2. Install a file manager (e.g. **Downloader** by AFTVnews)
-3. Enter the APK URL from the [latest release](https://github.com/nexStream-app/nexStream/releases/latest)
-4. Follow the on-screen install prompts
-5. Launch nexStream and enter your licence key
+1. Install **Downloader** (free on the Amazon Appstore)
+2. Open Downloader and enter code: **`4596072`**
+3. The APK will download and install automatically
+4. Launch nexStream and enter your licence key
 
-> **Tip:** You can use the Downloader app code **[URL from release page]** to download directly to your Fire TV.
+### 📱 Android Phone / Tablet
 
-### Getting a Licence
+Download the APK directly from the [latest release](https://github.com/nexStream-app/nexStream/releases/latest) and install it.
 
-Visit **[nexstream.uk/buy.php](https://nexstream.uk/buy.php)** — £3.99 per device, one-time payment. A free trial is available with no payment details required.
+### 📺 Android TV / Google TV (Sideload)
+
+1. Enable **Apps from Unknown Sources** in Settings → Security
+2. Use a file manager or the Downloader app to install the APK from the [latest release](https://github.com/nexStream-app/nexStream/releases/latest)
+3. Launch nexStream and enter your licence key
+
+### 💳 Getting a Licence
+
+Visit **[nexstream.uk/buy.php](https://nexstream.uk/buy.php)**:
+- **£2/device/year** — Annual subscription
+- **£5/device** — Lifetime, one-time payment
+
+A free trial is available with no payment details required.
 
 ---
 
@@ -180,10 +193,10 @@ See the full changelog in [Releases](https://github.com/nexStream-app/nexStream/
 A: No. nexStream is a player app. You need your own IPTV subscription, Plex server, Jellyfin server, or local video files.
 
 **Q: How many devices can I use one licence on?**  
-A: One licence covers one device. Each device needs its own £3.99 licence.
+A: One licence covers one device. Each device needs its own licence (£2/year or £5 lifetime).
 
-**Q: Does it work on phones/tablets?**  
-A: The app installs and works on phones, but the interface is designed for TV screens and remote controls. A phone-optimised version is not planned.
+**Q: Does it work on phones and tablets?**  
+A: Yes — nexStream works perfectly on Android phones and tablets, as well as TV devices.
 
 **Q: Can I use it with my existing Plex or Jellyfin server?**  
 A: Yes — add it as a playlist source in Settings. For Plex, you'll authenticate with a PIN; for Jellyfin, use your server URL and credentials.
@@ -201,6 +214,6 @@ nexStream is a media player application. It does not host, stream, or distribute
 
 <div align="center">
 
-Made with ❤️ for Android TV &nbsp;·&nbsp; [nexstream.uk](https://nexstream.uk) &nbsp;·&nbsp; [Privacy Policy](https://nexstream.uk/privacy.php) &nbsp;·&nbsp; [Terms of Service](https://nexstream.uk/terms.php)
+Made with ❤️ for Android &nbsp;·&nbsp; [nexstream.uk](https://nexstream.uk) &nbsp;·&nbsp; [Privacy Policy](https://nexstream.uk/privacy.php) &nbsp;·&nbsp; [Terms of Service](https://nexstream.uk/terms.php)
 
 </div>
