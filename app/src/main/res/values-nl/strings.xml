@@ -273,4 +273,10 @@
     <string name="catchup_checking_size">Grootte controleren…</string>
     <string name="catchup_no_episodes">Geen afleveringen in de laatste 7 dagen</string>
     <string name="catchup_continue_anyway">Toch doorgaan</string>
+
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Taal</string>
+    <string name="settings_menu_language_subtitle">Stel de weergavetaal van de app in</string>
+    <string name="settings_language_system_default">Systeemstandaard</string>
+    <string name="settings_language_note">Wijzigingen worden onmiddellijk doorgevoerd.</string>
 </resources>

@@ -273,4 +273,10 @@
     <string name="catchup_checking_size">Kontrollerar storlek…</string>
     <string name="catchup_no_episodes">Inga avsnitt de senaste 7 dagarna</string>
     <string name="catchup_continue_anyway">Fortsätt ändå</string>
+
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Språk</string>
+    <string name="settings_menu_language_subtitle">Ange appens visningsspråk</string>
+    <string name="settings_language_system_default">Systemstandard</string>
+    <string name="settings_language_note">Ändringar börjar gälla omedelbart.</string>
 </resources>

@@ -273,4 +273,10 @@
     <string name="catchup_checking_size">Controllo dimensione…</string>
     <string name="catchup_no_episodes">Nessun episodio negli ultimi 7 giorni</string>
     <string name="catchup_continue_anyway">Continua comunque</string>
+
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Lingua</string>
+    <string name="settings_menu_language_subtitle">Imposta la lingua dell\'app</string>
+    <string name="settings_language_system_default">Predefinito di sistema</string>
+    <string name="settings_language_note">Le modifiche hanno effetto immediato.</string>
 </resources>

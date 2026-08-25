@@ -212,6 +212,21 @@ suspend fun Context.applySyncedPlayerPrefs(settings: Map<String, Any?>) {
     }
 }
 
+// ── App display language ──────────────────────────────────────────────────────
+
+private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
+
+fun Context.getAppLanguageFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_APP_LANGUAGE] ?: "" }
+
+suspend fun Context.saveAppLanguage(code: String) {
+    playerPrefsDataStore.edit { it[KEY_APP_LANGUAGE] = code }
+}
+
+fun Context.getAppLanguageBlocking(): String = kotlinx.coroutines.runBlocking {
+    playerPrefsDataStore.data.first()[KEY_APP_LANGUAGE] ?: ""
+}
+
 // ── EPG timezone offset ───────────────────────────────────────────────────────
 
 private val KEY_EPG_TIME_OFFSET = androidx.datastore.preferences.core.intPreferencesKey("epg_time_offset_hours")

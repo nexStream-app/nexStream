@@ -299,4 +299,10 @@
     <string name="catchup_checking_size">A verificar tamanho…</string>
     <string name="catchup_no_episodes">Nenhum episódio nos últimos 7 dias</string>
     <string name="catchup_continue_anyway">Continuar mesmo assim</string>
+
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Idioma</string>
+    <string name="settings_menu_language_subtitle">Definir o idioma de exibição da aplicação</string>
+    <string name="settings_language_system_default">Padrão do sistema</string>
+    <string name="settings_language_note">As alterações têm efeito imediato.</string>
 </resources>

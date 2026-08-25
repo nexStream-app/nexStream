@@ -1273,6 +1273,7 @@ private fun SettingsPanel(
     val navigationFR    = remember { FocusRequester() }
     val aboutFR         = remember { FocusRequester() }
     val channelGroupsFR = remember { FocusRequester() }
+    val languageFR      = remember { FocusRequester() }
 
     val entries = remember(showSyncSettings) {
         buildList {
@@ -1280,6 +1281,7 @@ private fun SettingsPanel(
             add(SettingsEntry("Account",        AppRoute.SettingsAccount,        accountFR))
             add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,     appearanceFR))
             add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups,  channelGroupsFR))
+            add(SettingsEntry("Language",       AppRoute.SettingsLanguage,       languageFR))
             add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
             add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
             add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))

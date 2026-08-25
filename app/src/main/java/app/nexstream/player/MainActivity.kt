@@ -72,6 +72,7 @@ import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.update.AutoUpdateManager
+import app.nexstream.player.ui.theme.getAppLanguageBlocking
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -132,6 +133,19 @@ class MainActivity : ComponentActivity() {
                 startTime    = intent.getLongExtra(ReminderWorker.KEY_START_TIME, 0L)
             )
             reminderOverlayData.value = data
+        }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        val lang = newBase.getAppLanguageBlocking()
+        if (lang.isEmpty()) {
+            super.attachBaseContext(newBase)
+        } else {
+            val locale = java.util.Locale(lang)
+            java.util.Locale.setDefault(locale)
+            val config = android.content.res.Configuration(newBase.resources.configuration)
+            config.setLocale(locale)
+            super.attachBaseContext(newBase.createConfigurationContext(config))
         }
     }
 

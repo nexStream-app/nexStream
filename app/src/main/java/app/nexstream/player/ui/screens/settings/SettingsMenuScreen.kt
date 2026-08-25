@@ -67,6 +67,8 @@ fun SettingsMenuScreen(
     val strSyncSub         = stringResource(R.string.settings_menu_sync_subtitle)
     val strNavigation      = stringResource(R.string.settings_menu_navigation_title)
     val strNavigationSub   = stringResource(R.string.settings_menu_navigation_subtitle)
+    val strLanguage        = stringResource(R.string.settings_menu_language_title)
+    val strLanguageSub     = stringResource(R.string.settings_menu_language_subtitle)
     val strAbout           = stringResource(R.string.settings_menu_about_title)
     val strAboutSub        = stringResource(R.string.settings_menu_about_subtitle)
 
@@ -130,6 +132,13 @@ fun SettingsMenuScreen(
                 icon = Icons.Default.Reorder,
                 focusRequester = null,
                 route = AppRoute.SettingsNavigation
+            ),
+            MenuItemData(
+                title = strLanguage,
+                subtitle = strLanguageSub,
+                icon = Icons.Default.Language,
+                focusRequester = null,
+                route = AppRoute.SettingsLanguage
             ),
             MenuItemData(
                 title = strAbout,

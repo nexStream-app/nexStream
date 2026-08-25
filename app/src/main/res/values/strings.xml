@@ -282,6 +282,12 @@
     <string name="sports_refresh_label">Refresh</string>
     <string name="sports_refresh_button">Refresh Sports Guide</string>
 
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Language</string>
+    <string name="settings_menu_language_subtitle">Choose the app display language</string>
+    <string name="settings_language_system_default">System default</string>
+    <string name="settings_language_note">Changes take effect immediately.</string>
+
     <!-- Appearance screen -->
     <string name="appearance_title">Appearance</string>
     <string name="appearance_section_theme">Theme &amp; Display</string>

@@ -299,4 +299,10 @@
     <string name="catchup_checking_size">Boyut kontrol ediliyor…</string>
     <string name="catchup_no_episodes">Son 7 günde bölüm yok</string>
     <string name="catchup_continue_anyway">Yine de devam et</string>
+
+    <!-- Language settings -->
+    <string name="settings_menu_language_title">Dil</string>
+    <string name="settings_menu_language_subtitle">Uygulamanın görüntüleme dilini ayarlayın</string>
+    <string name="settings_language_system_default">Sistem varsayılanı</string>
+    <string name="settings_language_note">Değişiklikler hemen geçerli olur.</string>
 </resources>

@@ -315,7 +315,7 @@ fun MainScreen(
         buildList {
             add("Playlists"); add("Sports Guide"); add("Appearance"); add("Player")
             add("Sync")
-            add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("About")
+            add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("Language"); add("About")
         }
     }
     val settingsLabelToRoute: Map<String, AppRoute> = remember { mapOf(
@@ -328,6 +328,7 @@ fun MainScreen(
         "Account"      to AppRoute.SettingsAccount,
         "Profiles"     to AppRoute.SettingsProfiles,
         "Navigation"   to AppRoute.SettingsNavigation,
+        "Language"     to AppRoute.SettingsLanguage,
         "About"        to AppRoute.SettingsAbout,
     ) }
     val selectedSettingsLabel = remember(currentRoute) {
@@ -2059,6 +2060,7 @@ private fun MainContentArea(
             AppRoute.SettingsSyncSettings -> app.nexstream.player.ui.screens.settings.SyncSettingsScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsAccount    -> app.nexstream.player.ui.screens.settings.AccountScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsAbout      -> app.nexstream.player.ui.screens.settings.AboutScreen(firstItemFocusRequester = contentFR)
+            AppRoute.SettingsLanguage   -> app.nexstream.player.ui.screens.settings.LanguageSettingsScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsNavigation -> app.nexstream.player.ui.screens.settings.NavigationSettingsScreen(
                 firstItemFocusRequester = contentFR,
                 hasJellyfinPlaylist = hasJellyfinPlaylist,
