@@ -19,8 +19,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.nexstream.player.R
 import app.nexstream.player.downloads.NexStreamDownloadManager
 import app.nexstream.player.ui.components.FolderBrowserDialog
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
@@ -90,11 +92,11 @@ fun PlayerSettingsScreen(
     if (showStoragePicker) {
         AlertDialog(
             onDismissRequest = { showStoragePicker = false },
-            title = { Text("Downloads Location") },
+            title = { Text(stringResource(R.string.player_storage_dialog_title)) },
             text  = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Use internal storage or pick a USB / SD card folder using the system browser.",
+                        stringResource(R.string.player_storage_dialog_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -118,7 +120,7 @@ fun PlayerSettingsScreen(
                                 tint = if (currentStorageLabel == "Internal Storage")
                                     MaterialTheme.colorScheme.onPrimaryContainer
                                 else MaterialTheme.colorScheme.onSurface)
-                            Text("Internal Storage", style = MaterialTheme.typography.bodyMedium,
+                            Text(stringResource(R.string.player_storage_internal), style = MaterialTheme.typography.bodyMedium,
                                 color = if (currentStorageLabel == "Internal Storage")
                                     MaterialTheme.colorScheme.onPrimaryContainer
                                 else MaterialTheme.colorScheme.onSurface,
@@ -144,10 +146,10 @@ fun PlayerSettingsScreen(
                             Icon(Icons.Default.FolderOpen, null,
                                 tint = MaterialTheme.colorScheme.onSurface)
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Browse for USB / SD Card…", style = MaterialTheme.typography.bodyMedium,
+                                Text(stringResource(R.string.player_storage_browse), style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface)
                                 if (currentStorageLabel != "Internal Storage") {
-                                    Text("Current: $currentStorageLabel",
+                                    Text(stringResource(R.string.player_storage_current, currentStorageLabel),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -158,7 +160,7 @@ fun PlayerSettingsScreen(
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showStoragePicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showStoragePicker = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -179,7 +181,7 @@ fun PlayerSettingsScreen(
         if (uiStyle != UiStyle.MODERN) {
             Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart) {
-                Text("Player Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = sTheme.categoryText)
+                Text(stringResource(R.string.player_settings_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = sTheme.categoryText)
             }
             HorizontalDivider(color = nsTheme.sidebar.divider)
         }
@@ -193,21 +195,21 @@ fun PlayerSettingsScreen(
         ) {
             // ── Frame Rate + Buffering ────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Playback",
+                title = stringResource(R.string.player_section_playback),
                 icon = Icons.Default.PlayCircle,
                 uiStyle = uiStyle
             ) {
                 SettingsToggle(
-                    label = "Auto Frame Rate Matching",
-                    description = "Switches the display refresh rate to match content (24fps, 30fps, 60fps). Reduces judder on films. Disable if your screen flickers when playback starts.",
+                    label = stringResource(R.string.player_auto_frame_rate_label),
+                    description = stringResource(R.string.player_auto_frame_rate_desc),
                     checked = autoFrameRate,
                     uiStyle = uiStyle,
                     focusRequester = frameRateFR,
                     onToggle = { scope.launch { context.saveAutoFrameRate(!autoFrameRate) } }
                 )
                 SettingsToggle(
-                    label = "Smart Buffer",
-                    description = "Increases buffer size on slow or unstable connections. Improves stability at the cost of a slightly longer start time.",
+                    label = stringResource(R.string.player_smart_buffer_label),
+                    description = stringResource(R.string.player_smart_buffer_desc),
                     checked = smartBuffer,
                     uiStyle = uiStyle,
                     onToggle = { scope.launch { context.saveSmartBuffer(!smartBuffer) } }
@@ -216,7 +218,7 @@ fun PlayerSettingsScreen(
 
             // ── External Players ──────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "External Players",
+                title = stringResource(R.string.player_section_external_players),
                 icon = Icons.Default.OpenInNew,
                 uiStyle = uiStyle
             ) {
@@ -237,35 +239,35 @@ fun PlayerSettingsScreen(
                             tint = sTheme.categoryText.copy(alpha = 0.4f)
                         )
                         Text(
-                            "No external players detected",
+                            stringResource(R.string.player_no_external_players),
                             style = MaterialTheme.typography.bodyMedium,
                             color = sTheme.categoryText.copy(alpha = 0.5f)
                         )
                     }
                 } else {
                     ExternalPlayerDropdown(
-                        label = "Live TV",
+                        label = stringResource(R.string.player_ext_live_tv),
                         selectedId = extPlayerLiveTv,
                         players = availablePlayers,
                         uiStyle = uiStyle,
                         onSelect = { scope.launch { context.saveExtPlayerLiveTv(it) } }
                     )
                     ExternalPlayerDropdown(
-                        label = "Movies",
+                        label = stringResource(R.string.player_ext_movies),
                         selectedId = extPlayerMovies,
                         players = availablePlayers,
                         uiStyle = uiStyle,
                         onSelect = { scope.launch { context.saveExtPlayerMovies(it) } }
                     )
                     ExternalPlayerDropdown(
-                        label = "Series",
+                        label = stringResource(R.string.player_ext_series),
                         selectedId = extPlayerSeries,
                         players = availablePlayers,
                         uiStyle = uiStyle,
                         onSelect = { scope.launch { context.saveExtPlayerSeries(it) } }
                     )
                     ExternalPlayerDropdown(
-                        label = "CatchUp",
+                        label = stringResource(R.string.player_ext_catchup),
                         selectedId = extPlayerCatchup,
                         players = availablePlayers,
                         uiStyle = uiStyle,
@@ -277,13 +279,13 @@ fun PlayerSettingsScreen(
 
             // ── Downloads & Recordings ────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Downloads & Recordings",
+                title = stringResource(R.string.player_section_downloads),
                 icon = Icons.Default.Download,
                 uiStyle = uiStyle
             ) {
                 SettingsActionItem(
-                    label = "Storage Location",
-                    description = "Where downloads and recordings are saved.",
+                    label = stringResource(R.string.player_storage_location_label),
+                    description = stringResource(R.string.player_storage_location_desc),
                     value = currentStorageLabel,
                     uiStyle = uiStyle,
                     onClick = { showStoragePicker = true },
@@ -293,29 +295,29 @@ fun PlayerSettingsScreen(
 
             // ── Privacy ───────────────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Privacy",
+                title = stringResource(R.string.player_section_privacy),
                 icon = Icons.Default.Security,
                 uiStyle = uiStyle
             ) {
                 SettingsToggle(
-                    label = "AI Subtitles (Whisper)",
-                    description = "When enabled, audio is sent to nexstream.uk for on-device speech recognition. Disable to prevent any audio leaving this device.",
+                    label = stringResource(R.string.player_whisper_label),
+                    description = stringResource(R.string.player_whisper_desc),
                     checked = whisperSubtitles,
                     uiStyle = uiStyle,
                     onToggle = { scope.launch { context.saveWhisperSubtitles(!whisperSubtitles) } }
                 )
                 if (whisperSubtitles) {
                     SettingsToggle(
-                        label = "Automatically start on Live TV",
-                        description = "Starts AI subtitles automatically when you open a live TV channel. Off by default — you can always enable them manually using the CC button.",
+                        label = stringResource(R.string.player_whisper_autostart_label),
+                        description = stringResource(R.string.player_whisper_autostart_desc),
                         checked = whisperAutoStartLive,
                         uiStyle = uiStyle,
                         onToggle = { scope.launch { context.saveWhisperAutostartLive(!whisperAutoStartLive) } }
                     )
                 }
                 SettingsToggle(
-                    label = "Auto-detect non-English audio",
-                    description = "On Live TV, if the selected audio track is in a language other than English, you'll be asked if you want to add subtitles.",
+                    label = stringResource(R.string.player_auto_lang_label),
+                    description = stringResource(R.string.player_auto_lang_desc),
                     checked = autoLangDetect,
                     uiStyle = uiStyle,
                     onToggle = { scope.launch { context.saveAutoLangDetect(!autoLangDetect) } }
@@ -325,13 +327,13 @@ fun PlayerSettingsScreen(
 
             // ── Notifications ─────────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Notifications",
+                title = stringResource(R.string.player_section_notifications),
                 icon = Icons.Default.Notifications,
                 uiStyle = uiStyle
             ) {
                 SettingsToggle(
-                    label = "Admin Announcements",
-                    description = "Show in-app banners for announcements from the nexStream team. These appear as a banner over the current screen when the app is open.",
+                    label = stringResource(R.string.player_admin_notifs_label),
+                    description = stringResource(R.string.player_admin_notifs_desc),
                     checked = adminNotifsEnabled,
                     uiStyle = uiStyle,
                     onToggle = { scope.launch { context.saveAdminNotificationsEnabled(profileId, !adminNotifsEnabled) } }
@@ -340,18 +342,19 @@ fun PlayerSettingsScreen(
 
             // ── EPG ───────────────────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "EPG",
+                title = stringResource(R.string.player_section_epg),
                 icon = Icons.Default.Schedule,
                 uiStyle = uiStyle
             ) {
+                val epgOffsetZero = stringResource(R.string.player_epg_offset_zero)
                 val offsetLabel = when {
                     epgTimeOffset > 0 -> "+${epgTimeOffset}h"
                     epgTimeOffset < 0 -> "${epgTimeOffset}h"
-                    else -> "Off"
+                    else -> epgOffsetZero
                 }
                 SettingsActionItem(
-                    label       = "Time Zone Offset",
-                    description = "Shift EPG programme times if your provider uses a different time zone. Adjust by ±12 hours.",
+                    label       = stringResource(R.string.player_epg_offset_label),
+                    description = stringResource(R.string.player_epg_offset_desc),
                     value       = offsetLabel,
                     uiStyle     = uiStyle,
                     onClick     = { showEpgOffsetDialog = true },
@@ -361,13 +364,13 @@ fun PlayerSettingsScreen(
 
             // ── Formats ───────────────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Formats",
+                title = stringResource(R.string.player_section_formats),
                 icon = Icons.Default.Info,
                 uiStyle = uiStyle
             ) {
-                SettingsInfoRow("Supported", "HLS, DASH, MP4, MKV, AVI, TS")
-                SettingsInfoRow("Audio",     "AC3, EAC3, AAC, MP3, FLAC")
-                SettingsInfoRow("Subtitles", "SRT, VTT, ASS, embedded, AI (Whisper)")
+                SettingsInfoRow(stringResource(R.string.player_formats_supported), stringResource(R.string.player_formats_supported_value))
+                SettingsInfoRow(stringResource(R.string.player_formats_audio),     stringResource(R.string.player_formats_audio_value))
+                SettingsInfoRow(stringResource(R.string.player_formats_subtitles), stringResource(R.string.player_formats_subtitles_value))
             }
         }
     }
@@ -375,14 +378,14 @@ fun PlayerSettingsScreen(
     if (showEpgOffsetDialog) {
         AlertDialog(
             onDismissRequest = { showEpgOffsetDialog = false },
-            title            = { Text("EPG Time Zone Offset") },
+            title            = { Text(stringResource(R.string.player_epg_dialog_title)) },
             text             = {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Shift programme times to match your provider's schedule. Use a positive value if programmes appear early, negative if they appear late.",
+                        stringResource(R.string.player_epg_dialog_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -391,25 +394,25 @@ fun PlayerSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         IconButton(onClick = { scope.launch { context.saveEpgTimeOffset(epgTimeOffset - 1) } }) {
-                            Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                            Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.player_epg_decrease))
                         }
                         Text(
-                            text      = if (epgTimeOffset == 0) "0h (Off)" else if (epgTimeOffset > 0) "+${epgTimeOffset}h" else "${epgTimeOffset}h",
+                            text      = if (epgTimeOffset == 0) stringResource(R.string.player_epg_offset_zero) else if (epgTimeOffset > 0) "+${epgTimeOffset}h" else "${epgTimeOffset}h",
                             style     = MaterialTheme.typography.headlineSmall,
                             textAlign = TextAlign.Center,
                             modifier  = Modifier.width(80.dp)
                         )
                         IconButton(onClick = { scope.launch { context.saveEpgTimeOffset(epgTimeOffset + 1) } }) {
-                            Icon(Icons.Default.Add, contentDescription = "Increase")
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.player_epg_increase))
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showEpgOffsetDialog = false }) { Text("Done") }
+                TextButton(onClick = { showEpgOffsetDialog = false }) { Text(stringResource(R.string.common_done)) }
             },
             dismissButton = {
-                TextButton(onClick = { scope.launch { context.saveEpgTimeOffset(0) }; showEpgOffsetDialog = false }) { Text("Reset") }
+                TextButton(onClick = { scope.launch { context.saveEpgTimeOffset(0) }; showEpgOffsetDialog = false }) { Text(stringResource(R.string.common_reset)) }
             }
         )
     }

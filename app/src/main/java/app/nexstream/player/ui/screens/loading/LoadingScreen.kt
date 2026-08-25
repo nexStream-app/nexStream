@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -22,10 +23,13 @@ fun LoadingScreen(
     val loadState     by viewModel.playlistLoadState.collectAsState()
     val profilesReady by viewModel.profilesReady.collectAsState()
 
+    val startingUp = stringResource(R.string.loading_starting_up)
+    val noPlaylist = stringResource(R.string.loading_no_playlist)
+    val loading    = stringResource(R.string.loading_loading)
     val statusText = when {
-        !loadState.loaded              -> "Starting up..."
-        loadState.playlists.isEmpty()  -> "No playlist found..."
-        else                           -> "Loading..."
+        !loadState.loaded             -> startingUp
+        loadState.playlists.isEmpty() -> noPlaylist
+        else                          -> loading
     }
 
     // Wait for both playlists (Room, instant) AND the first profile sync (network) before

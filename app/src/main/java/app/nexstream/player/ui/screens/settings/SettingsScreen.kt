@@ -19,6 +19,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,7 +70,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Playlists", style = MaterialTheme.typography.titleMedium,
+                Text(stringResource(R.string.playlists_title), style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
@@ -81,7 +83,7 @@ fun SettingsScreen(
                     Icon(Icons.Default.PlaylistPlay, null,
                         modifier = Modifier.size(64.dp),
                         tint = sTheme.categoryText.copy(alpha = 0.3f))
-                    Text("No playlists added yet",
+                    Text(stringResource(R.string.playlists_empty),
                         style = MaterialTheme.typography.titleSmall,
                         color = sTheme.categoryText.copy(alpha = 0.6f))
                     Button(
@@ -90,7 +92,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Add, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Add Playlist")
+                        Text(stringResource(R.string.playlists_add))
                     }
                 }
             }
@@ -150,7 +152,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Add Another Playlist")
+                        Text(stringResource(R.string.playlists_add_another))
                     }
                 }
             }
@@ -160,16 +162,16 @@ fun SettingsScreen(
     if (showDeleteDialog && playlistToDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Playlist?") },
-            text = { Text("Are you sure you want to delete \"${playlistToDelete!!.name}\"? This will remove all channels, movies, series and EPG data.") },
+            title = { Text(stringResource(R.string.playlists_delete_title)) },
+            text = { Text(stringResource(R.string.playlists_delete_message, playlistToDelete!!.name)) },
             confirmButton = {
                 Button(
                     onClick = { viewModel.deletePlaylist(playlistToDelete!!); showDeleteDialog = false; playlistToDelete = null },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+                ) { Text(stringResource(R.string.common_delete)) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showDeleteDialog = false; playlistToDelete = null }) { Text("Cancel") }
+                OutlinedButton(onClick = { showDeleteDialog = false; playlistToDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -192,9 +194,9 @@ private fun DeduplicateToggleRow(enabled: Boolean, onToggle: (Boolean) -> Unit) 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Deduplicate content", style = MaterialTheme.typography.bodyMedium,
+            Text(stringResource(R.string.playlists_deduplicate_label), style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold, color = sTheme.categoryText)
-            Text("Hide duplicate channels, movies and series from lower-priority playlists",
+            Text(stringResource(R.string.playlists_deduplicate_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = sTheme.categoryText.copy(alpha = 0.6f))
         }
@@ -254,17 +256,17 @@ private fun PlaylistCard(
                 SettingsFocusableIconButton(
                     onClick = { onMoveUp?.invoke() }, icon = Icons.Default.KeyboardArrowUp,
                     tint = if (onMoveUp != null) sTheme.categoryText else sTheme.categoryText.copy(alpha = 0.2f),
-                    contentDescription = "Higher priority"
+                    contentDescription = stringResource(R.string.playlists_priority_higher)
                 )
                 SettingsFocusableIconButton(
                     onClick = { onMoveDown?.invoke() }, icon = Icons.Default.KeyboardArrowDown,
                     tint = if (onMoveDown != null) sTheme.categoryText else sTheme.categoryText.copy(alpha = 0.2f),
-                    contentDescription = "Lower priority"
+                    contentDescription = stringResource(R.string.playlists_priority_lower)
                 )
             }
             SettingsFocusableIconButton(
                 onClick = onDelete, icon = Icons.Default.Delete,
-                tint = MaterialTheme.colorScheme.error, contentDescription = "Delete playlist"
+                tint = MaterialTheme.colorScheme.error, contentDescription = stringResource(R.string.playlists_delete_playlist)
             )
         }
         Column(
@@ -272,7 +274,7 @@ private fun PlaylistCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Refresh Playlist",
+                stringResource(R.string.playlists_refresh_label),
                 style = MaterialTheme.typography.labelSmall,
                 color = sTheme.categoryText.copy(alpha = 0.55f)
             )
@@ -280,63 +282,63 @@ private fun PlaylistCard(
                 when (playlist.type) {
                     "JELLYFIN" -> {
                         SettingsFocusableButton(
-                            label = "Movies", icon = Icons.Default.Movie,
+                            label = stringResource(R.string.playlists_btn_movies), icon = Icons.Default.Movie,
                             isLoading = isRefreshingMovies, enabled = !isAnyRefreshing,
                             focusRequester = firstButtonFocus, onClick = onRefreshMovies
                         )
                         SettingsFocusableButton(
-                            label = "Series", icon = Icons.Default.VideoLibrary,
+                            label = stringResource(R.string.playlists_btn_series), icon = Icons.Default.VideoLibrary,
                             isLoading = isRefreshingSeries, enabled = !isAnyRefreshing,
                             onClick = onRefreshSeries
                         )
                         SettingsFocusableButton(
-                            label = "Music", icon = Icons.Default.MusicNote,
+                            label = stringResource(R.string.playlists_btn_music), icon = Icons.Default.MusicNote,
                             isLoading = false, enabled = !isAnyRefreshing,
                             onClick = {}
                         )
                     }
                     "PLEX" -> {
                         SettingsFocusableButton(
-                            label = "Movies", icon = Icons.Default.Movie,
+                            label = stringResource(R.string.playlists_btn_movies), icon = Icons.Default.Movie,
                             isLoading = isRefreshingMovies, enabled = !isAnyRefreshing,
                             focusRequester = firstButtonFocus, onClick = onRefreshMovies
                         )
                         SettingsFocusableButton(
-                            label = "Series", icon = Icons.Default.VideoLibrary,
+                            label = stringResource(R.string.playlists_btn_series), icon = Icons.Default.VideoLibrary,
                             isLoading = isRefreshingSeries, enabled = !isAnyRefreshing,
                             onClick = onRefreshSeries
                         )
                         SettingsFocusableButton(
-                            label = "Music", icon = Icons.Default.MusicNote,
+                            label = stringResource(R.string.playlists_btn_music), icon = Icons.Default.MusicNote,
                             isLoading = false, enabled = !isAnyRefreshing,
                             onClick = {}
                         )
                     }
                     "M3U" -> {
                         SettingsFocusableButton(
-                            label = "TV", icon = Icons.Default.Tv,
+                            label = stringResource(R.string.playlists_btn_tv), icon = Icons.Default.Tv,
                             isLoading = isRefreshingTV, enabled = !isAnyRefreshing,
                             focusRequester = firstButtonFocus, onClick = onRefreshTV
                         )
                     }
                     else -> { // XTREAM
                         SettingsFocusableButton(
-                            label = "All", icon = Icons.Default.Refresh,
+                            label = stringResource(R.string.playlists_btn_all), icon = Icons.Default.Refresh,
                             isLoading = isRefreshingAll, enabled = !isAnyRefreshing,
                             focusRequester = firstButtonFocus, onClick = onRefreshAll
                         )
                         SettingsFocusableButton(
-                            label = "TV", icon = Icons.Default.Tv,
+                            label = stringResource(R.string.playlists_btn_tv), icon = Icons.Default.Tv,
                             isLoading = isRefreshingTV, enabled = !isAnyRefreshing,
                             onClick = onRefreshTV
                         )
                         SettingsFocusableButton(
-                            label = "Movies", icon = Icons.Default.Movie,
+                            label = stringResource(R.string.playlists_btn_movies), icon = Icons.Default.Movie,
                             isLoading = isRefreshingMovies, enabled = !isAnyRefreshing,
                             onClick = onRefreshMovies
                         )
                         SettingsFocusableButton(
-                            label = "Series", icon = Icons.Default.VideoLibrary,
+                            label = stringResource(R.string.playlists_btn_series), icon = Icons.Default.VideoLibrary,
                             isLoading = isRefreshingSeries, enabled = !isAnyRefreshing,
                             onClick = onRefreshSeries
                         )

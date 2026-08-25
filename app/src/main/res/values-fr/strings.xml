@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">nexStream</string>
+
+    <!-- Common -->
+    <string name="common_cancel">Annuler</string>
+    <string name="common_delete">Supprimer</string>
+    <string name="common_save">Enregistrer</string>
+    <string name="common_done">Terminé</string>
+    <string name="common_reset">Réinitialiser</string>
+    <string name="common_refresh">Actualiser</string>
+    <string name="common_error">Erreur</string>
+    <string name="common_loading">Chargement…</string>
+    <string name="common_ok">OK</string>
+    <string name="common_yes">Oui</string>
+    <string name="common_no">Non</string>
+    <string name="common_off">Désactivé</string>
+    <string name="common_on">Activé</string>
+    <string name="common_show">Afficher</string>
+    <string name="common_hide">Masquer</string>
+    <string name="common_locked">verrouillé</string>
+    <string name="common_copied">Copié !</string>
+    <string name="common_movies">Films</string>
+    <string name="common_series">Séries</string>
+    <string name="common_live_tv">TV en direct</string>
+    <string name="common_music">Musique</string>
+    <string name="common_settings">Paramètres</string>
+    <string name="common_appearance">Apparence</string>
+    <string name="common_search">Rechercher</string>
+
+    <!-- Loading screen -->
+    <string name="loading_starting_up">Démarrage…</string>
+    <string name="loading_no_playlist">Aucune playlist trouvée…</string>
+    <string name="loading_loading">Chargement…</string>
+
+    <!-- Navigation items -->
+    <string name="nav_sports_today">Sports du jour</string>
+    <string name="nav_recent">Récents</string>
+    <string name="nav_guide">Guide</string>
+    <string name="nav_movies">Films</string>
+    <string name="nav_series">Séries</string>
+    <string name="nav_catch_up">Rattrapage</string>
+    <string name="nav_picks">Sélection</string>
+    <string name="nav_music">Musique</string>
+    <string name="nav_search">Rechercher</string>
+    <string name="nav_my_list">Ma liste</string>
+    <string name="nav_settings">Paramètres</string>
+    <string name="nav_tv_shows">Émissions TV</string>
+
+    <!-- Settings menu -->
+    <string name="settings_menu_playlists_title">Playlists</string>
+    <string name="settings_menu_playlists_subtitle">Ajouter, supprimer ou actualiser vos playlists IPTV</string>
+    <string name="settings_menu_appearance_title">Apparence</string>
+    <string name="settings_menu_appearance_subtitle">Modifier le thème, les couleurs et l\'affichage</string>
+    <string name="settings_menu_player_title">Lecteur</string>
+    <string name="settings_menu_player_subtitle">Fréquence d\'images, mise en mémoire tampon et lecture</string>
+    <string name="settings_menu_licence_title">Licence</string>
+    <string name="settings_menu_licence_subtitle_active">Active</string>
+    <string name="settings_menu_licence_subtitle_inactive">Non activée — appuyez pour entrer votre clé de licence</string>
+    <string name="settings_menu_account_title">Compte</string>
+    <string name="settings_menu_account_subtitle">Statut du compte Xtream, connexions et infos serveur</string>
+    <string name="settings_menu_profiles_title">Profils</string>
+    <string name="settings_menu_profiles_subtitle">Gérer les profils et les restrictions de contenu</string>
+    <string name="settings_menu_sync_title">Synchronisation</string>
+    <string name="settings_menu_sync_subtitle">Sync cloud et paramètres de données par profil</string>
+    <string name="settings_menu_navigation_title">Navigation</string>
+    <string name="settings_menu_navigation_subtitle">Définir l\'écran de démarrage et réorganiser le menu</string>
+    <string name="settings_menu_about_title">À propos</string>
+    <string name="settings_menu_about_subtitle">Infos appareil, identifiants et diagnostics</string>
+
+    <!-- Playlists screen -->
+    <string name="playlists_title">Playlists</string>
+    <string name="playlists_empty">Aucune playlist ajoutée</string>
+    <string name="playlists_add">Ajouter une playlist</string>
+    <string name="playlists_add_another">Ajouter une autre playlist</string>
+    <string name="playlists_delete_title">Supprimer la playlist ?</string>
+    <string name="playlists_delete_message">Voulez-vous vraiment supprimer \"%s\" ? Cela supprimera toutes les chaînes, films, séries et données EPG.</string>
+    <string name="playlists_deduplicate_label">Dédupliquer le contenu</string>
+    <string name="playlists_deduplicate_description">Masquer les chaînes, films et séries en double des playlists moins prioritaires</string>
+    <string name="playlists_refresh_label">Actualiser la playlist</string>
+    <string name="playlists_priority_higher">Priorité plus haute</string>
+    <string name="playlists_priority_lower">Priorité plus basse</string>
+    <string name="playlists_delete_playlist">Supprimer la playlist</string>
+    <string name="playlists_btn_all">Tout</string>
+    <string name="playlists_btn_tv">TV</string>
+    <string name="playlists_btn_movies">Films</string>
+    <string name="playlists_btn_series">Séries</string>
+    <string name="playlists_btn_music">Musique</string>
+
+    <!-- Player settings -->
+    <string name="player_settings_title">Paramètres du lecteur</string>
+    <string name="player_section_playback">Lecture</string>
+    <string name="player_auto_frame_rate_label">Correspondance automatique de la fréquence d\'images</string>
+    <string name="player_auto_frame_rate_desc">Change le taux de rafraîchissement pour correspondre au contenu (24fps, 30fps, 60fps). Réduit le saccade. Désactivez si l\'écran scintille.</string>
+    <string name="player_smart_buffer_label">Tampon intelligent</string>
+    <string name="player_smart_buffer_desc">Augmente la taille du tampon sur les connexions lentes. Améliore la stabilité au prix d\'un démarrage légèrement plus long.</string>
+    <string name="player_section_external_players">Lecteurs externes</string>
+    <string name="player_no_external_players">Aucun lecteur externe détecté</string>
+    <string name="player_ext_live_tv">TV en direct</string>
+    <string name="player_ext_movies">Films</string>
+    <string name="player_ext_series">Séries</string>
+    <string name="player_ext_catchup">Rattrapage</string>
+    <string name="player_section_downloads">Téléchargements et enregistrements</string>
+    <string name="player_storage_location_label">Emplacement de stockage</string>
+    <string name="player_storage_location_desc">Où sont enregistrés les téléchargements et enregistrements.</string>
+    <string name="player_storage_internal">Stockage interne</string>
+    <string name="player_storage_browse">Parcourir USB / carte SD…</string>
+    <string name="player_storage_current">Actuel : %s</string>
+    <string name="player_storage_dialog_title">Emplacement des téléchargements</string>
+    <string name="player_storage_dialog_desc">Utilisez le stockage interne ou choisissez un dossier USB / carte SD.</string>
+    <string name="player_section_privacy">Confidentialité</string>
+    <string name="player_whisper_label">Sous-titres IA (Whisper)</string>
+    <string name="player_whisper_desc">Lorsqu\'activé, l\'audio est envoyé à nexstream.uk pour la reconnaissance vocale. Désactivez pour garder l\'audio sur cet appareil.</string>
+    <string name="player_whisper_autostart_label">Démarrage automatique sur la TV en direct</string>
+    <string name="player_whisper_autostart_desc">Lance les sous-titres IA automatiquement sur les chaînes en direct. Désactivé par défaut.</string>
+    <string name="player_auto_lang_label">Détection automatique de l\'audio non anglais</string>
+    <string name="player_auto_lang_desc">Sur la TV en direct, si la piste audio est dans une autre langue que l\'anglais, vous serez invité à ajouter des sous-titres.</string>
+    <string name="player_section_notifications">Notifications</string>
+    <string name="player_admin_notifs_label">Annonces administrateur</string>
+    <string name="player_admin_notifs_desc">Afficher des bannières dans l\'application pour les annonces de l\'équipe nexStream.</string>
+    <string name="player_section_epg">EPG</string>
+    <string name="player_epg_offset_label">Décalage de fuseau horaire</string>
+    <string name="player_epg_offset_desc">Décaler les horaires EPG si votre fournisseur utilise un fuseau différent. Ajuster de ±12 heures.</string>
+    <string name="player_epg_offset_zero">0h (Désactivé)</string>
+    <string name="player_epg_dialog_title">Décalage EPG</string>
+    <string name="player_epg_dialog_desc">Décalez les horaires pour correspondre au planning de votre fournisseur. Valeur positive si les programmes apparaissent tôt, négative s\'ils apparaissent tard.</string>
+    <string name="player_epg_decrease">Diminuer</string>
+    <string name="player_epg_increase">Augmenter</string>
+    <string name="player_section_formats">Formats</string>
+    <string name="player_formats_supported">Pris en charge</string>
+    <string name="player_formats_supported_value">HLS, DASH, MP4, MKV, AVI, TS</string>
+    <string name="player_formats_audio">Audio</string>
+    <string name="player_formats_audio_value">AC3, EAC3, AAC, MP3, FLAC</string>
+    <string name="player_formats_subtitles">Sous-titres</string>
+    <string name="player_formats_subtitles_value">SRT, VTT, ASS, intégrés, IA (Whisper)</string>
+
+    <!-- Sync settings -->
+    <string name="sync_title">Sync et mises à jour</string>
+    <string name="sync_section_updates">Mises à jour</string>
+    <string name="sync_auto_update_label">Mise à jour automatique</string>
+    <string name="sync_auto_update_desc">Vérifier et installer automatiquement les mises à jour au démarrage. Désactivé par défaut.</string>
+    <string name="sync_section_cloud">Sync cloud</string>
+    <string name="sync_cloud_label">Sync cloud</string>
+    <string name="sync_cloud_desc">Synchroniser les données sur nexstream.uk entre vos appareils. Désactivez pour garder les données sur cet appareil uniquement.</string>
+    <string name="sync_what_syncs">Choisir ce qui se synchronise pour ce profil</string>
+    <string name="sync_channel_folders_label">Dossiers de chaînes</string>
+    <string name="sync_channel_folders_desc">Synchroniser l\'organisation de vos dossiers de chaînes</string>
+    <string name="sync_appearance_label">Apparence</string>
+    <string name="sync_appearance_desc">Synchroniser le thème, la police et la mise en page</string>
+    <string name="sync_player_settings_label">Paramètres du lecteur</string>
+    <string name="sync_player_settings_desc">Synchroniser les paramètres de lecture, tampon et sous-titres</string>
+    <string name="sync_syncing">Synchronisation…</string>
+    <string name="sync_now">Synchroniser</string>
+    <string name="sync_section_my_list">Ma liste</string>
+    <string name="sync_profile_count_one">1 profil synchronisé</string>
+    <string name="sync_profile_count_other">%d profils synchronisés</string>
+    <string name="sync_section_backup">Sauvegarde et restauration</string>
+    <string name="sync_export_label">Exporter les paramètres</string>
+    <string name="sync_export_desc">Enregistrer tous les paramètres dans un fichier JSON sur cet appareil.</string>
+    <string name="sync_import_label">Importer les paramètres</string>
+    <string name="sync_import_desc">Restaurer les paramètres depuis un fichier de sauvegarde.</string>
+    <string name="sync_export_success">Paramètres exportés avec succès</string>
+    <string name="sync_restore_success">Paramètres restaurés — redémarrez l\'application pour que les changements prennent effet</string>
+
+    <!-- Account screen -->
+    <string name="account_title">Compte</string>
+    <string name="account_refresh">Actualiser</string>
+    <string name="account_no_playlist_title">Aucune playlist Xtream</string>
+    <string name="account_no_playlist_message">Aucun compte Xtream trouvé. Ajoutez une playlist Xtream dans Paramètres → Playlists.</string>
+    <string name="account_section_user_info">Infos utilisateur</string>
+    <string name="account_username">Nom d\'utilisateur</string>
+    <string name="account_status">Statut</string>
+    <string name="account_expiry">Expiration</string>
+    <string name="account_plan">Forfait</string>
+    <string name="account_plan_trial">Essai</string>
+    <string name="account_section_connections">Connexions</string>
+    <string name="account_connections_active">Actives</string>
+    <string name="account_connections_maximum">Maximum</string>
+    <string name="account_connections_used">Connexions utilisées</string>
+    <string name="account_section_server">Infos serveur</string>
+    <string name="account_server_host">Hôte</string>
+    <string name="account_server_protocol">Protocole</string>
+    <string name="account_server_port">Port</string>
+    <string name="account_server_timezone">Fuseau horaire</string>
+
+    <!-- Licence screen -->
+    <string name="licence_title">Licence</string>
+    <string name="licence_status">Statut</string>
+    <string name="licence_status_free_trial">Essai gratuit</string>
+    <string name="licence_status_trial_expired">Essai expiré</string>
+    <string name="licence_status_licensed">Licencié</string>
+    <string name="licence_expires">Expire</string>
+    <string name="licence_device">Appareil</string>
+    <string name="licence_device_id">ID de l\'appareil</string>
+    <string name="licence_source">Source</string>
+    <string name="licence_source_reseller">Attribuée par revendeur</string>
+    <string name="licence_source_direct">Direct</string>
+    <string name="licence_account">Compte</string>
+    <string name="licence_type">Type</string>
+    <string name="licence_key">Clé</string>
+    <string name="licence_type_lifetime">À vie</string>
+    <string name="licence_type_annual">Annuel</string>
+    <string name="licence_type_never">Jamais</string>
+    <string name="licence_section_activate">Activer</string>
+    <string name="licence_check_assigned">Vérifier la licence attribuée</string>
+    <string name="licence_key_label">Clé de licence</string>
+    <string name="licence_key_placeholder">XXXXXX-XXXXXX-XXXXXX-XXXXXX</string>
+    <string name="licence_activate_button">Activer</string>
+    <string name="licence_section_actions">Actions</string>
+    <string name="licence_deactivate_button">Désactiver sur cet appareil</string>
+    <string name="licence_deactivate_dialog_title">Désactiver la licence</string>
+    <string name="licence_deactivate_dialog_message">Cela supprimera la licence de cet appareil. Vous pouvez la réactiver à tout moment avec votre clé de licence.</string>
+    <string name="licence_deactivate_confirm">Désactiver</string>
+
+    <!-- About screen -->
+    <string name="about_title">À propos</string>
+    <string name="about_section_app">Application</string>
+    <string name="about_version">Version</string>
+    <string name="about_build">Build</string>
+    <string name="about_section_device_id">ID de l\'appareil</string>
+    <string name="about_id">ID</string>
+    <string name="about_copy_device_id">Copier l\'ID de l\'appareil</string>
+    <string name="about_copied">Copié !</string>
+    <string name="about_section_attributions">Attributions</string>
+    <string name="about_tmdb_content_desc">The Movie Database</string>
+    <string name="about_tmdb_disclaimer">Ce produit utilise l\'API TMDB mais n\'est pas approuvé ni certifié par TMDB.</string>
+
+    <!-- Navigation settings -->
+    <string name="nav_settings_title">Navigation</string>
+    <string name="nav_settings_start_screen_section">Écran de démarrage</string>
+    <string name="nav_settings_start_screen_label">Écran de démarrage</string>
+    <string name="nav_settings_start_screen_desc">La section qui s\'ouvre au lancement de l\'application.</string>
+    <string name="nav_settings_rail_order_section">Ordre du menu</string>
+    <string name="nav_settings_rail_order_label">Ordre du menu</string>
+    <string name="nav_settings_rail_order_desc">Utilisez les flèches pour réorganiser ou masquer. Paramètres est toujours visible. Guide peut être déplacé mais pas masqué.</string>
+    <string name="nav_settings_move_up">Déplacer vers le haut</string>
+    <string name="nav_settings_move_down">Déplacer vers le bas</string>
+
+    <!-- Sports settings -->
+    <string name="sports_title">Guide sportif</string>
+    <string name="sports_daily_guide_title">Guide sportif quotidien</string>
+    <string name="sports_daily_guide_desc">Événements sportifs en direct et à venir depuis dailysportsguide.co.uk. Mis à jour automatiquement toutes les 20 minutes.</string>
+    <string name="sports_refresh_label">Actualiser</string>
+    <string name="sports_refresh_button">Actualiser le guide sportif</string>
+
+    <!-- Appearance screen -->
+    <string name="appearance_title">Apparence</string>
+    <string name="appearance_section_theme">Thème et affichage</string>
+    <string name="appearance_dark_mode_label">Mode sombre</string>
+    <string name="appearance_dark_mode_desc_high_contrast">L\'application utilise un thème à contraste élevé</string>
+    <string name="appearance_dark_mode_desc_dark">L\'application utilise le thème sombre</string>
+    <string name="appearance_dark_mode_desc_light">L\'application utilise le thème clair</string>
+    <string name="appearance_high_contrast_label">Contraste élevé</string>
+    <string name="appearance_high_contrast_desc_on">Fond noir, texte blanc, accents jaunes</string>
+    <string name="appearance_high_contrast_desc_off">Utiliser le thème de couleurs standard</string>
+    <string name="appearance_font_size_label">Taille de police</string>
+    <string name="appearance_font_size_small">Petite</string>
+    <string name="appearance_font_size_normal">Normale</string>
+    <string name="appearance_font_size_large">Grande</string>
+    <string name="appearance_font_size_extra_large">Très grande</string>
+    <string name="appearance_keyboard_bold_label">Lettres du clavier en gras</string>
+    <string name="appearance_keyboard_bold_desc">Toujours afficher les touches du clavier en gras</string>
+    <string name="sync_export_failed">Échec de l\'exportation : %s</string>
+    <string name="sync_import_failed">Échec de l\'importation : %s</string>
+    <string name="sync_stat_movies">Films</string>
+    <string name="sync_stat_series">Séries</string>
+    <string name="sync_stat_live_tv">TV en direct</string>
+
+    <!-- Exit dialog -->
+    <string name="exit_dialog_title">Quitter nexStream ?</string>
+    <string name="exit_dialog_message">Voulez-vous vraiment quitter ?</string>
+    <string name="common_exit">Quitter</string>
+
+    <!-- EPG screen -->
+    <string name="epg_no_playlists_title">Aucune playlist trouvée</string>
+    <string name="epg_no_playlists_message">Ajoutez une playlist dans Paramètres pour commencer</string>
+    <string name="epg_loading_guide">Chargement du guide…</string>
+    <string name="epg_no_favourites_title">Aucune chaîne dans vos favoris pour l\'instant</string>
+    <string name="epg_no_favourites_message">Appuyez longuement sur une chaîne dans le guide pour l\'ajouter</string>
+
+    <!-- Downloads screen -->
+    <string name="downloads_title">Téléchargements</string>
+    <string name="downloads_delete_title">Supprimer le téléchargement</string>
+    <string name="downloads_delete_message">Supprimer « %s » de vos téléchargements ? Le fichier sera supprimé de votre appareil.</string>
+    <string name="downloads_empty_title">Aucun téléchargement pour l\'instant</string>
+    <string name="downloads_empty_message">Appuyez longuement sur un film pour le télécharger</string>
+    <string name="downloads_section_downloading">Téléchargement</string>
+    <string name="downloads_section_completed">Terminé</string>
+    <string name="downloads_section_failed">Échec</string>
+
+    <!-- Local Files screen -->
+    <string name="local_files_change_folder">Changer de dossier</string>
+    <string name="local_files_empty_title">Aucun fichier vidéo trouvé dans ce dossier</string>
+    <string name="local_files_empty_formats">MP4, MKV, AVI, TS et bien plus sont pris en charge</string>
+    <string name="local_files_no_folder">Aucun dossier sélectionné</string>
+
+    <!-- Catch-Up screen -->
+    <string name="catchup_select_episode">Sélectionnez un épisode</string>
+    <string name="catchup_checking_size">Vérification de la taille…</string>
+    <string name="catchup_no_episodes">Aucun épisode dans les 7 derniers jours</string>
+    <string name="catchup_continue_anyway">Continuer quand même</string>
+</resources>

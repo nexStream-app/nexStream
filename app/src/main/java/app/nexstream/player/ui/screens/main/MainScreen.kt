@@ -33,7 +33,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
+import app.nexstream.player.R
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -1676,24 +1678,24 @@ private fun ExitDialog(onDismiss: () -> Unit, onExit: () -> Unit) {
                     },
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Exit nexStream?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Are you sure you want to exit?", style = MaterialTheme.typography.bodyMedium,
+                Text(stringResource(R.string.exit_dialog_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.exit_dialog_message), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spacer(Modifier.weight(1f))
                     if (exitSelected == 0)
                         Button(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Cancel")
+                            Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.common_cancel))
                         }
                     else OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Cancel")
+                        Icon(Icons.Default.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.common_cancel))
                     }
                     if (exitSelected == 1)
                         Button(onClick = onExit, shape = RoundedCornerShape(8.dp)) {
-                            Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Exit")
+                            Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.common_exit))
                         }
                     else OutlinedButton(onClick = onExit, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Exit")
+                        Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.common_exit))
                     }
                 }
             }

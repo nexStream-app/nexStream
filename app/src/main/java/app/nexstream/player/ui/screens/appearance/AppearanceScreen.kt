@@ -27,9 +27,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.R
 import app.nexstream.player.ui.screens.appearance.AppearanceViewModel
 import app.nexstream.player.ui.screens.settings.rememberUiStyle
 import app.nexstream.player.ui.screens.settings.SettingsSectionContainer
@@ -81,7 +83,7 @@ fun AppearanceScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Appearance", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text(stringResource(R.string.appearance_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -96,7 +98,7 @@ fun AppearanceScreen(
 
             // ── Theme & Display section ─────────────────────────────────────
             SettingsSectionContainer(
-                title = "Theme & Display",
+                title = stringResource(R.string.appearance_section_theme),
                 icon = Icons.Default.DarkMode,
                 uiStyle = uiStyle
             ) {
@@ -139,16 +141,16 @@ fun AppearanceScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                "Dark Mode",
+                                stringResource(R.string.appearance_dark_mode_label),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 when (themeMode) {
-                                    ThemeMode.HIGH_CONTRAST -> "App uses a high contrast theme"
-                                    ThemeMode.DARK          -> "App uses dark theme"
-                                    else                    -> "App uses light theme"
+                                    ThemeMode.HIGH_CONTRAST -> stringResource(R.string.appearance_dark_mode_desc_high_contrast)
+                                    ThemeMode.DARK          -> stringResource(R.string.appearance_dark_mode_desc_dark)
+                                    else                    -> stringResource(R.string.appearance_dark_mode_desc_light)
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -200,14 +202,14 @@ fun AppearanceScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                "High Contrast",
+                                stringResource(R.string.appearance_high_contrast_label),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                if (themeMode == ThemeMode.HIGH_CONTRAST) "Black background, white text, yellow accents"
-                                else "Use standard colour theme",
+                                if (themeMode == ThemeMode.HIGH_CONTRAST) stringResource(R.string.appearance_high_contrast_desc_on)
+                                else stringResource(R.string.appearance_high_contrast_desc_off),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -225,12 +227,16 @@ fun AppearanceScreen(
 
                     Spacer(Modifier.height(4.dp))
                     // Font Size dropdown
-                    val fontOptions = remember {
+                    val strFontSmall      = stringResource(R.string.appearance_font_size_small)
+                    val strFontNormal     = stringResource(R.string.appearance_font_size_normal)
+                    val strFontLarge      = stringResource(R.string.appearance_font_size_large)
+                    val strFontExtraLarge = stringResource(R.string.appearance_font_size_extra_large)
+                    val fontOptions = remember(strFontSmall, strFontNormal, strFontLarge, strFontExtraLarge) {
                         listOf(
-                            0.85f  to "Small",
-                            1.0f   to "Normal",
-                            1.15f  to "Large",
-                            1.3f   to "Extra Large"
+                            0.85f  to strFontSmall,
+                            1.0f   to strFontNormal,
+                            1.15f  to strFontLarge,
+                            1.3f   to strFontExtraLarge
                         )
                     }
                     val selectedLabel = fontOptions.firstOrNull { it.first == fontScale }?.second ?: "Normal"
@@ -282,7 +288,7 @@ fun AppearanceScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
-                                    "Font Size",
+                                    stringResource(R.string.appearance_font_size_label),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -609,8 +615,8 @@ fun AppearanceScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     SettingsToggle(
-                        label       = "Bold Keyboard Letters",
-                        description = "Always show keyboard keys in bold weight",
+                        label       = stringResource(R.string.appearance_keyboard_bold_label),
+                        description = stringResource(R.string.appearance_keyboard_bold_desc),
                         checked     = keyboardBold,
                         uiStyle     = uiStyle,
                         onToggle    = { scope.launch { viewModel.saveKeyboardBold(!keyboardBold) } }

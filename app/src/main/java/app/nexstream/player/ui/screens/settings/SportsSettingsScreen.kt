@@ -16,8 +16,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
 
@@ -40,7 +42,7 @@ fun SportsSettingsScreen(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    "Sports Guide",
+                    stringResource(R.string.sports_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = sTheme.categoryText
@@ -68,13 +70,13 @@ fun SportsSettingsScreen(
                 )
                 Column {
                     Text(
-                        "Daily Sports Guide",
+                        stringResource(R.string.sports_daily_guide_title),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = sTheme.categoryText
                     )
                     Text(
-                        "Live and upcoming sports events from dailysportsguide.co.uk. Updated automatically every 20 minutes.",
+                        stringResource(R.string.sports_daily_guide_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = sTheme.categoryText.copy(alpha = 0.6f)
                     )
@@ -84,7 +86,7 @@ fun SportsSettingsScreen(
             HorizontalDivider(color = sTheme.divider.copy(alpha = 0.4f))
 
             Text(
-                "Refresh",
+                stringResource(R.string.sports_refresh_label),
                 style = MaterialTheme.typography.labelSmall,
                 color = sTheme.categoryText.copy(alpha = 0.55f)
             )
@@ -116,7 +118,7 @@ fun SportsSettingsScreen(
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                 }
                 Spacer(Modifier.width(6.dp))
-                Text("Refresh Sports Guide", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.sports_refresh_button), style = MaterialTheme.typography.labelSmall)
             }
         }
     }

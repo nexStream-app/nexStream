@@ -14,9 +14,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
 import androidx.lifecycle.ViewModel
@@ -139,7 +141,7 @@ fun AccountScreen(
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Account",
+                    text = stringResource(R.string.account_title),
                     style = MaterialTheme.typography.titleMedium,
                     color = sTheme.categoryText,
                     modifier = Modifier.weight(1f)
@@ -156,7 +158,7 @@ fun AccountScreen(
                 ) {
                     Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Refresh")
+                    Text(stringResource(R.string.common_refresh))
                 }
             }
         }
@@ -179,12 +181,12 @@ fun AccountScreen(
 
                 is AccountScreenState.NoPlaylist -> {
                     SettingsSectionContainer(
-                        title = "No Xtream Playlist",
+                        title = stringResource(R.string.account_no_playlist_title),
                         icon = Icons.Default.Warning,
                         uiStyle = uiStyle
                     ) {
                         Text(
-                            "No Xtream account found. Add an Xtream playlist in Settings → Playlists.",
+                            stringResource(R.string.account_no_playlist_message),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -194,7 +196,7 @@ fun AccountScreen(
 
                 is AccountScreenState.Error -> {
                     SettingsSectionContainer(
-                        title = "Error",
+                        title = stringResource(R.string.common_error),
                         icon = Icons.Default.ErrorOutline,
                         uiStyle = uiStyle
                     ) {
@@ -212,32 +214,32 @@ fun AccountScreen(
 
                     // ── User Info ─────────────────────────────────────────────
                     SettingsSectionContainer(
-                        title = "User Info",
+                        title = stringResource(R.string.account_section_user_info),
                         icon = Icons.Default.Person,
                         uiStyle = uiStyle
                     ) {
-                        SettingsInfoRow("Username", info.username)
+                        SettingsInfoRow(stringResource(R.string.account_username), info.username)
                         SettingsInfoRow(
-                            label = "Status",
+                            label = stringResource(R.string.account_status),
                             value = info.status,
                             valueColor = if (info.status.lowercase() == "active")
                                 MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.error
                         )
-                        SettingsInfoRow("Expiry", info.expiry)
+                        SettingsInfoRow(stringResource(R.string.account_expiry), info.expiry)
                         if (info.isTrial) {
-                            SettingsInfoRow("Plan", "Trial")
+                            SettingsInfoRow(stringResource(R.string.account_plan), stringResource(R.string.account_plan_trial))
                         }
                     }
 
                     // ── Connections ───────────────────────────────────────────
                     SettingsSectionContainer(
-                        title = "Connections",
+                        title = stringResource(R.string.account_section_connections),
                         icon = Icons.Default.DeviceHub,
                         uiStyle = uiStyle
                     ) {
-                        SettingsInfoRow("Active",  "${info.activeConnections}")
-                        SettingsInfoRow("Maximum", "${info.maxConnections}")
+                        SettingsInfoRow(stringResource(R.string.account_connections_active),  "${info.activeConnections}")
+                        SettingsInfoRow(stringResource(R.string.account_connections_maximum), "${info.maxConnections}")
                         // Visual connection bar
                         val used = if (info.maxConnections > 0)
                             info.activeConnections.toFloat() / info.maxConnections.toFloat()
@@ -250,7 +252,7 @@ fun AccountScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Connections used",
+                                Text(stringResource(R.string.account_connections_used),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("${info.activeConnections} / ${info.maxConnections}",
@@ -272,14 +274,14 @@ fun AccountScreen(
 
                     // ── Server Info ───────────────────────────────────────────
                     SettingsSectionContainer(
-                        title = "Server Info",
+                        title = stringResource(R.string.account_section_server),
                         icon = Icons.Default.Dns,
                         uiStyle = uiStyle
                     ) {
-                        SettingsInfoRow("Host",     info.host)
-                        SettingsInfoRow("Protocol", info.serverProtocol)
-                        SettingsInfoRow("Port",     info.port)
-                        SettingsInfoRow("Timezone", info.timezone)
+                        SettingsInfoRow(stringResource(R.string.account_server_host),     info.host)
+                        SettingsInfoRow(stringResource(R.string.account_server_protocol), info.serverProtocol)
+                        SettingsInfoRow(stringResource(R.string.account_server_port),     info.port)
+                        SettingsInfoRow(stringResource(R.string.account_server_timezone), info.timezone)
                     }
 
                     Spacer(Modifier.height(32.dp))

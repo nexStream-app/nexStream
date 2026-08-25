@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">nexStream</string>
+
+    <!-- Common -->
+    <string name="common_cancel">İptal</string>
+    <string name="common_delete">Sil</string>
+    <string name="common_save">Kaydet</string>
+    <string name="common_done">Tamam</string>
+    <string name="common_reset">Sıfırla</string>
+    <string name="common_refresh">Yenile</string>
+    <string name="common_error">Hata</string>
+    <string name="common_loading">Yükleniyor…</string>
+    <string name="common_ok">Tamam</string>
+    <string name="common_yes">Evet</string>
+    <string name="common_no">Hayır</string>
+    <string name="common_off">Kapalı</string>
+    <string name="common_on">Açık</string>
+    <string name="common_show">Göster</string>
+    <string name="common_hide">Gizle</string>
+    <string name="common_locked">kilitli</string>
+    <string name="common_copied">Kopyalandı!</string>
+    <string name="common_movies">Filmler</string>
+    <string name="common_series">Diziler</string>
+    <string name="common_live_tv">Canlı TV</string>
+    <string name="common_music">Müzik</string>
+    <string name="common_settings">Ayarlar</string>
+    <string name="common_appearance">Görünüm</string>
+    <string name="common_search">Ara</string>
+
+    <!-- Loading screen -->
+    <string name="loading_starting_up">Başlatılıyor…</string>
+    <string name="loading_no_playlist">Oynatma listesi bulunamadı…</string>
+    <string name="loading_loading">Yükleniyor…</string>
+
+    <!-- Navigation items (rail) -->
+    <string name="nav_sports_today">Bugünkü Spor</string>
+    <string name="nav_recent">Son İzlenenler</string>
+    <string name="nav_guide">Rehber</string>
+    <string name="nav_movies">Filmler</string>
+    <string name="nav_series">Diziler</string>
+    <string name="nav_catch_up">Geri Al</string>
+    <string name="nav_picks">Seçimler</string>
+    <string name="nav_music">Müzik</string>
+    <string name="nav_search">Ara</string>
+    <string name="nav_my_list">Listem</string>
+    <string name="nav_settings">Ayarlar</string>
+    <string name="nav_tv_shows">TV Programları</string>
+
+    <!-- Settings menu -->
+    <string name="settings_menu_playlists_title">Oynatma Listeleri</string>
+    <string name="settings_menu_playlists_subtitle">IPTV oynatma listelerinizi ekleyin, kaldırın veya yenileyin</string>
+    <string name="settings_menu_appearance_title">Görünüm</string>
+    <string name="settings_menu_appearance_subtitle">Tema, renkler ve görüntüleme seçeneklerini değiştirin</string>
+    <string name="settings_menu_player_title">Oynatıcı</string>
+    <string name="settings_menu_player_subtitle">Kare hızı, arabellek ve oynatma seçenekleri</string>
+    <string name="settings_menu_licence_title">Lisans</string>
+    <string name="settings_menu_licence_subtitle_active">Aktif</string>
+    <string name="settings_menu_licence_subtitle_inactive">Etkinleştirilmedi — lisans anahtarınızı girin</string>
+    <string name="settings_menu_account_title">Hesap</string>
+    <string name="settings_menu_account_subtitle">Xtream hesap durumu, bağlantılar ve sunucu bilgileri</string>
+    <string name="settings_menu_profiles_title">Profiller</string>
+    <string name="settings_menu_profiles_subtitle">İzleyici profillerini ve içerik kısıtlamalarını yönetin</string>
+    <string name="settings_menu_sync_title">Senkronizasyon</string>
+    <string name="settings_menu_sync_subtitle">Profil başına bulut senkronizasyonu ve veri ayarları</string>
+    <string name="settings_menu_navigation_title">Gezinme</string>
+    <string name="settings_menu_navigation_subtitle">Başlangıç ekranını ayarlayın ve çubuk öğelerini yeniden sıralayın</string>
+    <string name="settings_menu_about_title">Hakkında</string>
+    <string name="settings_menu_about_subtitle">Cihaz bilgileri, kimlikler ve tanılamalar</string>
+
+    <!-- Playlists screen -->
+    <string name="playlists_title">Oynatma Listeleri</string>
+    <string name="playlists_empty">Henüz oynatma listesi eklenmedi</string>
+    <string name="playlists_add">Oynatma Listesi Ekle</string>
+    <string name="playlists_add_another">Başka Bir Oynatma Listesi Ekle</string>
+    <string name="playlists_delete_title">Oynatma Listesi Silinsin mi?</string>
+    <string name="playlists_delete_message">\"%s\" silinsin mi? Bu, tüm kanalları, filmleri, dizileri ve EPG verilerini kaldıracak.</string>
+    <string name="playlists_deduplicate_label">İçerikleri tekilleştir</string>
+    <string name="playlists_deduplicate_description">Düşük öncelikli oynatma listelerinden yinelenen kanalları, filmleri ve dizileri gizle</string>
+    <string name="playlists_refresh_label">Oynatma Listesini Yenile</string>
+    <string name="playlists_priority_higher">Daha yüksek öncelik</string>
+    <string name="playlists_priority_lower">Daha düşük öncelik</string>
+    <string name="playlists_delete_playlist">Oynatma listesini sil</string>
+    <string name="playlists_btn_all">Tümü</string>
+    <string name="playlists_btn_tv">TV</string>
+    <string name="playlists_btn_movies">Filmler</string>
+    <string name="playlists_btn_series">Diziler</string>
+    <string name="playlists_btn_music">Müzik</string>
+
+    <!-- Player settings screen -->
+    <string name="player_settings_title">Oynatıcı Ayarları</string>
+    <string name="player_section_playback">Oynatma</string>
+    <string name="player_auto_frame_rate_label">Otomatik Kare Hızı Eşleştirme</string>
+    <string name="player_auto_frame_rate_desc">İçerikle eşleşmek için ekran yenileme hızını değiştirir (24fps, 30fps, 60fps). Filmlerde titreşimi azaltır. Oynatma başladığında ekranınız titreşiyorsa devre dışı bırakın.</string>
+    <string name="player_smart_buffer_label">Akıllı Arabellek</string>
+    <string name="player_smart_buffer_desc">Yavaş veya kararsız bağlantılarda arabellek boyutunu artırır. Biraz daha uzun başlangıç süresi karşılığında kararlılığı artırır.</string>
+    <string name="player_section_external_players">Harici Oynatıcılar</string>
+    <string name="player_no_external_players">Harici oynatıcı algılanmadı</string>
+    <string name="player_ext_live_tv">Canlı TV</string>
+    <string name="player_ext_movies">Filmler</string>
+    <string name="player_ext_series">Diziler</string>
+    <string name="player_ext_catchup">Geri Al</string>
+    <string name="player_section_downloads">İndirmeler ve Kayıtlar</string>
+    <string name="player_storage_location_label">Depolama Konumu</string>
+    <string name="player_storage_location_desc">İndirmelerin ve kayıtların kaydedileceği yer.</string>
+    <string name="player_storage_internal">Dahili Depolama</string>
+    <string name="player_storage_browse">USB / SD Kart İçin Gözat…</string>
+    <string name="player_storage_current">Geçerli: %s</string>
+    <string name="player_storage_dialog_title">İndirme Konumu</string>
+    <string name="player_storage_dialog_desc">Dahili depolama kullanın veya sistem tarayıcısıyla bir USB / SD kart klasörü seçin.</string>
+    <string name="player_section_privacy">Gizlilik</string>
+    <string name="player_whisper_label">AI Altyazılar (Whisper)</string>
+    <string name="player_whisper_desc">Etkinleştirildiğinde, ses cihaz üzerinde konuşma tanıma için nexstream.uk\'a gönderilir. Bu cihazdan ses çıkmasını önlemek için devre dışı bırakın.</string>
+    <string name="player_whisper_autostart_label">Canlı TV\'de otomatik başlat</string>
+    <string name="player_whisper_autostart_desc">Canlı TV kanalı açtığınızda AI altyazıları otomatik olarak başlatır. Varsayılan olarak kapalı — CC düğmesiyle her zaman manuel olarak etkinleştirebilirsiniz.</string>
+    <string name="player_auto_lang_label">İngilizce dışı sesi otomatik algıla</string>
+    <string name="player_auto_lang_desc">Canlı TV\'de seçili ses parçası İngilizce dışında bir dilde ise altyazı eklemek isteyip istemediğiniz sorulur.</string>
+    <string name="player_section_notifications">Bildirimler</string>
+    <string name="player_admin_notifs_label">Yönetici Duyuruları</string>
+    <string name="player_admin_notifs_desc">nexStream ekibinden gelen duyurular için uygulama içi afişler göster. Bunlar, uygulama açıkken geçerli ekranın üzerinde bir afiş olarak görünür.</string>
+    <string name="player_section_epg">EPG</string>
+    <string name="player_epg_offset_label">Saat Dilimi Farkı</string>
+    <string name="player_epg_offset_desc">Sağlayıcınız farklı bir saat dilimi kullanıyorsa EPG program saatlerini kaydırın. ±12 saat ayarlayın.</string>
+    <string name="player_epg_offset_zero">0s (Kapalı)</string>
+    <string name="player_epg_dialog_title">EPG Saat Dilimi Farkı</string>
+    <string name="player_epg_dialog_desc">Program saatlerini sağlayıcınızın programıyla eşleştirmek için kaydırın. Programlar erken görünüyorsa pozitif, geç görünüyorsa negatif değer kullanın.</string>
+    <string name="player_epg_decrease">Azalt</string>
+    <string name="player_epg_increase">Artır</string>
+    <string name="player_section_formats">Biçimler</string>
+    <string name="player_formats_supported">Desteklenen</string>
+    <string name="player_formats_supported_value">HLS, DASH, MP4, MKV, AVI, TS</string>
+    <string name="player_formats_audio">Ses</string>
+    <string name="player_formats_audio_value">AC3, EAC3, AAC, MP3, FLAC</string>
+    <string name="player_formats_subtitles">Altyazılar</string>
+    <string name="player_formats_subtitles_value">SRT, VTT, ASS, gömülü, AI (Whisper)</string>
+
+    <!-- Sync settings screen -->
+    <string name="sync_title">Senkronizasyon ve Güncelleme</string>
+    <string name="sync_section_updates">Güncellemeler</string>
+    <string name="sync_auto_update_label">Otomatik Güncelleme</string>
+    <string name="sync_auto_update_desc">Başlangıçta uygulama güncellemelerini otomatik olarak kontrol edin ve yükleyin. Varsayılan olarak kapalı.</string>
+    <string name="sync_section_cloud">Bulut Senkronizasyonu</string>
+    <string name="sync_cloud_label">Bulut Senkronizasyonu</string>
+    <string name="sync_cloud_desc">Cihazlarınız arasında nexstream.uk\'a veri senkronize edin. Tüm verileri yalnızca bu cihazda tutmak için kapatın.</string>
+    <string name="sync_what_syncs">Bu profil için nelerin senkronize edileceğini seçin</string>
+    <string name="sync_channel_folders_label">Kanal Klasörleri</string>
+    <string name="sync_channel_folders_desc">Kanal klasörü ve grup düzeninizi senkronize edin</string>
+    <string name="sync_appearance_label">Görünüm</string>
+    <string name="sync_appearance_desc">Tema, yazı tipi ve düzen ayarlarını senkronize edin</string>
+    <string name="sync_player_settings_label">Oynatıcı Ayarları</string>
+    <string name="sync_player_settings_desc">Oynatma, arabellek ve altyazı ayarlarını senkronize edin</string>
+    <string name="sync_syncing">Senkronize ediliyor…</string>
+    <string name="sync_now">Şimdi Senkronize Et</string>
+    <string name="sync_section_my_list">Listem</string>
+    <string name="sync_profile_count_one">1 profil senkronize edildi</string>
+    <string name="sync_profile_count_other">%d profil senkronize edildi</string>
+    <string name="sync_section_backup">Yedekleme ve Geri Yükleme</string>
+    <string name="sync_export_label">Ayarları Dışa Aktar</string>
+    <string name="sync_export_desc">Tüm oynatıcı ve görünüm ayarlarını bu cihazdaki bir JSON dosyasına kaydedin.</string>
+    <string name="sync_import_label">Ayarları İçe Aktar</string>
+    <string name="sync_import_desc">Daha önce dışa aktarılan bir yedekleme dosyasından ayarları geri yükleyin.</string>
+    <string name="sync_export_success">Ayarlar başarıyla dışa aktarıldı</string>
+    <string name="sync_restore_success">Ayarlar geri yüklendi — tüm değişikliklerin geçerli olması için uygulamayı yeniden başlatın</string>
+
+    <!-- Account screen -->
+    <string name="account_title">Hesap</string>
+    <string name="account_refresh">Yenile</string>
+    <string name="account_no_playlist_title">Xtream Oynatma Listesi Yok</string>
+    <string name="account_no_playlist_message">Xtream hesabı bulunamadı. Ayarlar → Oynatma Listeleri\'nden bir Xtream oynatma listesi ekleyin.</string>
+    <string name="account_section_user_info">Kullanıcı Bilgileri</string>
+    <string name="account_username">Kullanıcı Adı</string>
+    <string name="account_status">Durum</string>
+    <string name="account_expiry">Son Kullanma</string>
+    <string name="account_plan">Plan</string>
+    <string name="account_plan_trial">Deneme</string>
+    <string name="account_section_connections">Bağlantılar</string>
+    <string name="account_connections_active">Aktif</string>
+    <string name="account_connections_maximum">Maksimum</string>
+    <string name="account_connections_used">Kullanılan bağlantılar</string>
+    <string name="account_section_server">Sunucu Bilgileri</string>
+    <string name="account_server_host">Sunucu</string>
+    <string name="account_server_protocol">Protokol</string>
+    <string name="account_server_port">Port</string>
+    <string name="account_server_timezone">Saat Dilimi</string>
+
+    <!-- Licence screen -->
+    <string name="licence_title">Lisans</string>
+    <string name="licence_status">Durum</string>
+    <string name="licence_status_free_trial">Ücretsiz Deneme</string>
+    <string name="licence_status_trial_expired">Deneme Süresi Doldu</string>
+    <string name="licence_status_licensed">Lisanslı</string>
+    <string name="licence_expires">Sona Eriyor</string>
+    <string name="licence_device">Cihaz</string>
+    <string name="licence_device_id">Cihaz Kimliği</string>
+    <string name="licence_source">Kaynak</string>
+    <string name="licence_source_reseller">Bayi tarafından atandı</string>
+    <string name="licence_source_direct">Doğrudan</string>
+    <string name="licence_account">Hesap</string>
+    <string name="licence_type">Tür</string>
+    <string name="licence_key">Anahtar</string>
+    <string name="licence_type_lifetime">Ömür Boyu</string>
+    <string name="licence_type_annual">Yıllık</string>
+    <string name="licence_type_never">Hiçbir Zaman</string>
+    <string name="licence_section_activate">Etkinleştir</string>
+    <string name="licence_check_assigned">Atanmış Lisansı Kontrol Et</string>
+    <string name="licence_key_label">Lisans Anahtarı</string>
+    <string name="licence_key_placeholder">XXXXXX-XXXXXX-XXXXXX-XXXXXX</string>
+    <string name="licence_activate_button">Etkinleştir</string>
+    <string name="licence_section_actions">İşlemler</string>
+    <string name="licence_deactivate_button">Bu Cihazda Devre Dışı Bırak</string>
+    <string name="licence_deactivate_dialog_title">Lisansı Devre Dışı Bırak</string>
+    <string name="licence_deactivate_dialog_message">Bu, lisansı bu cihazdan kaldıracak. Lisans anahtarınızla istediğiniz zaman yeniden etkinleştirebilirsiniz.</string>
+    <string name="licence_deactivate_confirm">Devre Dışı Bırak</string>
+
+    <!-- About screen -->
+    <string name="about_title">Hakkında</string>
+    <string name="about_section_app">Uygulama</string>
+    <string name="about_version">Sürüm</string>
+    <string name="about_build">Yapı</string>
+    <string name="about_section_device_id">Cihaz Kimliği</string>
+    <string name="about_id">Kimlik</string>
+    <string name="about_copy_device_id">Cihaz Kimliğini Kopyala</string>
+    <string name="about_copied">Kopyalandı!</string>
+    <string name="about_section_attributions">Atıflar</string>
+    <string name="about_tmdb_content_desc">Film Veritabanı</string>
+    <string name="about_tmdb_disclaimer">Bu ürün TMDB API\'sini kullanır, ancak TMDB tarafından desteklenmez veya onaylanmaz.</string>
+
+    <!-- Navigation settings screen -->
+    <string name="nav_settings_title">Gezinme</string>
+    <string name="nav_settings_start_screen_section">Başlangıç Ekranı</string>
+    <string name="nav_settings_start_screen_label">Başlangıç ekranı</string>
+    <string name="nav_settings_start_screen_desc">Uygulama başladığında açılan bölüm.</string>
+    <string name="nav_settings_rail_order_section">Çubuk Sırası</string>
+    <string name="nav_settings_rail_order_label">Çubuk sırası</string>
+    <string name="nav_settings_rail_order_desc">Yeniden sıralamak veya görünürlüğü değiştirmek için okları kullanın. Ayarlar her zaman görünür. Rehber yeniden sıralanabilir ancak gizlenemez.</string>
+    <string name="nav_settings_move_up">Yukarı taşı</string>
+    <string name="nav_settings_move_down">Aşağı taşı</string>
+
+    <!-- Sports settings screen -->
+    <string name="sports_title">Spor Rehberi</string>
+    <string name="sports_daily_guide_title">Günlük Spor Rehberi</string>
+    <string name="sports_daily_guide_desc">dailysportsguide.co.uk\'tan canlı ve yaklaşan spor etkinlikleri. Her 20 dakikada bir otomatik olarak güncellenir.</string>
+    <string name="sports_refresh_label">Yenile</string>
+    <string name="sports_refresh_button">Spor Rehberini Yenile</string>
+
+    <!-- Appearance screen -->
+    <string name="appearance_title">Görünüm</string>
+    <string name="appearance_section_theme">Tema ve Görüntü</string>
+    <string name="appearance_dark_mode_label">Karanlık Mod</string>
+    <string name="appearance_dark_mode_desc_high_contrast">Uygulama yüksek kontrast teması kullanıyor</string>
+    <string name="appearance_dark_mode_desc_dark">Uygulama karanlık tema kullanıyor</string>
+    <string name="appearance_dark_mode_desc_light">Uygulama açık tema kullanıyor</string>
+    <string name="appearance_high_contrast_label">Yüksek Kontrast</string>
+    <string name="appearance_high_contrast_desc_on">Siyah arka plan, beyaz metin, sarı vurgular</string>
+    <string name="appearance_high_contrast_desc_off">Standart renk temasını kullan</string>
+    <string name="appearance_font_size_label">Yazı Tipi Boyutu</string>
+    <string name="appearance_font_size_small">Küçük</string>
+    <string name="appearance_font_size_normal">Normal</string>
+    <string name="appearance_font_size_large">Büyük</string>
+    <string name="appearance_font_size_extra_large">Çok Büyük</string>
+    <string name="appearance_keyboard_bold_label">Kalın Klavye Harfleri</string>
+    <string name="appearance_keyboard_bold_desc">Klavye tuşlarını her zaman kalın ağırlıkta göster</string>
+    <string name="sync_export_failed">Dışa aktarma başarısız: %s</string>
+    <string name="sync_import_failed">İçe aktarma başarısız: %s</string>
+    <string name="sync_stat_movies">Filmler</string>
+    <string name="sync_stat_series">Diziler</string>
+    <string name="sync_stat_live_tv">Canlı TV</string>
+
+    <!-- Exit dialog -->
+    <string name="exit_dialog_title">nexStream\'den çıkılsın mı?</string>
+    <string name="exit_dialog_message">Çıkmak istediğinizden emin misiniz?</string>
+    <string name="common_exit">Çık</string>
+
+    <!-- EPG screen -->
+    <string name="epg_no_playlists_title">Oynatma listesi bulunamadı</string>
+    <string name="epg_no_playlists_message">Başlamak için Ayarlar\'dan bir oynatma listesi ekleyin</string>
+    <string name="epg_loading_guide">Rehber yükleniyor…</string>
+    <string name="epg_no_favourites_title">Favorilerinizde henüz kanal yok</string>
+    <string name="epg_no_favourites_message">Eklemek için rehberde bir kanala uzun basın</string>
+
+    <!-- Downloads screen -->
+    <string name="downloads_title">İndirmeler</string>
+    <string name="downloads_delete_title">İndirmeyi Sil</string>
+    <string name="downloads_delete_message">« %s » indirmelerinizden kaldırılsın mı? Dosya cihazınızdan silinecek.</string>
+    <string name="downloads_empty_title">Henüz indirme yok</string>
+    <string name="downloads_empty_message">İndirmek için bir filme uzun basın</string>
+    <string name="downloads_section_downloading">İndiriliyor</string>
+    <string name="downloads_section_completed">Tamamlandı</string>
+    <string name="downloads_section_failed">Başarısız</string>
+
+    <!-- Local Files screen -->
+    <string name="local_files_change_folder">Klasörü Değiştir</string>
+    <string name="local_files_empty_title">Bu klasörde video dosyası bulunamadı</string>
+    <string name="local_files_empty_formats">MP4, MKV, AVI, TS ve daha fazlası desteklenmektedir</string>
+    <string name="local_files_no_folder">Klasör seçilmedi</string>
+
+    <!-- Catch-Up screen -->
+    <string name="catchup_select_episode">Bir bölüm seçin</string>
+    <string name="catchup_checking_size">Boyut kontrol ediliyor…</string>
+    <string name="catchup_no_episodes">Son 7 günde bölüm yok</string>
+    <string name="catchup_continue_anyway">Yine de devam et</string>
+</resources>

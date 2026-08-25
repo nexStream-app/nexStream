@@ -14,10 +14,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.R
 import app.nexstream.player.license.AppAccessState
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
@@ -39,7 +41,7 @@ fun LicenceScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Licence", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text(stringResource(R.string.licence_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -84,15 +86,15 @@ fun LicenceContent(
                 "${uiState.trialDaysLeft} day${if (uiState.trialDaysLeft == 1) "" else "s"} remaining"
             else "—"
 
-            SettingsSectionContainer(title = "Licence", icon = Icons.Default.Lock, uiStyle = uiStyle) {
-                SettingsInfoRow("Status", if (isExpired) "Trial Expired" else "Free Trial")
-                SettingsInfoRow("Expires", expiryText)
-                if (uiState.deviceModel.isNotEmpty()) SettingsInfoRow("Device", uiState.deviceModel)
-                SettingsInfoRow("Device ID", uiState.currentDeviceId)
+            SettingsSectionContainer(title = stringResource(R.string.licence_title), icon = Icons.Default.Lock, uiStyle = uiStyle) {
+                SettingsInfoRow(stringResource(R.string.licence_status), if (isExpired) stringResource(R.string.licence_status_trial_expired) else stringResource(R.string.licence_status_free_trial))
+                SettingsInfoRow(stringResource(R.string.licence_expires), expiryText)
+                if (uiState.deviceModel.isNotEmpty()) SettingsInfoRow(stringResource(R.string.licence_device), uiState.deviceModel)
+                SettingsInfoRow(stringResource(R.string.licence_device_id), uiState.currentDeviceId)
             }
 
             // ── Activate ──────────────────────────────────────────────────────
-            SettingsSectionContainer(title = "Activate", icon = Icons.Default.VpnKey, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.licence_section_activate), icon = Icons.Default.VpnKey, uiStyle = uiStyle) {
                 uiState.successMessage?.let {
                     SettingsInfoRow("", it, valueColor = MaterialTheme.colorScheme.primary)
                 }
@@ -111,7 +113,7 @@ fun LicenceContent(
                         Icon(Icons.Default.CloudDownload, null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text("Check for Assigned Licence")
+                    Text(stringResource(R.string.licence_check_assigned))
                 }
                 OutlinedTextField(
                     value = keyInput,
@@ -119,8 +121,8 @@ fun LicenceContent(
                         val clean = raw.uppercase().filter { it.isLetterOrDigit() }
                         keyInput = clean.chunked(6).take(4).joinToString("-")
                     },
-                    label       = { Text("Licence Key") },
-                    placeholder = { Text("XXXXXX-XXXXXX-XXXXXX-XXXXXX") },
+                    label       = { Text(stringResource(R.string.licence_key_label)) },
+                    placeholder = { Text(stringResource(R.string.licence_key_placeholder)) },
                     modifier    = Modifier.fillMaxWidth().padding(horizontal = 16.dp).focusRequester(keyFieldFocus),
                     singleLine  = true,
                     isError     = uiState.errorMessage != null
@@ -135,7 +137,7 @@ fun LicenceContent(
                             strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Activate")
+                    Text(stringResource(R.string.licence_activate_button))
                 }
             }
 
@@ -144,34 +146,34 @@ fun LicenceContent(
             val isLifetimeLicence = uiState.licenceType.isNullOrBlank() ||
                 uiState.licenceType.equals("lifetime", ignoreCase = true)
             val typeDisplay = when {
-                isLifetimeLicence -> "Lifetime"
-                uiState.licenceType.equals("annual", ignoreCase = true) -> "Annual"
-                uiState.licenceType.equals("trial", ignoreCase = true) -> "Free Trial"
-                else -> uiState.licenceType?.replaceFirstChar { c -> c.uppercase() } ?: "Lifetime"
+                isLifetimeLicence -> stringResource(R.string.licence_type_lifetime)
+                uiState.licenceType.equals("annual", ignoreCase = true) -> stringResource(R.string.licence_type_annual)
+                uiState.licenceType.equals("trial", ignoreCase = true) -> stringResource(R.string.licence_status_free_trial)
+                else -> uiState.licenceType?.replaceFirstChar { c -> c.uppercase() } ?: stringResource(R.string.licence_type_lifetime)
             }
             val expiryDisplay = when {
                 !uiState.expiresAt.isNullOrBlank() -> formatExpiry(uiState.expiresAt)
-                isLifetimeLicence -> "Never"
+                isLifetimeLicence -> stringResource(R.string.licence_type_never)
                 else -> "—"
             }
 
-            SettingsSectionContainer(title = "Licence", icon = Icons.Default.VerifiedUser, uiStyle = uiStyle) {
-                SettingsInfoRow("Status", "Licensed", valueColor = MaterialTheme.colorScheme.primary)
-                val sourceDisplay = if (uiState.resellerId != null) "Reseller assigned" else "Direct"
-                SettingsInfoRow("Source", sourceDisplay)
+            SettingsSectionContainer(title = stringResource(R.string.licence_title), icon = Icons.Default.VerifiedUser, uiStyle = uiStyle) {
+                SettingsInfoRow(stringResource(R.string.licence_status), stringResource(R.string.licence_status_licensed), valueColor = MaterialTheme.colorScheme.primary)
+                val sourceDisplay = if (uiState.resellerId != null) stringResource(R.string.licence_source_reseller) else stringResource(R.string.licence_source_direct)
+                SettingsInfoRow(stringResource(R.string.licence_source), sourceDisplay)
                 if (!uiState.isResellerAssigned) {
                     uiState.email?.takeIf { it.isNotEmpty() && !it.endsWith("@nexstream.app") }
-                        ?.let { SettingsInfoRow("Account", it) }
+                        ?.let { SettingsInfoRow(stringResource(R.string.licence_account), it) }
                 }
-                SettingsInfoRow("Type", typeDisplay)
-                SettingsInfoRow("Expires", expiryDisplay)
+                SettingsInfoRow(stringResource(R.string.licence_type), typeDisplay)
+                SettingsInfoRow(stringResource(R.string.licence_expires), expiryDisplay)
                 uiState.licenceKey?.takeIf { it.isNotEmpty() }
-                    ?.let { SettingsInfoRow("Key", it) }
-                if (uiState.deviceModel.isNotEmpty()) SettingsInfoRow("Device", uiState.deviceModel)
-                SettingsInfoRow("Device ID", uiState.currentDeviceId)
+                    ?.let { SettingsInfoRow(stringResource(R.string.licence_key), it) }
+                if (uiState.deviceModel.isNotEmpty()) SettingsInfoRow(stringResource(R.string.licence_device), uiState.deviceModel)
+                SettingsInfoRow(stringResource(R.string.licence_device_id), uiState.currentDeviceId)
             }
 
-            SettingsSectionContainer(title = "Actions", icon = Icons.Default.Settings, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.licence_section_actions), icon = Icons.Default.Settings, uiStyle = uiStyle) {
                 var deactivateFocused by remember { mutableStateOf(false) }
                 OutlinedButton(
                     onClick  = { showDeactivateDialog = true },
@@ -197,7 +199,7 @@ fun LicenceContent(
                 ) {
                     Icon(Icons.Default.LinkOff, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Deactivate on This Device")
+                    Text(stringResource(R.string.licence_deactivate_button))
                 }
             }
         }
@@ -206,15 +208,15 @@ fun LicenceContent(
     if (showDeactivateDialog) {
         AlertDialog(
             onDismissRequest = { showDeactivateDialog = false },
-            title   = { Text("Deactivate Licence") },
-            text    = { Text("This will remove the licence from this device. You can reactivate at any time with your licence key.") },
+            title   = { Text(stringResource(R.string.licence_deactivate_dialog_title)) },
+            text    = { Text(stringResource(R.string.licence_deactivate_dialog_message)) },
             confirmButton = {
                 TextButton(onClick = { onDeactivate(); showDeactivateDialog = false }) {
-                    Text("Deactivate", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.licence_deactivate_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeactivateDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeactivateDialog = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }

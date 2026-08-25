@@ -22,6 +22,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -119,7 +121,7 @@ fun LocalFilesScreen(
                         .clickable { showBrowser = true }
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text("Change Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.local_files_change_folder), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -129,15 +131,15 @@ fun LocalFilesScreen(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.VideoFile, null, modifier = Modifier.size(48.dp), tint = sTheme.categoryText.copy(alpha = 0.3f))
-                    Text("No video files found in this folder", color = sTheme.categoryText.copy(alpha = 0.5f), fontSize = 14.sp)
-                    Text("MP4, MKV, AVI, TS and more are supported", color = sTheme.categoryText.copy(alpha = 0.35f), fontSize = 12.sp)
+                    Text(stringResource(R.string.local_files_empty_title), color = sTheme.categoryText.copy(alpha = 0.5f), fontSize = 14.sp)
+                    Text(stringResource(R.string.local_files_empty_formats), color = sTheme.categoryText.copy(alpha = 0.35f), fontSize = 12.sp)
                 }
             }
         } else if (files.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = sTheme.categoryText.copy(alpha = 0.3f))
-                    Text("No folder selected", color = sTheme.categoryText.copy(alpha = 0.5f), fontSize = 14.sp)
+                    Text(stringResource(R.string.local_files_no_folder), color = sTheme.categoryText.copy(alpha = 0.5f), fontSize = 14.sp)
                 }
             }
         } else {

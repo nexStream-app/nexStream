@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,7 +67,7 @@ fun AboutScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("About", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text(stringResource(R.string.about_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -79,14 +80,14 @@ fun AboutScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── App section ───────────────────────────────────────────────────
-            SettingsSectionContainer(title = "App", icon = Icons.Default.Info, uiStyle = uiStyle) {
-                SettingsInfoRow("Version", BuildConfig.VERSION_NAME)
-                SettingsInfoRow("Build",   BuildConfig.BUILD_NUMBER)
+            SettingsSectionContainer(title = stringResource(R.string.about_section_app), icon = Icons.Default.Info, uiStyle = uiStyle) {
+                SettingsInfoRow(stringResource(R.string.about_version), BuildConfig.VERSION_NAME)
+                SettingsInfoRow(stringResource(R.string.about_build),   BuildConfig.BUILD_NUMBER)
             }
 
             // ── Device ID section ─────────────────────────────────────────────
-            SettingsSectionContainer(title = "Device ID", icon = Icons.Default.Fingerprint, uiStyle = uiStyle) {
-                SettingsInfoRow("ID", currentDeviceId)
+            SettingsSectionContainer(title = stringResource(R.string.about_section_device_id), icon = Icons.Default.Fingerprint, uiStyle = uiStyle) {
+                SettingsInfoRow(stringResource(R.string.about_id), currentDeviceId)
                 Spacer(Modifier.height(8.dp))
                 var copyFocused by remember { mutableStateOf(false) }
                 OutlinedButton(
@@ -115,22 +116,22 @@ fun AboutScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (copied) "Copied!" else "Copy Device ID")
+                    Text(if (copied) stringResource(R.string.about_copied) else stringResource(R.string.about_copy_device_id))
                 }
                 Spacer(Modifier.height(4.dp))
             }
 
             // ── Attributions section ──────────────────────────────────────────
-            SettingsSectionContainer(title = "Attributions", icon = Icons.Default.Movie, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.about_section_attributions), icon = Icons.Default.Movie, uiStyle = uiStyle) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Image(
                         painter = painterResource(R.drawable.ic_tmdb),
-                        contentDescription = "The Movie Database",
+                        contentDescription = stringResource(R.string.about_tmdb_content_desc),
                         modifier = Modifier.height(20.dp).wrapContentWidth()
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                        stringResource(R.string.about_tmdb_disclaimer),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

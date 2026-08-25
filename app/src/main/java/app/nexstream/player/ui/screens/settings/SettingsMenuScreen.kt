@@ -19,9 +19,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.R
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.theme.UiStyle
 
@@ -47,70 +49,91 @@ fun SettingsMenuScreen(
     val uiStyle = rememberUiStyle()
     val scrollState = rememberScrollState()
 
-    val items = remember(uiState) {
+    // Resolve string resources in composable scope so they update on locale change
+    val strPlaylists       = stringResource(R.string.settings_menu_playlists_title)
+    val strPlaylistsSub    = stringResource(R.string.settings_menu_playlists_subtitle)
+    val strAppearance      = stringResource(R.string.settings_menu_appearance_title)
+    val strAppearanceSub   = stringResource(R.string.settings_menu_appearance_subtitle)
+    val strPlayer          = stringResource(R.string.settings_menu_player_title)
+    val strPlayerSub       = stringResource(R.string.settings_menu_player_subtitle)
+    val strLicence         = stringResource(R.string.settings_menu_licence_title)
+    val strLicenceActive   = stringResource(R.string.settings_menu_licence_subtitle_active)
+    val strLicenceInactive = stringResource(R.string.settings_menu_licence_subtitle_inactive)
+    val strAccount         = stringResource(R.string.settings_menu_account_title)
+    val strAccountSub      = stringResource(R.string.settings_menu_account_subtitle)
+    val strProfiles        = stringResource(R.string.settings_menu_profiles_title)
+    val strProfilesSub     = stringResource(R.string.settings_menu_profiles_subtitle)
+    val strSync            = stringResource(R.string.settings_menu_sync_title)
+    val strSyncSub         = stringResource(R.string.settings_menu_sync_subtitle)
+    val strNavigation      = stringResource(R.string.settings_menu_navigation_title)
+    val strNavigationSub   = stringResource(R.string.settings_menu_navigation_subtitle)
+    val strAbout           = stringResource(R.string.settings_menu_about_title)
+    val strAboutSub        = stringResource(R.string.settings_menu_about_subtitle)
+
+    val items = remember(uiState, strLicenceActive, strLicenceInactive) {
         listOf(
             MenuItemData(
-                title = "Playlists",
-                subtitle = "Add, remove or refresh your IPTV playlists",
+                title = strPlaylists,
+                subtitle = strPlaylistsSub,
                 icon = Icons.Default.List,
                 focusRequester = playlistsFocusRequester,
                 route = AppRoute.SettingsPlaylists
             ),
             MenuItemData(
-                title = "Appearance",
-                subtitle = "Change theme, colours and display options",
+                title = strAppearance,
+                subtitle = strAppearanceSub,
                 icon = Icons.Default.Palette,
                 focusRequester = appearanceFocusRequester,
                 route = AppRoute.SettingsAppearance
             ),
             MenuItemData(
-                title = "Player",
-                subtitle = "Frame rate, buffering and playback options",
+                title = strPlayer,
+                subtitle = strPlayerSub,
                 icon = Icons.Default.PlayCircle,
                 focusRequester = playerFocusRequester,
                 route = AppRoute.SettingsPlayer
             ),
             MenuItemData(
-                title = "Licence",
+                title = strLicence,
                 subtitle = if (uiState.isActivated) {
                     val email = uiState.email?.takeIf { it.isNotEmpty() && !it.endsWith("@nexstream.app") }
-                    if (email != null) "Active · $email" else "Active"
-                } else "Not activated — tap to enter your licence key",
+                    if (email != null) "$strLicenceActive · $email" else strLicenceActive
+                } else strLicenceInactive,
                 icon = if (uiState.isActivated) Icons.Default.VerifiedUser else Icons.Default.Lock,
                 focusRequester = licenceFocusRequester,
                 route = AppRoute.SettingsLicence
             ),
             MenuItemData(
-                title = "Account",
-                subtitle = "Xtream account status, connections and server info",
+                title = strAccount,
+                subtitle = strAccountSub,
                 icon = Icons.Default.ManageAccounts,
                 focusRequester = accountFocusRequester,
                 route = AppRoute.SettingsAccount
             ),
             MenuItemData(
-                title = "Profiles",
-                subtitle = "Manage viewer profiles and content restrictions",
+                title = strProfiles,
+                subtitle = strProfilesSub,
                 icon = Icons.Default.People,
                 focusRequester = null,
                 route = AppRoute.SettingsProfiles
             ),
             MenuItemData(
-                title = "Sync",
-                subtitle = "Cloud sync and data settings per profile",
+                title = strSync,
+                subtitle = strSyncSub,
                 icon = Icons.Default.Sync,
                 focusRequester = null,
                 route = AppRoute.SettingsSyncSettings
             ),
             MenuItemData(
-                title = "Navigation",
-                subtitle = "Set start screen and reorder rail items",
+                title = strNavigation,
+                subtitle = strNavigationSub,
                 icon = Icons.Default.Reorder,
                 focusRequester = null,
                 route = AppRoute.SettingsNavigation
             ),
             MenuItemData(
-                title = "About",
-                subtitle = "Device info, IDs and diagnostics",
+                title = strAbout,
+                subtitle = strAboutSub,
                 icon = Icons.Default.Info,
                 focusRequester = null,
                 route = AppRoute.SettingsAbout

@@ -72,6 +72,8 @@ import android.os.Environment
 import android.os.StatFs
 import java.util.*
 import javax.inject.Inject
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date helpers
@@ -986,7 +988,7 @@ fun CatchUpDetailsDialog(
                                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             } else {
-                                Text("Select an episode", fontSize = 13.sp,
+                                Text(stringResource(R.string.catchup_select_episode), fontSize = 13.sp,
                                     color = Color.White.copy(alpha = 0.40f),
                                     modifier = Modifier.align(Alignment.CenterStart))
                             }
@@ -1005,7 +1007,7 @@ fun CatchUpDetailsDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
-                                Text("Checking size…", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
+                                Text(stringResource(R.string.catchup_checking_size), fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
                             }
                         }
                         is CatchUpInfoBarState.StorageInfo -> {

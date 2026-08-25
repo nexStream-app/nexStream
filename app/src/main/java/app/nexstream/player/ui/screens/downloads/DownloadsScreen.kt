@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -81,18 +83,18 @@ fun DownloadsScreen(
     deleteTarget?.let { item ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete Download") },
-            text = { Text("Remove \"${item.title}\" from your downloads? The file will be deleted from your device.") },
+            title = { Text(stringResource(R.string.downloads_delete_title)) },
+            text = { Text(stringResource(R.string.downloads_delete_message, item.title)) },
             confirmButton = {
                 Button(onClick = {
                     NexStreamDownloadManager.deleteDownload(context, item.downloadId, item.filePath)
                     deleteTarget = null
                 }) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { deleteTarget = null }) { Text("Cancel") }
+                OutlinedButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -123,7 +125,7 @@ fun DownloadsScreen(
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
-                text = selectedType ?: "Downloads",
+                text = selectedType ?: stringResource(R.string.downloads_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = sTheme.categoryText
             )
@@ -136,10 +138,10 @@ fun DownloadsScreen(
                     Icon(Icons.Default.Download, null,
                         modifier = Modifier.size(64.dp),
                         tint = sTheme.categoryText.copy(alpha = 0.3f))
-                    Text("No downloads yet",
+                    Text(stringResource(R.string.downloads_empty_title),
                         style = MaterialTheme.typography.titleSmall,
                         color = sTheme.categoryText.copy(alpha = 0.6f))
-                    Text("Long-press a movie to download it",
+                    Text(stringResource(R.string.downloads_empty_message),
                         style = MaterialTheme.typography.bodySmall,
                         color = sTheme.categoryText.copy(alpha = 0.4f))
                 }
@@ -151,7 +153,7 @@ fun DownloadsScreen(
             ) {
                 if (active.isNotEmpty()) {
                     item {
-                        SectionHeader("Downloading", active.size)
+                        SectionHeader(stringResource(R.string.downloads_section_downloading), active.size)
                     }
                     items(active, key = { it.downloadId }) { item ->
                         val isFirst = item == (active + completed + failed).firstOrNull()
@@ -165,7 +167,7 @@ fun DownloadsScreen(
                 }
 
                 if (completed.isNotEmpty()) {
-                    item { Spacer(Modifier.height(8.dp)); SectionHeader("Completed", completed.size) }
+                    item { Spacer(Modifier.height(8.dp)); SectionHeader(stringResource(R.string.downloads_section_completed), completed.size) }
                     items(completed, key = { it.downloadId }) { item ->
                         DownloadCard(
                             item = item,
@@ -180,7 +182,7 @@ fun DownloadsScreen(
                 }
 
                 if (failed.isNotEmpty()) {
-                    item { Spacer(Modifier.height(8.dp)); SectionHeader("Failed", failed.size) }
+                    item { Spacer(Modifier.height(8.dp)); SectionHeader(stringResource(R.string.downloads_section_failed), failed.size) }
                     items(failed, key = { it.downloadId }) { item ->
                         DownloadCard(
                             item = item,

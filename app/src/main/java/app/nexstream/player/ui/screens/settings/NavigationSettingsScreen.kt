@@ -20,6 +20,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nexstream.player.ui.screens.main.AppRoute
@@ -121,7 +123,7 @@ fun NavigationSettingsScreen(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Navigation", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text(stringResource(R.string.nav_settings_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -135,7 +137,7 @@ fun NavigationSettingsScreen(
         ) {
             // ── Start-on picker ──────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Start Screen",
+                title = stringResource(R.string.nav_settings_start_screen_section),
                 icon = Icons.Default.Home,
                 uiStyle = uiStyle
             ) {
@@ -145,14 +147,14 @@ fun NavigationSettingsScreen(
                 )) {
                     if (uiStyle == UiStyle.CLASSIC) {
                         Text(
-                            "Start screen",
+                            stringResource(R.string.nav_settings_start_screen_label),
                             style      = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color      = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        "The section that opens when the app launches.",
+                        stringResource(R.string.nav_settings_start_screen_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -260,7 +262,7 @@ fun NavigationSettingsScreen(
 
             // ── Rail order ───────────────────────────────────────────────────
             SettingsSectionContainer(
-                title = "Rail Order",
+                title = stringResource(R.string.nav_settings_rail_order_section),
                 icon = Icons.Default.Reorder,
                 uiStyle = uiStyle
             ) {
@@ -270,14 +272,14 @@ fun NavigationSettingsScreen(
                 )) {
                     if (uiStyle == UiStyle.CLASSIC) {
                         Text(
-                            "Rail order",
+                            stringResource(R.string.nav_settings_rail_order_label),
                             style      = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color      = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        "Use the arrows to reorder or toggle visibility. Settings is always visible. Guide can be reordered but not hidden.",
+                        stringResource(R.string.nav_settings_rail_order_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -351,7 +353,7 @@ fun NavigationSettingsScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             if (isSettings) {
-                                Text("locked", style = MaterialTheme.typography.labelSmall,
+                                Text(stringResource(R.string.common_locked), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                             } else {
                                 Row(
@@ -362,7 +364,7 @@ fun NavigationSettingsScreen(
                                     if (!isGuide) {
                                         RailOrderIconButton(
                                             icon = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = if (isHidden) "Show" else "Hide",
+                                            contentDescription = if (isHidden) stringResource(R.string.common_show) else stringResource(R.string.common_hide),
                                             enabled = true,
                                             onClick = {
                                                 val newHidden = if (isHidden) hiddenItems - item.routeName
@@ -374,7 +376,7 @@ fun NavigationSettingsScreen(
                                     // Move up
                                     RailOrderIconButton(
                                         icon = Icons.Default.KeyboardArrowUp,
-                                        contentDescription = "Move up",
+                                        contentDescription = stringResource(R.string.nav_settings_move_up),
                                         enabled = canMoveUp,
                                         focusRequester = upFR,
                                         onClick = {
@@ -389,7 +391,7 @@ fun NavigationSettingsScreen(
                                     // Move down
                                     RailOrderIconButton(
                                         icon = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = "Move down",
+                                        contentDescription = stringResource(R.string.nav_settings_move_down),
                                         enabled = canMoveDown,
                                         focusRequester = downFR,
                                         onClick = {

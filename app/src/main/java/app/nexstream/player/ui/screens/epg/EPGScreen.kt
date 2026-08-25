@@ -68,6 +68,8 @@ import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.screens.epg.ReminderViewModel
 import app.nexstream.player.ui.theme.LocalUiStyle
 import app.nexstream.player.ui.theme.UiStyle
+import androidx.compose.ui.res.stringResource
+import app.nexstream.player.R
 import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -107,8 +109,8 @@ fun EPGScreen(
         playlists.isEmpty() -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("No playlists found", style = MaterialTheme.typography.headlineMedium)
-                    Text("Add a playlist in Settings to get started", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.epg_no_playlists_title), style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(R.string.epg_no_playlists_message), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -456,7 +458,7 @@ private fun EPGContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator()
-                    Text("Loading guide…",
+                    Text(stringResource(R.string.epg_loading_guide),
                         style = MaterialTheme.typography.bodyMedium,
                         color = sTheme.categoryText.copy(alpha = 0.7f))
                 }
@@ -467,10 +469,10 @@ private fun EPGContent(
         if (showEmptyFavourites) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("No channels in your favourites yet",
+                    Text(stringResource(R.string.epg_no_favourites_title),
                         style = MaterialTheme.typography.titleSmall,
                         color = sTheme.categoryText.copy(alpha = 0.6f))
-                    Text("Long press a channel in the guide to add it",
+                    Text(stringResource(R.string.epg_no_favourites_message),
                         style = MaterialTheme.typography.bodySmall,
                         color = sTheme.categoryText.copy(alpha = 0.4f))
                 }

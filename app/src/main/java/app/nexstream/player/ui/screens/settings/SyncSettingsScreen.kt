@@ -14,9 +14,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.local.dao.ProfileDao
@@ -58,7 +60,7 @@ data class ProfileSyncStat(
 
 data class SyncSettingsUiState(
     val isSyncing: Boolean = false,
-    val syncMessage: String? = null,
+    val syncedCount: Int? = null,
     val profileStats: List<ProfileSyncStat> = emptyList(),
     val syncCloudEnabled: Boolean = true,
     val syncChannelFolders: Boolean = true,
@@ -150,20 +152,14 @@ class SyncSettingsViewModel @Inject constructor(
     fun manualSync() {
         if (!_uiState.value.syncCloudEnabled) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isSyncing = true, syncMessage = null) }
+            _uiState.update { it.copy(isSyncing = true, syncedCount = null) }
             profileSyncManager.syncFromServer()
             profileSyncManager.pushProfiles()
             watchlistSyncManager.pushAllToServer()
             val profiles = profileDao.getAllProfilesOnce()
             profiles.forEach { profile -> watchlistSyncManager.syncFromServer(profile.id) }
             refreshStats()
-            val count = profiles.size
-            _uiState.update {
-                it.copy(
-                    isSyncing   = false,
-                    syncMessage = "Synced $count profile${if (count == 1) "" else "s"}"
-                )
-            }
+            _uiState.update { it.copy(isSyncing = false, syncedCount = profiles.size) }
         }
     }
 }
@@ -186,13 +182,20 @@ fun SyncSettingsScreen(
     val syncBtnFR = remember { FocusRequester() }
     val scope     = rememberCoroutineScope()
 
+    val strProfileCountOne   = stringResource(R.string.sync_profile_count_one)
+    val strProfileCountOther = stringResource(R.string.sync_profile_count_other)
+    val strExportSuccess     = stringResource(R.string.sync_export_success)
+    val strExportFailed      = stringResource(R.string.sync_export_failed)
+    val strRestoreSuccess    = stringResource(R.string.sync_restore_success)
+    val strImportFailed      = stringResource(R.string.sync_import_failed)
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiStyle != UiStyle.MODERN) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Text("Sync and Update", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+                Text(stringResource(R.string.sync_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = sTheme.divider)
         }
@@ -205,10 +208,10 @@ fun SyncSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Auto Update ───────────────────────────────────────────────────
-            SettingsSectionContainer(title = "Updates", icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
                 SettingsToggle(
-                    label          = "Auto Update",
-                    description    = "Automatically check for and install app updates on startup. Off by default.",
+                    label          = stringResource(R.string.sync_auto_update_label),
+                    description    = stringResource(R.string.sync_auto_update_desc),
                     checked        = autoUpdateEnabled,
                     uiStyle        = uiStyle,
                     focusRequester = firstFR,
@@ -217,10 +220,10 @@ fun SyncSettingsScreen(
             }
 
             // ── Cloud Sync section ────────────────────────────────────────────
-            SettingsSectionContainer(title = "Cloud Sync", icon = Icons.Default.Cloud, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.sync_section_cloud), icon = Icons.Default.Cloud, uiStyle = uiStyle) {
                 SettingsToggle(
-                    label       = "Cloud Sync",
-                    description = "Sync data to nexstream.uk across your devices. Turn off to keep all data on this device only.",
+                    label       = stringResource(R.string.sync_cloud_label),
+                    description = stringResource(R.string.sync_cloud_desc),
                     checked     = uiState.syncCloudEnabled,
                     uiStyle     = uiStyle,
                     onToggle    = { viewModel.setSyncCloudEnabled(!uiState.syncCloudEnabled, context) },
@@ -232,28 +235,28 @@ fun SyncSettingsScreen(
                         color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                     )
                     Text(
-                        "Choose what syncs for this profile",
+                        stringResource(R.string.sync_what_syncs),
                         style    = MaterialTheme.typography.bodySmall,
                         color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                     SettingsToggle(
-                        label       = "Channel Folders",
-                        description = "Sync your channel folder and group layout",
+                        label       = stringResource(R.string.sync_channel_folders_label),
+                        description = stringResource(R.string.sync_channel_folders_desc),
                         checked     = uiState.syncChannelFolders,
                         uiStyle     = uiStyle,
                         onToggle    = { viewModel.setSyncChannelFolders(!uiState.syncChannelFolders) },
                     )
                     SettingsToggle(
-                        label       = "Appearance",
-                        description = "Sync theme, font and layout settings",
+                        label       = stringResource(R.string.sync_appearance_label),
+                        description = stringResource(R.string.sync_appearance_desc),
                         checked     = uiState.syncAppearance,
                         uiStyle     = uiStyle,
                         onToggle    = { viewModel.setSyncAppearance(!uiState.syncAppearance) },
                     )
                     SettingsToggle(
-                        label       = "Player Settings",
-                        description = "Sync playback, buffer and subtitle settings",
+                        label       = stringResource(R.string.sync_player_settings_label),
+                        description = stringResource(R.string.sync_player_settings_desc),
                         checked     = uiState.syncPlayerSettings,
                         uiStyle     = uiStyle,
                         onToggle    = { viewModel.setSyncPlayerSettings(!uiState.syncPlayerSettings) },
@@ -262,6 +265,8 @@ fun SyncSettingsScreen(
                     // ── Manual sync button ────────────────────────────────────
                     Spacer(Modifier.height(4.dp))
                     var syncFocused by remember { mutableStateOf(false) }
+                    val strSyncing = stringResource(R.string.sync_syncing)
+                    val strSyncNow = stringResource(R.string.sync_now)
                     Button(
                         onClick  = { if (!uiState.isSyncing) viewModel.manualSync() },
                         enabled  = !uiState.isSyncing,
@@ -280,15 +285,17 @@ fun SyncSettingsScreen(
                         if (uiState.isSyncing) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(8.dp))
-                            Text("Syncing…")
+                            Text(strSyncing)
                         } else {
                             Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Sync Now")
+                            Text(strSyncNow)
                         }
                     }
 
-                    uiState.syncMessage?.let { msg ->
+                    uiState.syncedCount?.let { count ->
+                        val msg = if (count == 1) strProfileCountOne
+                                  else String.format(strProfileCountOther, count)
                         Spacer(Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp),
@@ -305,10 +312,12 @@ fun SyncSettingsScreen(
 
             // ── My List stats per profile ─────────────────────────────────────
             if (uiState.syncCloudEnabled && uiState.profileStats.isNotEmpty()) {
-                SettingsSectionContainer(title = "My List", icon = Icons.Default.Favorite, uiStyle = uiStyle) {
+                SettingsSectionContainer(title = stringResource(R.string.sync_section_my_list), icon = Icons.Default.Favorite, uiStyle = uiStyle) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val statCount = uiState.profileStats.size
                         Text(
-                            "${uiState.profileStats.size} profile${if (uiState.profileStats.size == 1) "" else "s"} synced",
+                            if (statCount == 1) strProfileCountOne
+                            else String.format(strProfileCountOther, statCount),
                             style      = MaterialTheme.typography.bodySmall,
                             color      = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
@@ -357,9 +366,9 @@ fun SyncSettingsScreen(
                                 out.write(json.toString(2).toByteArray())
                             }
                         }
-                        backupStatus = "Settings exported successfully"
+                        backupStatus = strExportSuccess
                     } catch (e: Exception) {
-                        backupStatus = "Export failed: ${e.message}"
+                        backupStatus = String.format(strExportFailed, e.message)
                     }
                 }
             }
@@ -380,25 +389,25 @@ fun SyncSettingsScreen(
                             context.applySyncedPlayerPrefs(settingsMap)
                             context.applySyncedThemePrefs(settingsMap)
                         }
-                        backupStatus = "Settings restored — restart the app for all changes to take effect"
+                        backupStatus = strRestoreSuccess
                     } catch (e: Exception) {
-                        backupStatus = "Import failed: ${e.message}"
+                        backupStatus = String.format(strImportFailed, e.message)
                     }
                 }
             }
 
-            SettingsSectionContainer(title = "Backup & Restore", icon = Icons.Default.SaveAlt, uiStyle = uiStyle) {
+            SettingsSectionContainer(title = stringResource(R.string.sync_section_backup), icon = Icons.Default.SaveAlt, uiStyle = uiStyle) {
                 val java8Date = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
                 SettingsActionItem(
-                    label       = "Export Settings",
-                    description = "Save all player and appearance settings to a JSON file on this device.",
+                    label       = stringResource(R.string.sync_export_label),
+                    description = stringResource(R.string.sync_export_desc),
                     value       = "",
                     uiStyle     = uiStyle,
                     onClick     = { exportLauncher.launch("nexstream_backup_$java8Date.json") }
                 )
                 SettingsActionItem(
-                    label       = "Import Settings",
-                    description = "Restore settings from a previously exported backup file.",
+                    label       = stringResource(R.string.sync_import_label),
+                    description = stringResource(R.string.sync_import_desc),
                     value       = "",
                     uiStyle     = uiStyle,
                     onClick     = { importLauncher.launch(arrayOf("application/json", "*/*")) },
@@ -425,9 +434,9 @@ private fun ProfileStatRow(stat: ProfileSyncStat) {
             Text(stat.profileName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StatChip(label = "Movies",  count = stat.movies)
-            StatChip(label = "Series",  count = stat.series)
-            StatChip(label = "Live TV", count = stat.liveTV)
+            StatChip(label = stringResource(R.string.sync_stat_movies),  count = stat.movies)
+            StatChip(label = stringResource(R.string.sync_stat_series),  count = stat.series)
+            StatChip(label = stringResource(R.string.sync_stat_live_tv), count = stat.liveTV)
         }
     }
 }
