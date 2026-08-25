@@ -180,7 +180,8 @@ object DatabaseModule {
                 NexStreamDatabase.MIGRATION_31_32,
                 NexStreamDatabase.MIGRATION_32_33,
                 NexStreamDatabase.MIGRATION_33_34,
-                NexStreamDatabase.MIGRATION_34_35
+                NexStreamDatabase.MIGRATION_34_35,
+                NexStreamDatabase.MIGRATION_35_36
             )
             .build()
     }
