@@ -144,7 +144,7 @@ fun MoviesScreen(
     var showKeyboard by remember { mutableStateOf(false) }
     LaunchedEffect(showSearch) {
         if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
-        else { showKeyboard = false; searchQuery = ""; debouncedQuery = "" }
+        else { showKeyboard = false }
     }
     // Pre-fill query and open keyboard when navigated from Picks
     LaunchedEffect(autoSearchQuery) {
