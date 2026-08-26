@@ -213,19 +213,22 @@ suspend fun Context.applySyncedPlayerPrefs(settings: Map<String, Any?>) {
 }
 
 // ── App display language ──────────────────────────────────────────────────────
+// SharedPreferences (not DataStore) so attachBaseContext can read synchronously
+// without runBlocking, and so commit() guarantees the write is on disk before
+// recreate() fires.
 
-private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
+private fun Context.langPrefs() =
+    getSharedPreferences("nexstream_lang", Context.MODE_PRIVATE)
 
 fun Context.getAppLanguageFlow(): Flow<String> =
-    playerPrefsDataStore.data.map { it[KEY_APP_LANGUAGE] ?: "" }
+    kotlinx.coroutines.flow.flow { emit(getAppLanguageBlocking()) }
 
-suspend fun Context.saveAppLanguage(code: String) {
-    playerPrefsDataStore.edit { it[KEY_APP_LANGUAGE] = code }
+fun Context.saveAppLanguage(code: String) {
+    langPrefs().edit().putString("app_language", code).commit()
 }
 
-fun Context.getAppLanguageBlocking(): String = kotlinx.coroutines.runBlocking {
-    playerPrefsDataStore.data.first()[KEY_APP_LANGUAGE] ?: ""
-}
+fun Context.getAppLanguageBlocking(): String =
+    langPrefs().getString("app_language", "") ?: ""
 
 // ── EPG timezone offset ───────────────────────────────────────────────────────
 

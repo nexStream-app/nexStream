@@ -28,13 +28,11 @@ import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.getAppLanguageFlow
 import app.nexstream.player.ui.theme.saveAppLanguage
-import kotlinx.coroutines.launch
 
 @Composable
 fun LanguageSettingsScreen(firstItemFocusRequester: FocusRequester? = null) {
     val context = LocalContext.current
     val sTheme = LocalNexStreamTheme.current.sidebar
-    val scope = rememberCoroutineScope()
 
     val currentLang by context.getAppLanguageFlow().collectAsState(initial = "")
 
@@ -76,10 +74,8 @@ fun LanguageSettingsScreen(firstItemFocusRequester: FocusRequester? = null) {
                 isSelected = code == currentLang,
                 focusRequester = if (index == 0) firstItemFocusRequester else null,
                 onClick = {
-                    scope.launch {
-                        context.saveAppLanguage(code)
-                        (context as? Activity)?.recreate()
-                    }
+                    context.saveAppLanguage(code)
+                    (context as? Activity)?.recreate()
                 }
             )
         }
