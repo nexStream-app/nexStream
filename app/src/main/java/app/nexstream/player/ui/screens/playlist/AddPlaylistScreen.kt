@@ -5,6 +5,7 @@ import android.graphics.Color as AndroidColor
 import android.content.pm.PackageManager
 import android.os.Environment
 import android.provider.DocumentsContract
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -129,6 +130,13 @@ class AddPlaylistViewModel @Inject constructor(
     var importIsJellyfin by mutableStateOf(false); private set
     var importIsPlex     by mutableStateOf(false); private set
 
+    private var isCancelled = false
+
+    fun cancelPolling() {
+        isCancelled = true
+        _pollState.update { MacPollState.Idle }
+    }
+
     // ── Plex PIN flow state ───────────────────────────────────────────────────
     enum class PlexPinState { IDLE, REQUESTING, WAITING, FETCHING_SERVERS, READY, ERROR, EXPIRED }
 
@@ -200,6 +208,7 @@ class AddPlaylistViewModel @Inject constructor(
     }
 
     private suspend fun handlePlaylistEvent(event: PlaylistRepository.PlaylistAssignedEvent) {
+        if (isCancelled) return
         _pollState.update { MacPollState.Found }
         repository.resetImportState()
         importIsXtream   = event.type == "xtream"
@@ -347,9 +356,18 @@ fun AddPlaylistScreen(
     val isTv       = remember { isTvDevice(context) }
     val deviceId   = remember { viewModel.getDeviceId() }
     val cancelLabel = if (isFirstRun) "Quit" else "Cancel"
+    var navigatingAway by remember { mutableStateOf(false) }
     val onCancel: () -> Unit = if (isFirstRun) {
         { (context as? android.app.Activity)?.finish() }
-    } else onBack
+    } else {
+        {
+            navigatingAway = true
+            viewModel.cancelPolling()
+            onBack()
+        }
+    }
+
+    BackHandler(enabled = !isFirstRun) { onCancel() }
 
     var keyboardTarget by remember { mutableStateOf<String?>(null) }
     var keyboardValue  by remember { mutableStateOf("") }
@@ -380,7 +398,7 @@ fun AddPlaylistScreen(
     }
 
     val importStarted = viewModel.importStarted
-    if (importStarted) {
+    if (importStarted && !navigatingAway) {
         PlaylistImportProgressScreen(viewModel = viewModel, onDone = onBack)
         return
     }
