@@ -98,4 +98,7 @@ interface MovieDao {
 
     @Query("SELECT * FROM movies WHERE LOWER(name) IN (:lowerTitles)")
     suspend fun findMoviesByTitlesBatch(lowerTitles: List<String>): List<MovieEntity>
+
+    @Query("SELECT * FROM movies WHERE streamUrl = :streamUrl LIMIT 1")
+    suspend fun getByStreamUrl(streamUrl: String): MovieEntity?
 }

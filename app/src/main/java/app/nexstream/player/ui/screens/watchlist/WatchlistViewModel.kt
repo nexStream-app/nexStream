@@ -104,6 +104,11 @@ class WatchlistViewModel @Inject constructor(
 
     suspend fun getMovieById(id: String): MovieEntity? = repository.getMovieById(id)
 
+    suspend fun getMovieByStreamUrl(streamUrl: String): MovieEntity? = repository.getMovieByStreamUrl(streamUrl)
+
+    suspend fun getSeriesByName(name: String): SeriesEntity? =
+        try { repository.findSeriesByTitle(name).firstOrNull() } catch (_: Exception) { null }
+
     suspend fun getSeriesById(id: String): SeriesEntity? = repository.getSeriesById(id)
 
     suspend fun getChannelById(id: String): app.nexstream.player.data.local.entity.ChannelEntity? = repository.getChannelById(id)

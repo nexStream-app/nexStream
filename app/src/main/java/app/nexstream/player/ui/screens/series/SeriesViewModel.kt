@@ -34,7 +34,7 @@ class SeriesViewModel @Inject constructor(
         .flatMapLatest { list ->
             if (list.isEmpty()) flowOf(emptyList())
             else combine(list.map { repository.getSeriesGridItems(it.id) }) { arrays ->
-                arrays.flatMap { it }
+                arrays.flatMap { it }.distinctBy { it.name.trim().lowercase() }
             }.debounce(150) // Coalesce rapid batch inserts during fetch
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

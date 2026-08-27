@@ -123,7 +123,11 @@ fun WatchlistScreen(
         if (item == null) return@LaunchedEffect
         when (item.type) {
             WatchlistType.MOVIE -> {
-                val base = viewModel.getMovieById(item.id)
+                var base = viewModel.getMovieById(item.id)
+                // Fallback: playlist IDs differ across devices so the composite ID may not match
+                if (base == null && !item.streamUrl.isNullOrEmpty()) {
+                    base = viewModel.getMovieByStreamUrl(item.streamUrl)
+                }
                 movieDialogEntity = base
                 if (base != null) {
                     movieResumePosition = viewModel.getMoviePosition(base.id)
@@ -132,7 +136,9 @@ fun WatchlistScreen(
                 }
             }
             WatchlistType.SERIES -> {
-                val s = viewModel.getSeriesById(item.id)
+                var s = viewModel.getSeriesById(item.id)
+                // Fallback: look up by name when playlist IDs differ across devices
+                if (s == null) s = viewModel.getSeriesByName(item.name)
                 seriesDialogEntity = s
                 if (s != null) {
                     seriesDialogProgressMap = viewModel.getEpisodeProgressMap(s.id)

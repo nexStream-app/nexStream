@@ -769,8 +769,9 @@ class MoviesViewModel @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val allMovies: StateFlow<List<MovieGridItem>> = playlists.flatMapLatest { list ->
         if (list.isEmpty()) flowOf(emptyList())
-        else combine(list.map { repository.getMovieGridItems(it.id) }) { arrays -> arrays.flatMap { it } }
-            .debounce(150) // Coalesce rapid batch inserts during fetch
+        else combine(list.map { repository.getMovieGridItems(it.id) }) { arrays ->
+                arrays.flatMap { it }.distinctBy { it.name.trim().lowercase() }
+            }.debounce(150) // Coalesce rapid batch inserts during fetch
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -788,7 +789,7 @@ class MoviesViewModel @Inject constructor(
         else playlists.flatMapLatest { list ->
             if (list.isEmpty()) flowOf(emptyList())
             else combine(list.map { repository.getMovieGridItemsByCategory(it.id, category) }) { arrays ->
-                arrays.flatMap { it }
+                arrays.flatMap { it }.distinctBy { it.name.trim().lowercase() }
             }
             // No debounce: data is already in DB at category-switch time; combine waits for all
             // playlist flows before emitting, so no rapid-fire updates occur

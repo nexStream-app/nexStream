@@ -1776,6 +1776,9 @@ class PlaylistRepository @Inject constructor(
     suspend fun getMovieById(movieId: String): MovieEntity? =
         database.movieDao().getById(movieId)
 
+    suspend fun getMovieByStreamUrl(streamUrl: String): MovieEntity? =
+        database.movieDao().getByStreamUrl(streamUrl)
+
     suspend fun getEpisodeById(episodeId: String): EpisodeEntity? =
         database.seriesDao().getEpisodeByIdOnce(episodeId)
 
