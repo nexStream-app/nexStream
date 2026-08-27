@@ -145,7 +145,7 @@ fun SeriesScreen(
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base
             val filtered = when {
                 silentFilterQuery != null -> ageFiltered.filter { it.name.contains(silentFilterQuery, ignoreCase = true) }
-                showSearch && debouncedQuery.isNotBlank() -> ageFiltered.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
+                debouncedQuery.isNotBlank() -> ageFiltered.filter { it.name.contains(debouncedQuery, ignoreCase = true) }
                 else -> ageFiltered
             }
             when (sortOrder) {

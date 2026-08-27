@@ -49,25 +49,35 @@ class RecentlySyncManager @Inject constructor(
             Log.i(tag, "syncFromServer: profile=$profileId HTTP ${response.code()}")
             if (!response.isSuccessful) return@withContext
             val items = response.body()?.items ?: return@withContext
-            val localItems = dao.getRecentlyWatchedSuspend(profileId)
-            val localById  = localItems.associateBy { it.id }
+            val localItems  = dao.getRecentlyWatchedSuspend(profileId)
+            val localById   = localItems.associateBy { it.id }
+            val localByName = localItems.associateBy { it.name.trim().lowercase() }
 
-            // Upsert server items
-            var saved = 0
+            // Upsert server items, guarding against cross-device ID divergence causing duplicates
+            var saved = 0; var skipped = 0
             items.forEach { item ->
                 val entity = mapToEntity(item, profileId) ?: return@forEach
-                dao.insert(entity)
-                saved++
+                val nameKey = entity.name.trim().lowercase()
+                if (localById.containsKey(entity.id) || !localByName.containsKey(nameKey)) {
+                    dao.insert(entity)
+                    saved++
+                } else {
+                    Log.d(tag, "syncFromServer: skipping '${entity.name}' (exists locally under different ID)")
+                    skipped++
+                }
             }
 
-            // Remove local items absent from server
-            val serverIds = items.mapNotNull { it["item_id"] }.toSet()
+            // Remove local items absent from server by both ID and name
+            val serverIds   = items.mapNotNull { it["item_id"] }.toSet()
+            val serverNames = items.mapNotNull { it["name"] }.map { it.trim().lowercase() }.toSet()
             var deleted = 0
-            localItems.filter { it.id !in serverIds }.forEach { stale ->
+            localItems.filter { local ->
+                local.id !in serverIds && local.name.trim().lowercase() !in serverNames
+            }.forEach { stale ->
                 dao.deleteById(stale.id, profileId)
                 deleted++
             }
-            Log.i(tag, "syncFromServer: saved=$saved deleted=$deleted")
+            Log.i(tag, "syncFromServer: saved=$saved skipped=$skipped deleted=$deleted")
         } catch (e: Exception) {
             Log.e(tag, "syncFromServer: ${e.javaClass.simpleName}: ${e.message}", e)
         }

@@ -702,7 +702,7 @@ fun CatchUpDetailsDialog(
 
     val focusedEpisode = limitedEpisodes.getOrNull(focusedGridIndex)
 
-    LaunchedEffect(focusedGridIndex) { infoBarState = CatchUpInfoBarState.Idle }
+    // infoBarState reset on D-pad focus change is handled directly in onFocusChanged below
 
     val dialogFocus = remember { FocusRequester() }
     val gridFRs     = remember(limitedEpisodes.size) { mutableMapOf<Int, FocusRequester>() }

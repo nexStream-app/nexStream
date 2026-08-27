@@ -275,7 +275,8 @@ fun SeriesDetailsDialog(
         }
     }
 
-    LaunchedEffect(focusedGridIndex) { infoBarState = InfoBarState.Idle }
+    var focusTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(focusTick) { if (focusTick > 0) infoBarState = InfoBarState.Idle }
 
     val dialogFocus         = remember { FocusRequester() }
     val gridFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
@@ -1056,6 +1057,7 @@ function onYouTubeIframeAPIReady(){
                                     .onFocusChanged { fs ->
                                         if (fs.isFocused && inGrid) {
                                             focusedGridIndex = index
+                                            focusTick++
                                         }
                                     }
                                     .clickable {
