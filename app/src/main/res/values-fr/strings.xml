@@ -68,6 +68,8 @@
     <string name="settings_menu_sync_subtitle">Sync cloud et paramètres de données par profil</string>
     <string name="settings_menu_navigation_title">Navigation</string>
     <string name="settings_menu_navigation_subtitle">Définir l\'écran de démarrage et réorganiser le menu</string>
+    <string name="settings_menu_network_title">Network</string>
+    <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
     <string name="settings_menu_about_title">À propos</string>
     <string name="settings_menu_about_subtitle">Infos appareil, identifiants et diagnostics</string>
 

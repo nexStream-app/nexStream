@@ -240,3 +240,55 @@ fun Context.getEpgTimeOffsetFlow(): Flow<Int> =
 suspend fun Context.saveEpgTimeOffset(hours: Int) {
     playerPrefsDataStore.edit { it[KEY_EPG_TIME_OFFSET] = hours.coerceIn(-12, 12) }
 }
+
+// ── Stream proxy ──────────────────────────────────────────────────────────────
+// OFF = no proxy, BUILTIN = proxy.nexstream.uk, CUSTOM = user-configured
+
+private val KEY_PROXY_MODE     = stringPreferencesKey("proxy_mode")
+private val KEY_PROXY_HOST     = stringPreferencesKey("proxy_host")
+private val KEY_PROXY_PORT     = androidx.datastore.preferences.core.intPreferencesKey("proxy_port")
+private val KEY_PROXY_TYPE     = stringPreferencesKey("proxy_type") // HTTP or SOCKS5
+private val KEY_PROXY_USERNAME = stringPreferencesKey("proxy_username")
+private val KEY_PROXY_PASSWORD = stringPreferencesKey("proxy_password")
+
+fun Context.getProxyModeFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_MODE] ?: "OFF" }
+
+fun Context.getProxyHostFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_HOST] ?: "" }
+
+fun Context.getProxyPortFlow(): Flow<Int> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_PORT] ?: 8080 }
+
+fun Context.getProxyTypeFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_TYPE] ?: "HTTP" }
+
+fun Context.getProxyUsernameFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_USERNAME] ?: "" }
+
+fun Context.getProxyPasswordFlow(): Flow<String> =
+    playerPrefsDataStore.data.map { it[KEY_PROXY_PASSWORD] ?: "" }
+
+suspend fun Context.saveProxyMode(mode: String) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_MODE] = mode }
+}
+
+suspend fun Context.saveProxyHost(host: String) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_HOST] = host }
+}
+
+suspend fun Context.saveProxyPort(port: Int) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_PORT] = port }
+}
+
+suspend fun Context.saveProxyType(type: String) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_TYPE] = type }
+}
+
+suspend fun Context.saveProxyUsername(username: String) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_USERNAME] = username }
+}
+
+suspend fun Context.saveProxyPassword(password: String) {
+    playerPrefsDataStore.edit { it[KEY_PROXY_PASSWORD] = password }
+}

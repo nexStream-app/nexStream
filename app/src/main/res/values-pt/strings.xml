@@ -68,6 +68,8 @@
     <string name="settings_menu_sync_subtitle">Sincronização na nuvem e definições de dados por perfil</string>
     <string name="settings_menu_navigation_title">Navegação</string>
     <string name="settings_menu_navigation_subtitle">Defina o ecrã inicial e reordene os itens do painel</string>
+    <string name="settings_menu_network_title">Network</string>
+    <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
     <string name="settings_menu_about_title">Acerca de</string>
     <string name="settings_menu_about_subtitle">Informações do dispositivo, IDs e diagnósticos</string>
 

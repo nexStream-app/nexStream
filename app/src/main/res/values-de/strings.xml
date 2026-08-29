@@ -60,6 +60,8 @@
     <string name="settings_menu_sync_subtitle">Cloud-Sync und Dateneinstellungen pro Profil</string>
     <string name="settings_menu_navigation_title">Navigation</string>
     <string name="settings_menu_navigation_subtitle">Startbildschirm festlegen und Menüreihenfolge anpassen</string>
+    <string name="settings_menu_network_title">Network</string>
+    <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
     <string name="settings_menu_about_title">Über</string>
     <string name="settings_menu_about_subtitle">Geräteinformationen, IDs und Diagnose</string>
     <string name="playlists_title">Playlists</string>

@@ -35,6 +35,7 @@ sealed interface AppRoute {
     data object SettingsSyncSettings  : AppRoute
     data object SettingsChannelGroups : AppRoute
     data object SettingsLanguage      : AppRoute
+    data object SettingsProxy         : AppRoute
 }
 
 // ── Route grouping helpers ────────────────────────────────────────────────────
@@ -66,7 +67,8 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
     AppRoute.SettingsSports,
     AppRoute.SettingsSyncSettings,
     AppRoute.SettingsChannelGroups,
-    AppRoute.SettingsLanguage                         -> AppRoute.Settings
+    AppRoute.SettingsLanguage,
+    AppRoute.SettingsProxy                            -> AppRoute.Settings
 }
 
 /** True for routes that have a category panel. */
