@@ -288,15 +288,15 @@ class SearchViewModel @Inject constructor(
                                 mergedPeopleSeries.forEach { s -> addNames(s.cast); addNames(s.director) }
                             }.sorted()
 
-                            val filteredChannels = cp.first.filter { ch ->
-                                ch.groupTitle !in blockedTv
-                            }
-                            val filteredMovies = ms.first.filter { m ->
-                                isAllowedByAgeRating(m.certification, maxAgeRating, allowNr)
-                            }
-                            val filteredSeries = ms.second.filter { s ->
-                                isAllowedByAgeRating(s.certification, maxAgeRating, allowNr)
-                            }
+                            val filteredChannels = cp.first
+                                .filter { ch -> ch.groupTitle !in blockedTv }
+                                .distinctBy { it.name.trim().lowercase() }
+                            val filteredMovies = ms.first
+                                .filter { m -> isAllowedByAgeRating(m.certification, maxAgeRating, allowNr) }
+                                .distinctBy { it.name.trim().lowercase() }
+                            val filteredSeries = ms.second
+                                .filter { s -> isAllowedByAgeRating(s.certification, maxAgeRating, allowNr) }
+                                .distinctBy { it.name.trim().lowercase() }
 
                             SearchResults(
                                 channels     = filteredChannels,

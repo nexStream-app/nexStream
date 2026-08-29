@@ -151,10 +151,8 @@ fun SearchScreen(
         scope.launch {
             val ch = viewModel.getChannelByEpgId(prog.channelId)
             if (ch != null) {
-                val epgId = ch.epgChannelId ?: ch.id
-                val current = viewModel.getCurrentProgram(epgId)
-                val next    = viewModel.getNextProgram(epgId)
-                programDialogState = ProgramDialogState(ch, current, next)
+                val next = viewModel.getNextProgram(ch.epgChannelId ?: ch.id)
+                programDialogState = ProgramDialogState(ch, prog, next)
             }
         }
     }
