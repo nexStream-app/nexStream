@@ -180,11 +180,23 @@ class WatchlistViewModel @Inject constructor(
     fun clearAllForType(selectedType: String?) {
         viewModelScope.launch {
             when (selectedType) {
-                "Live TV" -> repository.clearWatchlistByType(WatchlistType.CHANNEL)
-                "Movies"  -> repository.clearWatchlistByType(WatchlistType.MOVIE)
-                "Series"  -> repository.clearWatchlistByType(WatchlistType.SERIES)
+                "Live TV" -> {
+                    repository.clearWatchlistByType(WatchlistType.CHANNEL)
+                    syncManager.enqueuePushClearAll(WatchlistType.CHANNEL, activeProfileId)
+                }
+                "Movies"  -> {
+                    repository.clearWatchlistByType(WatchlistType.MOVIE)
+                    syncManager.enqueuePushClearAll(WatchlistType.MOVIE, activeProfileId)
+                }
+                "Series"  -> {
+                    repository.clearWatchlistByType(WatchlistType.SERIES)
+                    syncManager.enqueuePushClearAll(WatchlistType.SERIES, activeProfileId)
+                }
                 "Music"   -> repository.clearWatchlistByType(WatchlistType.MUSIC)
-                else      -> repository.clearWatchlistAll()
+                else      -> {
+                    repository.clearWatchlistAll()
+                    syncManager.enqueuePushClearAll(null, activeProfileId)
+                }
             }
         }
     }

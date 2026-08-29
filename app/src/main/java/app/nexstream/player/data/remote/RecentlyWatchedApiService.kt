@@ -25,7 +25,8 @@ data class RecentlyWatchedItemRequest(
 
 data class RecentlyWatchedDeleteRequest(
     val item_id: String? = null,
-    val profile_id: String = "default"
+    val profile_id: String = "default",
+    val type: String? = null
 )
 
 interface RecentlyWatchedApiService {

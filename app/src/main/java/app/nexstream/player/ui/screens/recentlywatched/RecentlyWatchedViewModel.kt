@@ -63,16 +63,31 @@ class RecentlyWatchedViewModel @Inject constructor(
     }
 
     fun clearAll() {
-        viewModelScope.launch { repository.clearRecentlyWatched() }
+        viewModelScope.launch {
+            repository.clearRecentlyWatched()
+            recentlySyncManager.enqueuePushClearAll(null, activeProfileId)
+        }
     }
 
     fun clearAllForType(selectedType: String?) {
         viewModelScope.launch {
             when (selectedType) {
-                "Live TV"  -> repository.clearRecentlyWatchedByType(RecentlyWatchedType.CHANNEL)
-                "Movies"   -> repository.clearRecentlyWatchedByType(RecentlyWatchedType.MOVIE)
-                "Episodes" -> repository.clearRecentlyWatchedByType(RecentlyWatchedType.EPISODE)
-                else       -> repository.clearRecentlyWatched()
+                "Live TV"  -> {
+                    repository.clearRecentlyWatchedByType(RecentlyWatchedType.CHANNEL)
+                    recentlySyncManager.enqueuePushClearAll(RecentlyWatchedType.CHANNEL, activeProfileId)
+                }
+                "Movies"   -> {
+                    repository.clearRecentlyWatchedByType(RecentlyWatchedType.MOVIE)
+                    recentlySyncManager.enqueuePushClearAll(RecentlyWatchedType.MOVIE, activeProfileId)
+                }
+                "Episodes" -> {
+                    repository.clearRecentlyWatchedByType(RecentlyWatchedType.EPISODE)
+                    recentlySyncManager.enqueuePushClearAll(RecentlyWatchedType.EPISODE, activeProfileId)
+                }
+                else       -> {
+                    repository.clearRecentlyWatched()
+                    recentlySyncManager.enqueuePushClearAll(null, activeProfileId)
+                }
             }
         }
     }

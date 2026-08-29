@@ -41,6 +41,10 @@ class WatchlistSyncManager @Inject constructor(
         syncScope.launch { pushRemove(id, type, profileId) }
     }
 
+    fun enqueuePushClearAll(type: WatchlistType?, profileId: String) {
+        syncScope.launch { pushClearAll(type, profileId) }
+    }
+
     private fun authHeader(): String? {
         val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey() ?: return null
         return "Bearer $key"
@@ -222,6 +226,35 @@ class WatchlistSyncManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(tag, "pushAdd: EXCEPTION pushing ${item.type} ${item.id}: ${e.javaClass.simpleName}: ${e.message}", e)
+        }
+    }
+
+    private suspend fun pushClearAll(type: WatchlistType?, profileId: String) = withContext(Dispatchers.IO) {
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) return@withContext
+        val auth = authHeader() ?: run {
+            Log.e(tag, "pushClearAll: authHeader null")
+            return@withContext
+        }
+        val apiType = when (type) {
+            WatchlistType.CHANNEL -> "channels"
+            WatchlistType.MOVIE   -> "vod"
+            WatchlistType.SERIES  -> "series"
+            WatchlistType.MUSIC   -> return@withContext
+            null                  -> "all"
+        }
+        Log.d(tag, "pushClearAll: apiType=$apiType profile=$profileId")
+        try {
+            val response = api.removeItem(
+                auth = auth,
+                type = apiType,
+                body = DeleteRequest(item_id = "", profile_id = profileId)
+            )
+            if (!response.isSuccessful) {
+                Log.e(tag, "pushClearAll: $apiType → HTTP ${response.code()} FAILED")
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "pushClearAll: EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 

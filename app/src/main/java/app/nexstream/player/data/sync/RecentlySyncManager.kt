@@ -34,6 +34,7 @@ class RecentlySyncManager @Inject constructor(
 
     fun enqueuePushAdd(entity: RecentlyWatchedEntity) { syncScope.launch { pushAdd(entity) } }
     fun enqueuePushRemove(id: String, profileId: String) { syncScope.launch { pushRemove(id, profileId) } }
+    fun enqueuePushClearAll(type: RecentlyWatchedType?, profileId: String) { syncScope.launch { pushClearAll(type, profileId) } }
 
     private fun authHeader(): String? {
         val key = licencePreferences.getLicenceKey() ?: licencePreferences.getTrialSyncKey() ?: return null
@@ -103,6 +104,21 @@ class RecentlySyncManager @Inject constructor(
             ))
         } catch (e: Exception) {
             Log.e(tag, "pushAdd: ${e.javaClass.simpleName}: ${e.message}", e)
+        }
+    }
+
+    private suspend fun pushClearAll(type: RecentlyWatchedType?, profileId: String) = withContext(Dispatchers.IO) {
+        val cloudEnabled = context.getCloudSyncEnabledFlow().first()
+        if (!cloudEnabled) return@withContext
+        val auth = authHeader() ?: return@withContext
+        try {
+            api.removeItem(auth, RecentlyWatchedDeleteRequest(
+                item_id    = null,
+                profile_id = profileId,
+                type       = type?.name
+            ))
+        } catch (e: Exception) {
+            Log.e(tag, "pushClearAll: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 
