@@ -1788,6 +1788,12 @@ class PlaylistRepository @Inject constructor(
     suspend fun getChannelById(channelId: String): app.nexstream.player.data.local.entity.ChannelEntity? =
         database.channelDao().getChannelById(channelId)
 
+    suspend fun getChannelByStreamUrl(streamUrl: String): app.nexstream.player.data.local.entity.ChannelEntity? =
+        database.channelDao().getChannelByStreamUrlOnce(streamUrl)
+
+    suspend fun getChannelByName(name: String): app.nexstream.player.data.local.entity.ChannelEntity? =
+        database.channelDao().getChannelByName(name)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getRecentlyWatched(): Flow<List<RecentlyWatchedEntity>> =
         profileManager.activeProfile.flatMapLatest { profile ->

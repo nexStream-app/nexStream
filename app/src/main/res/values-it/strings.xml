@@ -40,6 +40,9 @@
     <string name="nav_my_list">La mia lista</string>
     <string name="nav_settings">Impostazioni</string>
     <string name="nav_tv_shows">Programmi TV</string>
+    <string name="nav_downloads">Download</string>
+    <string name="nav_device">Dispositivo</string>
+    <string name="common_categories">Categorie</string>
     <string name="settings_menu_playlists_title">Playlist</string>
     <string name="settings_menu_playlists_subtitle">Aggiungi, rimuovi o aggiorna le tue playlist IPTV</string>
     <string name="settings_menu_appearance_title">Aspetto</string>

@@ -40,6 +40,9 @@
     <string name="nav_my_list">Mijn lijst</string>
     <string name="nav_settings">Instellingen</string>
     <string name="nav_tv_shows">TV-programma\'s</string>
+    <string name="nav_downloads">Downloads</string>
+    <string name="nav_device">Apparaat</string>
+    <string name="common_categories">Categorieën</string>
     <string name="settings_menu_playlists_title">Afspeellijsten</string>
     <string name="settings_menu_playlists_subtitle">IPTV-afspeellijsten toevoegen, verwijderen of vernieuwen</string>
     <string name="settings_menu_appearance_title">Weergave</string>

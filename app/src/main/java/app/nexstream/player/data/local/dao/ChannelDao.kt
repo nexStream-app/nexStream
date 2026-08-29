@@ -47,6 +47,12 @@ interface ChannelDao {
 
     @Query("SELECT * FROM channels WHERE epgChannelId = :epgChannelId LIMIT 1")
     suspend fun getChannelByEpgId(epgChannelId: String): ChannelEntity?
+
+    @Query("SELECT * FROM channels WHERE streamUrl = :streamUrl LIMIT 1")
+    suspend fun getChannelByStreamUrlOnce(streamUrl: String): ChannelEntity?
+
+    @Query("SELECT * FROM channels WHERE LOWER(name) = LOWER(:name) LIMIT 1")
+    suspend fun getChannelByName(name: String): ChannelEntity?
 }
 
 data class CategoryChannelCount(val groupTitle: String, val count: Int)

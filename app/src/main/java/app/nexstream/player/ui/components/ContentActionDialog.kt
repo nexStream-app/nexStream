@@ -42,10 +42,12 @@ fun ContentActionDialog(
     removeIsDestructive: Boolean = true,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
-    onGoTo: () -> Unit
+    onGoTo: () -> Unit,
+    onPlay: (() -> Unit)? = null,
 ) {
-    // 0=Close, 1=Remove, 2=GoTo(default)
-    var selectedButton by remember { mutableStateOf(2) }
+    // 0=Close, 1=Remove, 2=Play(if present)/GoTo, 3=GoTo(if Play present)
+    val buttonCount = if (onPlay != null) 4 else 3
+    var selectedButton by remember { mutableStateOf(if (onPlay != null) 2 else 2) }
     val dialogFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -80,10 +82,15 @@ fun ContentActionDialog(
                     .onKeyEvent { e ->
                         if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                         when (e.key) {
-                            Key.DirectionLeft  -> { selectedButton = (selectedButton - 1 + 3) % 3; true }
-                            Key.DirectionRight -> { selectedButton = (selectedButton + 1) % 3; true }
+                            Key.DirectionLeft  -> { selectedButton = (selectedButton - 1 + buttonCount) % buttonCount; true }
+                            Key.DirectionRight -> { selectedButton = (selectedButton + 1) % buttonCount; true }
                             Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                when (selectedButton) { 0 -> onDismiss(); 1 -> onRemove(); 2 -> onGoTo() }
+                                when (selectedButton) {
+                                    0 -> onDismiss()
+                                    1 -> onRemove()
+                                    2 -> if (onPlay != null) onPlay() else onGoTo()
+                                    3 -> onGoTo()
+                                }
                                 true
                             }
                             Key.Back -> { onDismiss(); true }
@@ -160,7 +167,7 @@ fun ContentActionDialog(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment     = Alignment.CenterVertically,
                     ) {
-                        // Remove / action button (index 1)
+                        // Remove button (index 1)
                         ContentDialogPill(
                             icon       = removeIcon,
                             label      = removeLabel,
@@ -168,11 +175,21 @@ fun ContentActionDialog(
                             accent     = if (removeIsDestructive) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
                             onClick    = onRemove,
                         )
-                        // Go To button (index 2 / default)
+                        // Play button (index 2, only when onPlay provided)
+                        if (onPlay != null) {
+                            ContentDialogPill(
+                                icon       = Icons.Default.PlayArrow,
+                                label      = "Play",
+                                isSelected = selectedButton == 2,
+                                accent     = MaterialTheme.colorScheme.primary,
+                                onClick    = onPlay,
+                            )
+                        }
+                        // Go To button (index 2 when no Play, index 3 when Play present)
                         ContentDialogPill(
-                            icon       = Icons.Default.PlayArrow,
+                            icon       = Icons.Default.OpenInNew,
                             label      = goToLabel,
-                            isSelected = selectedButton == 2,
+                            isSelected = selectedButton == if (onPlay != null) 3 else 2,
                             accent     = MaterialTheme.colorScheme.primary,
                             onClick    = onGoTo,
                         )

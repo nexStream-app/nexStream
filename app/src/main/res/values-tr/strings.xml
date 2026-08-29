@@ -46,6 +46,9 @@
     <string name="nav_my_list">Listem</string>
     <string name="nav_settings">Ayarlar</string>
     <string name="nav_tv_shows">TV Programları</string>
+    <string name="nav_downloads">İndirilenler</string>
+    <string name="nav_device">Cihaz</string>
+    <string name="common_categories">Kategoriler</string>
 
     <!-- Settings menu -->
     <string name="settings_menu_playlists_title">Oynatma Listeleri</string>

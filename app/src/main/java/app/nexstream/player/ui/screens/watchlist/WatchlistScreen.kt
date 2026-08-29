@@ -124,10 +124,10 @@ fun WatchlistScreen(
         when (item.type) {
             WatchlistType.MOVIE -> {
                 var base = viewModel.getMovieById(item.id)
-                // Fallback: playlist IDs differ across devices so the composite ID may not match
-                if (base == null && !item.streamUrl.isNullOrEmpty()) {
-                    base = viewModel.getMovieByStreamUrl(item.streamUrl)
-                }
+                // Fallback 1: stream URL — same Xtream server + same credentials
+                if (base == null && !item.streamUrl.isNullOrEmpty()) base = viewModel.getMovieByStreamUrl(item.streamUrl)
+                // Fallback 2: title match — works even when credentials differ across devices
+                if (base == null) base = viewModel.findMovieByName(item.name)
                 movieDialogEntity = base
                 if (base != null) {
                     movieResumePosition = viewModel.getMoviePosition(base.id)
@@ -157,7 +157,11 @@ fun WatchlistScreen(
                 }
             }
             WatchlistType.CHANNEL -> {
-                val ch = viewModel.getChannelById(item.id)
+                var ch = viewModel.getChannelById(item.id)
+                // Fallback 1: stream URL match
+                if (ch == null && !item.streamUrl.isNullOrEmpty()) ch = viewModel.getChannelByStreamUrl(item.streamUrl)
+                // Fallback 2: name match
+                if (ch == null) ch = viewModel.getChannelByName(item.name)
                 channelDialogEntity = ch
                 if (ch != null) {
                     val epgId = ch.epgChannelId ?: ch.id
@@ -501,6 +505,19 @@ fun WatchlistScreen(
                     WatchlistType.SERIES  -> "Go to Series"
                     WatchlistType.MUSIC   -> "Go to Music"
                 }
+                // Play is available for movies/channels/music that have a stream URL
+                val playAction: (() -> Unit)? = when {
+                    selectedItem.type == WatchlistType.MOVIE && !selectedItem.streamUrl.isNullOrEmpty() -> {
+                        { onLaunchPlayer(selectedItem.streamUrl, null, null, null, 0L, selectedItem.name, null); dialogItem = null }
+                    }
+                    selectedItem.type == WatchlistType.CHANNEL && !selectedItem.streamUrl.isNullOrEmpty() -> {
+                        { onChannelClick(selectedItem.streamUrl, selectedItem.name); dialogItem = null }
+                    }
+                    selectedItem.type == WatchlistType.MUSIC && !selectedItem.streamUrl.isNullOrEmpty() -> {
+                        { onChannelClick(selectedItem.streamUrl, selectedItem.name); dialogItem = null }
+                    }
+                    else -> null
+                }
                 ContentActionDialog(
                     name        = selectedItem.name,
                     posterUrl   = selectedItem.posterUrl,
@@ -521,7 +538,8 @@ fun WatchlistScreen(
                                 onChannelClick(url, selectedItem.name)
                             }
                         }
-                    }
+                    },
+                    onPlay = playAction,
                 )
             }
         }

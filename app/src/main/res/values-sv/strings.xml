@@ -40,6 +40,9 @@
     <string name="nav_my_list">Min lista</string>
     <string name="nav_settings">Inställningar</string>
     <string name="nav_tv_shows">TV-program</string>
+    <string name="nav_downloads">Nedladdningar</string>
+    <string name="nav_device">Enhet</string>
+    <string name="common_categories">Kategorier</string>
     <string name="settings_menu_playlists_title">Spellistor</string>
     <string name="settings_menu_playlists_subtitle">Lägg till, ta bort eller uppdatera dina IPTV-spellistor</string>
     <string name="settings_menu_appearance_title">Utseende</string>

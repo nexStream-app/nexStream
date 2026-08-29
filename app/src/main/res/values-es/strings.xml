@@ -46,6 +46,9 @@
     <string name="nav_my_list">Mi lista</string>
     <string name="nav_settings">Ajustes</string>
     <string name="nav_tv_shows">Programas de TV</string>
+    <string name="nav_downloads">Descargas</string>
+    <string name="nav_device">Dispositivo</string>
+    <string name="common_categories">Categorías</string>
 
     <!-- Settings menu -->
     <string name="settings_menu_playlists_title">Listas de reproducción</string>

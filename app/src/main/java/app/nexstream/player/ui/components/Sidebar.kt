@@ -44,6 +44,7 @@ import app.nexstream.player.ui.theme.LogoMode
 import app.nexstream.player.ui.theme.getRailHiddenFlow
 import app.nexstream.player.ui.theme.getRailOrderFlow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
 
 
@@ -319,17 +320,17 @@ fun Sidebar(
                             }
                         },
                         header                = when (expandedRoute) {
-                            AppRoute.Home      -> "Sports Today"
-                            AppRoute.Guide     -> "Guide"
-                            AppRoute.Movies    -> "Movies"
-                            AppRoute.Series    -> "Series"
-                            AppRoute.Recent    -> "Recent"
-                            AppRoute.Search    -> "Search"
-                            AppRoute.MyList    -> "My List"
-                            AppRoute.Downloads -> "Downloads"
-                            AppRoute.Picks     -> "Picks"
-                            AppRoute.Device    -> "Device"
-                            else               -> "Categories"
+                            AppRoute.Home      -> stringResource(R.string.nav_sports_today)
+                            AppRoute.Guide     -> stringResource(R.string.nav_guide)
+                            AppRoute.Movies    -> stringResource(R.string.nav_movies)
+                            AppRoute.Series    -> stringResource(R.string.nav_series)
+                            AppRoute.Recent    -> stringResource(R.string.nav_recent)
+                            AppRoute.Search    -> stringResource(R.string.nav_search)
+                            AppRoute.MyList    -> stringResource(R.string.nav_my_list)
+                            AppRoute.Downloads -> stringResource(R.string.nav_downloads)
+                            AppRoute.Picks     -> stringResource(R.string.nav_picks)
+                            AppRoute.Device    -> stringResource(R.string.nav_device)
+                            else               -> stringResource(R.string.common_categories)
                         },
                         isAndroidTV           = isAndroidTV,
                         onBackPressed         = onExitPanelToRail,
@@ -445,22 +446,22 @@ private fun MainMenu(
 
     val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders) {
         buildMap {
-            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  "Sports Today", AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) }))
-            put("Recent",   MenuEntry(Icons.Default.History,       "Recent",    AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
-            put("Guide",    MenuEntry(Icons.Default.CalendarToday, "Guide",     AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
-            put("Movies",   MenuEntry(Icons.Default.Movie,         "Movies",    AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true))
-            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  "Series",    AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true))
-            put("CatchUp",  MenuEntry(Icons.Default.Replay,        "Catch Up",  AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
-            put("Picks",    MenuEntry(Icons.Default.Stars,         "Picks",     AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) }))
+            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  context.getString(R.string.nav_sports_today), AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) }))
+            put("Recent",   MenuEntry(Icons.Default.History,       context.getString(R.string.nav_recent),       AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
+            put("Guide",    MenuEntry(Icons.Default.CalendarToday, context.getString(R.string.nav_guide),        AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
+            put("Movies",   MenuEntry(Icons.Default.Movie,         context.getString(R.string.nav_movies),       AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true))
+            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  context.getString(R.string.nav_series),       AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true))
+            put("CatchUp",  MenuEntry(Icons.Default.Replay,        context.getString(R.string.nav_catch_up),     AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
+            put("Picks",    MenuEntry(Icons.Default.Stars,         context.getString(R.string.nav_picks),        AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) }))
             if (hasJellyfinPlaylist) {
-                put("Music", MenuEntry(Icons.Default.MusicNote,    "Music",     AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
+                put("Music", MenuEntry(Icons.Default.MusicNote,    context.getString(R.string.nav_music),        AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
             }
             if (hasDeviceFolders) {
-                put("Device", MenuEntry(Icons.Default.Folder,      "Device",    AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
+                put("Device", MenuEntry(Icons.Default.Folder,      context.getString(R.string.nav_device),       AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
             }
-            put("Search",   MenuEntry(Icons.Default.Search,        "Search",    AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
-            put("MyList",   MenuEntry(Icons.Default.Bookmark,      "My List",   AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
-            put("Settings", MenuEntry(Icons.Default.Settings,      "Settings",  AppRoute.Settings, settingsFocus))
+            put("Search",   MenuEntry(Icons.Default.Search,        context.getString(R.string.nav_search),       AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
+            put("MyList",   MenuEntry(Icons.Default.Bookmark,      context.getString(R.string.nav_my_list),      AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
+            put("Settings", MenuEntry(Icons.Default.Settings,      context.getString(R.string.nav_settings),     AppRoute.Settings, settingsFocus))
         }
     }
 
@@ -859,7 +860,7 @@ private fun CategoryPanel(
             if (showSearch) {
                 item(key = "__search__") {
                     PanelItem(
-                        text                  = "Search",
+                        text                  = stringResource(R.string.nav_search),
                         isSelected            = selectedCategory == "__search__",
                         focusRequester        = searchFR,
                         onRequestContentFocus = onRequestContentFocus,
@@ -1320,7 +1321,7 @@ private fun SettingsPanel(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back",
                     tint = sTheme.categoryText, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(text = "Settings", style = MaterialTheme.typography.labelLarge,
+                Text(text = stringResource(R.string.nav_settings), style = MaterialTheme.typography.labelLarge,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     color = sTheme.categoryText)
             }
@@ -1330,7 +1331,7 @@ private fun SettingsPanel(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    text       = "Settings",
+                    text       = stringResource(R.string.nav_settings),
                     style      = MaterialTheme.typography.labelLarge,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     color      = sTheme.categoryText,
@@ -1445,13 +1446,13 @@ private fun CatchUpDatePanel(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back",
                     tint = sTheme.categoryText, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(text = "Catch Up", style = MaterialTheme.typography.labelLarge,
+                Text(text = stringResource(R.string.nav_catch_up), style = MaterialTheme.typography.labelLarge,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     color = sTheme.categoryText)
             }
         } else {
             Box(modifier = Modifier.fillMaxWidth().height(headerHeight), contentAlignment = Alignment.CenterStart) {
-                Text("Catch Up",
+                Text(stringResource(R.string.nav_catch_up),
                     style      = MaterialTheme.typography.labelLarge,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     color      = sTheme.categoryText,

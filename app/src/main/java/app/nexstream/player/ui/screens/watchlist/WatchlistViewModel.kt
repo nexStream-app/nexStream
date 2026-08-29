@@ -106,8 +106,17 @@ class WatchlistViewModel @Inject constructor(
 
     suspend fun getMovieByStreamUrl(streamUrl: String): MovieEntity? = repository.getMovieByStreamUrl(streamUrl)
 
+    suspend fun findMovieByName(name: String): MovieEntity? =
+        try { repository.findMoviesByTitle(name).firstOrNull() } catch (_: Exception) { null }
+
     suspend fun getSeriesByName(name: String): SeriesEntity? =
         try { repository.findSeriesByTitle(name).firstOrNull() } catch (_: Exception) { null }
+
+    suspend fun getChannelByStreamUrl(streamUrl: String): app.nexstream.player.data.local.entity.ChannelEntity? =
+        try { repository.getChannelByStreamUrl(streamUrl) } catch (_: Exception) { null }
+
+    suspend fun getChannelByName(name: String): app.nexstream.player.data.local.entity.ChannelEntity? =
+        try { repository.getChannelByName(name) } catch (_: Exception) { null }
 
     suspend fun getSeriesById(id: String): SeriesEntity? = repository.getSeriesById(id)
 
