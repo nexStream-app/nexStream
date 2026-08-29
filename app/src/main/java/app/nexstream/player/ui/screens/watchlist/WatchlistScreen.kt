@@ -124,9 +124,15 @@ fun WatchlistScreen(
         when (item.type) {
             WatchlistType.MOVIE -> {
                 var base = viewModel.getMovieById(item.id)
-                // Fallback 1: stream URL — same Xtream server + same credentials
+                // Fallback 1: exact stream URL match
                 if (base == null && !item.streamUrl.isNullOrEmpty()) base = viewModel.getMovieByStreamUrl(item.streamUrl)
-                // Fallback 2: title match — works even when credentials differ across devices
+                // Fallback 2: Xtream stream ID from URL path (handles http→https, credential changes, format differences)
+                if (base == null) {
+                    val streamId = item.id.substringAfterLast('-')
+                    if (streamId.isNotEmpty() && streamId.all { it.isDigit() })
+                        base = viewModel.getMovieByXtreamStreamId(streamId)
+                }
+                // Fallback 3: title match
                 if (base == null) base = viewModel.findMovieByName(item.name)
                 movieDialogEntity = base
                 if (base != null) {
@@ -158,9 +164,15 @@ fun WatchlistScreen(
             }
             WatchlistType.CHANNEL -> {
                 var ch = viewModel.getChannelById(item.id)
-                // Fallback 1: stream URL match
+                // Fallback 1: exact stream URL match
                 if (ch == null && !item.streamUrl.isNullOrEmpty()) ch = viewModel.getChannelByStreamUrl(item.streamUrl)
-                // Fallback 2: name match
+                // Fallback 2: Xtream stream ID from URL path
+                if (ch == null) {
+                    val streamId = item.id.substringAfterLast('-')
+                    if (streamId.isNotEmpty() && streamId.all { it.isDigit() })
+                        ch = viewModel.getChannelByXtreamStreamId(streamId)
+                }
+                // Fallback 3: name match
                 if (ch == null) ch = viewModel.getChannelByName(item.name)
                 channelDialogEntity = ch
                 if (ch != null) {

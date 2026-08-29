@@ -53,6 +53,9 @@ interface ChannelDao {
 
     @Query("SELECT * FROM channels WHERE LOWER(name) = LOWER(:name) LIMIT 1")
     suspend fun getChannelByName(name: String): ChannelEntity?
+
+    @Query("SELECT * FROM channels WHERE streamUrl LIKE '%/' || :streamId OR streamUrl LIKE '%/' || :streamId || '?%' LIMIT 1")
+    suspend fun getChannelByXtreamStreamId(streamId: String): ChannelEntity?
 }
 
 data class CategoryChannelCount(val groupTitle: String, val count: Int)

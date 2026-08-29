@@ -14,10 +14,12 @@ import java.io.File
 import java.net.URL
 
 object AutoUpdateManager {
-    private const val TAG         = "AutoUpdate"
-    private const val BUILD_URL   = "https://nexstream.uk/build_number.txt"
-    private const val APK_URL     = "https://nexstream.uk/nexStream.apk"
-    private const val AUTHORITY   = "app.nexstream.player.fileprovider"
+    private const val TAG       = "AutoUpdate"
+    private const val BUILD_URL = "https://nexstream.uk/build_number.txt"
+    private const val AUTHORITY = "app.nexstream.player.fileprovider"
+
+    private fun apkUrl(build: Int) =
+        "https://github.com/nexStream-app/nexStream/releases/download/v0.0.$build/nexstream-build-$build.apk"
 
     suspend fun checkAndPrompt(activity: Activity) = withContext(Dispatchers.IO) {
         try {
@@ -34,7 +36,7 @@ object AutoUpdateManager {
             if (remote <= local) return@withContext
 
             Log.d(TAG, "Update available — downloading build $remote")
-            val apkFile = downloadApk(activity)
+            val apkFile = downloadApk(activity, apkUrl(remote))
             if (apkFile != null) {
                 withContext(Dispatchers.Main) {
                     installApk(activity, apkFile)
@@ -45,11 +47,11 @@ object AutoUpdateManager {
         }
     }
 
-    private fun downloadApk(context: Context): File? {
+    private fun downloadApk(context: Context, url: String): File? {
         return try {
             val dir = File(context.cacheDir, "updates").also { it.mkdirs() }
             val out = File(dir, "nexStream_update.apk")
-            URL(APK_URL).openStream().use { input ->
+            URL(url).openStream().use { input ->
                 out.outputStream().use { output -> input.copyTo(output) }
             }
             Log.d(TAG, "APK downloaded to ${out.absolutePath} (${out.length()} bytes)")

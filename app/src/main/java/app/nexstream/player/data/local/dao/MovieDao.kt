@@ -101,4 +101,7 @@ interface MovieDao {
 
     @Query("SELECT * FROM movies WHERE streamUrl = :streamUrl LIMIT 1")
     suspend fun getByStreamUrl(streamUrl: String): MovieEntity?
+
+    @Query("SELECT * FROM movies WHERE streamUrl LIKE '%/' || :streamId || '.%' OR streamUrl LIKE '%/' || :streamId LIMIT 1")
+    suspend fun getByXtreamStreamId(streamId: String): MovieEntity?
 }

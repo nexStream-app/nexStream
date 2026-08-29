@@ -1779,6 +1779,9 @@ class PlaylistRepository @Inject constructor(
     suspend fun getMovieByStreamUrl(streamUrl: String): MovieEntity? =
         database.movieDao().getByStreamUrl(streamUrl)
 
+    suspend fun getMovieByXtreamStreamId(streamId: String): MovieEntity? =
+        database.movieDao().getByXtreamStreamId(streamId)
+
     suspend fun getEpisodeById(episodeId: String): EpisodeEntity? =
         database.seriesDao().getEpisodeByIdOnce(episodeId)
 
@@ -1793,6 +1796,9 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun getChannelByName(name: String): app.nexstream.player.data.local.entity.ChannelEntity? =
         database.channelDao().getChannelByName(name)
+
+    suspend fun getChannelByXtreamStreamId(streamId: String): app.nexstream.player.data.local.entity.ChannelEntity? =
+        database.channelDao().getChannelByXtreamStreamId(streamId)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getRecentlyWatched(): Flow<List<RecentlyWatchedEntity>> =
