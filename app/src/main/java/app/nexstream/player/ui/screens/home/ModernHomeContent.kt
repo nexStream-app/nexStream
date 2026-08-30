@@ -1,5 +1,6 @@
 package app.nexstream.player.ui.screens.home
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -7,6 +8,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -195,11 +200,106 @@ fun ModernHomeContent(
             }
         }
 
-        // Today's Live Sport — grouped by sport category
+        // Today's Live Sport
         if (sportsEvents.isNotEmpty()) {
-            val sportGroups = remember(sportsEvents, sportsCategoryOrder) {
-                val grouped = sportsEvents.groupBy { it.sportCategory }
-                val result = linkedMapOf<String, List<MatchedSportEvent>>()
+            val liveEvents = remember(sportsEvents, currentUkMinutes) {
+                sportsEvents.filter { isLiveNow(it, currentUkMinutes) }
+            }
+            val upcomingEvents = remember(sportsEvents, currentUkMinutes) {
+                sportsEvents.filter { !isLiveNow(it, currentUkMinutes) }
+            }
+
+            // ── Live Now row ──────────────────────────────────────────
+            AnimatedVisibility(
+                visible = liveEvents.isNotEmpty(),
+                enter   = fadeIn(tween(400)) + expandVertically(tween(400)),
+                exit    = fadeOut(tween(300)) + shrinkVertically(tween(300)),
+            ) {
+                Column {
+                    Row(
+                        modifier              = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val liveHeaderTransition = rememberInfiniteTransition(label = "liveNowHeader")
+                        val headerDotAlpha by liveHeaderTransition.animateFloat(
+                            initialValue  = 1f,
+                            targetValue   = 0.25f,
+                            animationSpec = infiniteRepeatable(tween(700, easing = LinearEasing), RepeatMode.Reverse),
+                            label         = "headerDotAlpha",
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color.Red.copy(alpha = headerDotAlpha))
+                        )
+                        Text("Live Now", fontSize = 12.sp, color = Color.Red, fontWeight = FontWeight.Bold)
+                        val count = liveEvents.size
+                        Text(
+                            text     = "· $count event${if (count == 1) "" else "s"}",
+                            fontSize = 12.sp,
+                            color    = textSecondary,
+                        )
+                    }
+                    LazyRow(
+                        contentPadding        = PaddingValues(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        itemsIndexed(liveEvents, key = { _, e -> "live_${e.id}" }) { idx, event ->
+                            val cardFR         = remember { FocusRequester() }
+                            val eventChannelId = "sport_${event.id}"
+                            val eventStartMs   = computeEventStartMs(event.timeUk)
+                            val remId          = "${eventChannelId}_${eventStartMs}"
+                            val hasReminder    = reminderIds.contains(remId)
+                            Box(modifier = Modifier.animateItem()) {
+                                SportEventCard(
+                                    event            = event,
+                                    accent           = accent,
+                                    surface          = surface,
+                                    textPrimary      = textPrimary,
+                                    textSecondary    = textSecondary,
+                                    currentUkMinutes = currentUkMinutes,
+                                    hasReminder      = hasReminder,
+                                    onChannelClick   = { url, name ->
+                                        lastClickedCardFR = cardFR
+                                        onSportChannelClick(url, name)
+                                    },
+                                    onGoToEpg        = onGoToEpg,
+                                    onRemind         = {
+                                        val ch = event.matchedChannels.firstOrNull()
+                                        if (hasReminder) {
+                                            onCancelSportReminder(eventChannelId, eventStartMs)
+                                            bannerMessage = "Reminder cancelled for ${event.eventName}"
+                                        } else {
+                                            onSetSportReminder(
+                                                eventChannelId,
+                                                ch?.channelName ?: event.eventName,
+                                                ch?.streamUrl ?: "",
+                                                event.eventName,
+                                                eventStartMs,
+                                            )
+                                            bannerMessage = "Reminder set for ${event.eventName}"
+                                        }
+                                    },
+                                    focusRequester   = if (idx == 0) firstItemFocusRequester ?: cardFR else cardFR,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        color    = textSecondary.copy(alpha = 0.12f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+
+            // ── Upcoming by category ──────────────────────────────────
+            val sportGroups = remember(upcomingEvents, sportsCategoryOrder) {
+                val grouped = upcomingEvents.groupBy { it.sportCategory }
+                val result  = linkedMapOf<String, List<MatchedSportEvent>>()
                 for (cat in sportsCategoryOrder) grouped[cat]?.let { result[cat] = it }
                 grouped.keys.filter { it !in result }.sorted().forEach { result[it] = grouped[it]!! }
                 result
@@ -226,42 +326,44 @@ fun ModernHomeContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     itemsIndexed(events, key = { _, e -> e.id }) { itemIndex, event ->
-                        val cardFR = remember { FocusRequester() }
+                        val cardFR         = remember { FocusRequester() }
                         val eventChannelId = "sport_${event.id}"
-                        val eventStartMs = computeEventStartMs(event.timeUk)
-                        val remId = "${eventChannelId}_${eventStartMs}"
-                        val hasReminder = reminderIds.contains(remId)
-                        SportEventCard(
-                            event            = event,
-                            accent           = accent,
-                            surface          = surface,
-                            textPrimary      = textPrimary,
-                            textSecondary    = textSecondary,
-                            currentUkMinutes = currentUkMinutes,
-                            hasReminder      = hasReminder,
-                            onChannelClick   = { url, name ->
-                                lastClickedCardFR = cardFR
-                                onSportChannelClick(url, name)
-                            },
-                            onGoToEpg        = onGoToEpg,
-                            onRemind         = {
-                                val ch = event.matchedChannels.firstOrNull()
-                                if (hasReminder) {
-                                    onCancelSportReminder(eventChannelId, eventStartMs)
-                                    bannerMessage = "Reminder cancelled for ${event.eventName}"
-                                } else {
-                                    onSetSportReminder(
-                                        eventChannelId,
-                                        ch?.channelName ?: event.eventName,
-                                        ch?.streamUrl ?: "",
-                                        event.eventName,
-                                        eventStartMs
-                                    )
-                                    bannerMessage = "Reminder set for ${event.eventName}"
-                                }
-                            },
-                            focusRequester   = if (groupIndex == 0 && itemIndex == 0) firstItemFocusRequester ?: cardFR else cardFR,
-                        )
+                        val eventStartMs   = computeEventStartMs(event.timeUk)
+                        val remId          = "${eventChannelId}_${eventStartMs}"
+                        val hasReminder    = reminderIds.contains(remId)
+                        Box(modifier = Modifier.animateItem()) {
+                            SportEventCard(
+                                event            = event,
+                                accent           = accent,
+                                surface          = surface,
+                                textPrimary      = textPrimary,
+                                textSecondary    = textSecondary,
+                                currentUkMinutes = currentUkMinutes,
+                                hasReminder      = hasReminder,
+                                onChannelClick   = { url, name ->
+                                    lastClickedCardFR = cardFR
+                                    onSportChannelClick(url, name)
+                                },
+                                onGoToEpg        = onGoToEpg,
+                                onRemind         = {
+                                    val ch = event.matchedChannels.firstOrNull()
+                                    if (hasReminder) {
+                                        onCancelSportReminder(eventChannelId, eventStartMs)
+                                        bannerMessage = "Reminder cancelled for ${event.eventName}"
+                                    } else {
+                                        onSetSportReminder(
+                                            eventChannelId,
+                                            ch?.channelName ?: event.eventName,
+                                            ch?.streamUrl ?: "",
+                                            event.eventName,
+                                            eventStartMs,
+                                        )
+                                        bannerMessage = "Reminder set for ${event.eventName}"
+                                    }
+                                },
+                                focusRequester   = if (liveEvents.isEmpty() && groupIndex == 0 && itemIndex == 0) firstItemFocusRequester ?: cardFR else cardFR,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
