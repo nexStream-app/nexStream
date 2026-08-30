@@ -205,9 +205,21 @@ On Windows use `.\gradlew`; on Mac/Linux use `./gradlew`.
 
 ## Backend Deployment
 
-**IMPORTANT:** The IONOS shared hosting has no SSH. All backend deployments are done via the IONOS file manager (web UI file upload).
-- Never suggest `scp`, `rsync`, `ssh`, or any command-line deploy steps for the backend
-- PHP files are uploaded directly; no build step required
+Backend files are deployed to IONOS via **`deploy.ps1`** (WinSCP SFTP — credentials in `sftp.env`).
+
+```powershell
+# Upload specific files (most common — after a build)
+.\deploy.ps1 nexStream.apk
+.\deploy.ps1 build_number.txt
+.\deploy.ps1 download.php
+.\deploy.ps1 api/mylist.php        # any single file relative to backend/
+
+# Full sync of entire backend/ directory
+.\deploy.ps1
+```
+
+- Credentials are read from `sftp.env` in the project root (not committed)
+- The "mkdir" error on every upload is harmless — the remote directory already exists; WinSCP skips and continues
 - Database migrations are run manually via phpMyAdmin or inline PHP scripts
 
 ## Backend Architecture (PHP)
