@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/nexStream-app/nexStream/main/assets/nexStream.gif" alt="nexStream" width="100%" />
+<video src="https://github.com/user-attachments/assets/439fc3d6-f2d4-4e04-80a9-1f8beca201f7" autoplay loop muted playsinline width="100%"></video>
 
 # nexStream
 
