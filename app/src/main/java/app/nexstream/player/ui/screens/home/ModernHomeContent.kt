@@ -12,6 +12,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -73,6 +74,7 @@ import app.nexstream.player.ui.theme.LocalNsTextSecondary
 import androidx.compose.material3.CircularProgressIndicator
 import app.nexstream.player.ui.components.NexStreamBanner
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ModernHomeContent(
     firstItemFocusRequester: FocusRequester? = null,
@@ -252,7 +254,7 @@ fun ModernHomeContent(
                             val eventStartMs   = computeEventStartMs(event.timeUk)
                             val remId          = "${eventChannelId}_${eventStartMs}"
                             val hasReminder    = reminderIds.contains(remId)
-                            Box(modifier = Modifier.animateItem()) {
+                            Box(modifier = Modifier.animateItemPlacement()) {
                                 SportEventCard(
                                     event            = event,
                                     accent           = accent,
@@ -331,7 +333,7 @@ fun ModernHomeContent(
                         val eventStartMs   = computeEventStartMs(event.timeUk)
                         val remId          = "${eventChannelId}_${eventStartMs}"
                         val hasReminder    = reminderIds.contains(remId)
-                        Box(modifier = Modifier.animateItem()) {
+                        Box(modifier = Modifier.animateItemPlacement()) {
                             SportEventCard(
                                 event            = event,
                                 accent           = accent,

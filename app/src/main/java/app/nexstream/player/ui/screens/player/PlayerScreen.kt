@@ -374,7 +374,10 @@ fun PlayerScreen(
         if (!isAndroidTV) context.stopService(Intent(context, NexStreamPlaybackService::class.java))
     }
 
-    BackHandler(enabled = handleBackInternally) { stopPlayback(); onBack() }
+    BackHandler(enabled = handleBackInternally) {
+        if (showControls) showControls = false
+        else { stopPlayback(); onBack() }
+    }
 
     // Stop playback when PiP stop action fires (X button on API 31+ or Stop button on older)
     LaunchedEffect(pipStopSignal) {
@@ -1054,12 +1057,11 @@ fun PlayerScreen(
             add("stats")
         }
     }}
-    LaunchedEffect(showControls, centreButtons) {
-        if (showControls) {
-            centreIndex = centreButtons.indexOf("playpause").coerceAtLeast(0)
-        } else {
-            centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0))
-        }
+    LaunchedEffect(showControls) {
+        if (showControls) centreIndex = centreButtons.indexOf("playpause").coerceAtLeast(0)
+    }
+    LaunchedEffect(centreButtons) {
+        centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0))
     }
 
     // Icon row: aspect ratio, cast (phone-only)
@@ -1160,7 +1162,6 @@ fun PlayerScreen(
                             ErrorButton.RETRY   -> { val pos = errorPosition; hasError = false; autoRetryCount = 0; if (!isCatchup && !isVod) player?.seekToDefaultPosition(); player?.prepare(); if ((isCatchup || isVod) && pos > 0L) player?.seekTo(pos); player?.play() }
                         }; true
                     }
-                    android.view.KeyEvent.KEYCODE_BACK -> { if (handleBackInternally) { stopPlayback(); onBack() }; true }
                     else -> false
                 }
                 !showControls -> when (keyCode) {
@@ -1171,7 +1172,6 @@ fun PlayerScreen(
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT,
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { showControls = true; true }
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (player?.isPlaying == true) player?.pause() else player?.play(); true }
-                    android.view.KeyEvent.KEYCODE_BACK -> { if (handleBackInternally) { stopPlayback(); onBack() }; true }
                     else -> false
                 }
                 else -> when (keyCode) {
@@ -1221,8 +1221,6 @@ fun PlayerScreen(
                     }
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
                     { if (player?.isPlaying == true) player?.pause() else player?.play(); true }
-                    android.view.KeyEvent.KEYCODE_BACK ->
-                    { showControls = false; true }
                     else -> false
                 }
             }
@@ -1613,7 +1611,7 @@ fun PlayerScreen(
                                 }
                             }
                             val sliderFocused = currentDpadZone == DpadZone.SLIDER && showControls
-                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = if (sliderFocused) 2.dp else 0.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth()) {
                                 Slider(
                                     value               = sliderPosition,
                                     onValueChange       = { isDragging = true; sliderPosition = it },
