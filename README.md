@@ -98,7 +98,7 @@ nexStream is a premium IPTV and media player for **all Android devices** — And
 ### 🌐 Languages
 Built-in translations for 10 languages — change in Settings or use System default:
 
-🇬🇧 English · 🇫🇷 Français · 🇩🇪 Deutsch · 🇳🇱 Nederlands · 🇸🇪 Svenska · 🇮🇹 Italiano · 🇹🇷 Türkçe · 🇵🇱 Polski · 🇪🇸 Español · 🇵🇹 Português
+🇬🇧 · 🇫🇷 · 🇩🇪 · 🇳🇱 · 🇸🇪 · 🇮🇹 · 🇹🇷 · 🇵🇱 · 🇪🇸 · 🇵🇹
 
 ### 🔔 Notifications
 - Firebase Cloud Messaging — receive push notifications from your provider
