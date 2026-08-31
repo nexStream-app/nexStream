@@ -25,8 +25,6 @@ nexStream is a premium IPTV and media player for **all Android devices** — And
 
 ---
 
----
-
 ## Features
 
 ### 📡 Playlist Sources
