@@ -18,8 +18,8 @@ object AutoUpdateManager {
     private const val BUILD_URL = "https://nexstream.uk/build_number.txt"
     private const val AUTHORITY = "app.nexstream.player.fileprovider"
 
-    private fun apkUrl(build: Int) =
-        "https://github.com/nexStream-app/nexStream/releases/download/v0.0.$build/nexStream-%04d.apk".format(build)
+    private fun apkUrl(@Suppress("UNUSED_PARAMETER") build: Int) =
+        "https://github.com/nexStream-app/nexStream/releases/latest/download/nexStream.apk"
 
     suspend fun checkAndPrompt(activity: Activity) = withContext(Dispatchers.IO) {
         try {
