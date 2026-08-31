@@ -324,12 +324,30 @@ private fun EPGContent(
             dialogProgram = null
         }
         // Seed the strip with the first channel in the new category, then explicitly
-        // trigger programme loading so the description appears without waiting for the grid
+        // trigger programme loading so the description appears without waiting for the grid.
+        // For channel groups, groupChannelIds resolves asynchronously — skip seeding here
+        // and let the LaunchedEffect(groupChannelIds) below handle it once IDs are ready.
+        if (selectedCategory?.startsWith("__grp_") == true) return@LaunchedEffect
         kotlinx.coroutines.delay(200)
         val first = channels.firstOrNull()
         if (first != null) {
             focusedChannel = first
             // Programs are keyed by epgChannelId in the database (mirrors grid behaviour)
+            val epgId = first.epgChannelId?.takeIf { it.isNotEmpty() } ?: first.id
+            viewModel.loadProgramsForVisibleChannels(listOf(epgId))
+        }
+    }
+
+    // Channel groups: groupChannelIds resolves asynchronously after selectedCategory changes,
+    // so seed the first channel here once the IDs are available.
+    LaunchedEffect(groupChannelIds) {
+        groupChannelIds ?: return@LaunchedEffect
+        if (selectedCategory?.startsWith("__grp_") != true) return@LaunchedEffect
+        if (focusedChannel != null) return@LaunchedEffect
+        kotlinx.coroutines.delay(50)
+        val first = channels.firstOrNull()
+        if (first != null) {
+            focusedChannel = first
             val epgId = first.epgChannelId?.takeIf { it.isNotEmpty() } ?: first.id
             viewModel.loadProgramsForVisibleChannels(listOf(epgId))
         }

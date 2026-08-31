@@ -801,8 +801,10 @@ private fun CategoryPanel(
                 if (catIdx >= 0) fixedCount + catIdx else allIndex
             }
         }
-        listState.scrollToItem(targetIndex.coerceAtLeast(0))
-        kotlinx.coroutines.delay(80)
+        // Scroll one item above the target so the selected item isn't flush against the top
+        val scrollAnchor = (targetIndex - 1).coerceAtLeast(0)
+        listState.animateScrollToItem(scrollAnchor)
+        kotlinx.coroutines.delay(150)
         val target = when (selectedCategory) {
             "__search__"     -> searchFR
             "__favourites__" -> favouritesFR
