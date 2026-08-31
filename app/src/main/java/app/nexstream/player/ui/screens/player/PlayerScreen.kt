@@ -164,6 +164,10 @@ fun PlayerScreen(
         context.getSharedPreferences("nexstream_licence", android.content.Context.MODE_PRIVATE)
             .getString("licence_key", null)
     }
+    val deviceId = remember {
+        context.getSharedPreferences("nexstream_licence", android.content.Context.MODE_PRIVATE)
+            .getString("stable_device_id", "unknown") ?: "unknown"
+    }
 
     // ── Whisper AI subtitles ──────────────────────────────────────────────────
     val whisperManager = viewModel.whisperSubtitleManager
@@ -523,7 +527,7 @@ fun PlayerScreen(
             val streamProxy: java.net.Proxy = when (proxyMode) {
                 "BUILTIN" -> java.net.Proxy(
                     java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress("proxy.nexstream.uk", 3128)
+                    java.net.InetSocketAddress("proxy.nexstream.uk", 3129)
                 )
                 "CUSTOM"  -> if (proxyHost.isNotBlank()) java.net.Proxy(
                     if (proxyType == "SOCKS5") java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP,
@@ -540,14 +544,15 @@ fun PlayerScreen(
                 .apply {
                     val needsAuth = proxyMode == "BUILTIN" || (proxyMode == "CUSTOM" && proxyUser.isNotBlank())
                     if (needsAuth) {
-                        val capturedMode = proxyMode
-                        val capturedKey  = licenceKey
-                        val capturedUser = proxyUser
-                        val capturedPass = proxyPass
+                        val capturedMode     = proxyMode
+                        val capturedKey      = licenceKey
+                        val capturedUser     = proxyUser
+                        val capturedPass     = proxyPass
+                        val capturedDeviceId = deviceId
                         proxyAuthenticator(object : okhttp3.Authenticator {
                             override fun authenticate(route: okhttp3.Route?, response: okhttp3.Response): okhttp3.Request? {
                                 val creds = when (capturedMode) {
-                                    "BUILTIN" -> capturedKey?.let { okhttp3.Credentials.basic(it, "nexstream") }
+                                    "BUILTIN" -> capturedKey?.let { okhttp3.Credentials.basic(it, capturedDeviceId) }
                                     "CUSTOM"  -> okhttp3.Credentials.basic(capturedUser, capturedPass)
                                     else      -> null
                                 } ?: return null
