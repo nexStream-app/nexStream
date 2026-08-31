@@ -561,19 +561,70 @@ fun PicksScreen(
                 )
             }
             pickEntityNotFound -> {
-                // Title not matched in local DB — simple fallback
-                val isBookmarked = pick.tmdbId.toString() in watchlistIds
-                val goToLabel = if (pick.mediaType == "movie") "Go to Movies" else "Go to Series"
-                ContentActionDialog(
-                    name        = pick.title,
-                    posterUrl   = pick.posterUrl,
-                    goToLabel   = goToLabel,
-                    removeLabel = if (isBookmarked) "Remove from My List" else "Add to My List",
-                    removeIsDestructive = isBookmarked,
-                    onDismiss   = { dialogPick = null },
-                    onRemove    = { dialogPick = null; onToggleWatchlist?.invoke(pick, isBookmarked) },
-                    onGoTo      = { dialogPick = null; onPickSelected?.invoke(pick) }
-                )
+                val isBookmarked  = pick.tmdbId.toString() in watchlistIds
+                val activeProfile = watchlistViewModel.profileManager.activeProfile.value
+                if (pick.mediaType == "movie") {
+                    val stub = MovieEntity(
+                        id = "picks-${pick.tmdbId}", name = pick.title, streamUrl = "",
+                        posterUrl = pick.posterUrl, backdropUrl = pick.posterUrl,
+                        plot = pick.overview.ifBlank { null }, cast = null, director = null,
+                        genre = null, releaseDate = null, rating = null, duration = null,
+                        categoryId = null, categoryName = null, playlistId = "picks",
+                        isFavourite = false, lastPlayedPosition = 0L, lastPlayedTimestamp = 0L,
+                        certification = null, addedAt = 0L,
+                        rtCriticsScore = null, rtAudienceScore = null, rtConsensus = null,
+                        originalLanguage = null,
+                    )
+                    ModernMovieDetailsDialog(
+                        movie             = stub,
+                        isBookmarked      = isBookmarked,
+                        maxAgeRating      = activeProfile?.maxAgeRating,
+                        allowNr           = activeProfile?.allowNr ?: true,
+                        onDismiss         = { dialogPick = null },
+                        onPlay            = { _ -> dialogPick = null; onPickSelected?.invoke(pick) },
+                        onToggleWatchlist = {
+                            watchlistViewModel.toggleWatchlist(
+                                WatchlistEntity(
+                                    id = pick.tmdbId.toString(),
+                                    profileId = activeProfile?.id ?: "default",
+                                    type = WatchlistType.MOVIE,
+                                    name = pick.title, posterUrl = pick.posterUrl, streamUrl = null
+                                ), isBookmarked
+                            )
+                        },
+                    )
+                } else {
+                    val stub = SeriesEntity(
+                        id = "picks-${pick.tmdbId}", seriesId = pick.tmdbId.toString(),
+                        name = pick.title, posterUrl = pick.posterUrl, backdropUrl = pick.posterUrl,
+                        plot = pick.overview.ifBlank { null }, cast = null, director = null,
+                        genre = null, releaseDate = null, rating = null,
+                        categoryId = null, categoryName = null, seasonCount = 0,
+                        playlistId = "picks",
+                    )
+                    SeriesDetailsDialog(
+                        series            = stub,
+                        episodes          = emptyList(),
+                        seasons           = emptyList(),
+                        episodeProgressMap = emptyMap(),
+                        isLoading         = false,
+                        isBookmarked      = isBookmarked,
+                        maxAgeRating      = activeProfile?.maxAgeRating,
+                        allowNr           = activeProfile?.allowNr ?: true,
+                        onDismiss         = { dialogPick = null },
+                        onToggleWatchlist = {
+                            watchlistViewModel.toggleWatchlist(
+                                WatchlistEntity(
+                                    id = pick.tmdbId.toString(),
+                                    profileId = activeProfile?.id ?: "default",
+                                    type = WatchlistType.SERIES,
+                                    name = pick.title, posterUrl = pick.posterUrl, streamUrl = null
+                                ), isBookmarked
+                            )
+                        },
+                        onPlayEpisode = { _, _, _, _, _, _, _, _ -> dialogPick = null; onPickSelected?.invoke(pick) },
+                    )
+                }
             }
         }
     }

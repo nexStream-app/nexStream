@@ -313,24 +313,23 @@ fun MainScreen(
     val isReseller = viewModel.isReseller
     val settingsSubCategories: List<String> = remember {
         buildList {
-            add("Playlists"); add("Sports Guide"); add("Appearance"); add("Player")
+            add("Playlists"); add("Appearance"); add("Player")
             add("Sync")
-            add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("Language"); add("About")
+            add("Licence"); add("Account"); add("Profiles"); add("Navigation"); add("Language"); add("Network"); add("About")
         }
     }
     val settingsLabelToRoute: Map<String, AppRoute> = remember { mapOf(
-        "Playlists"    to AppRoute.SettingsPlaylists,
-        "Sports Guide" to AppRoute.SettingsSports,
-        "Appearance"   to AppRoute.SettingsAppearance,
-        "Player"       to AppRoute.SettingsPlayer,
-        "Sync"         to AppRoute.SettingsSyncSettings,
-        "Licence"      to AppRoute.SettingsLicence,
-        "Account"      to AppRoute.SettingsAccount,
-        "Profiles"     to AppRoute.SettingsProfiles,
-        "Navigation"   to AppRoute.SettingsNavigation,
-        "Language"     to AppRoute.SettingsLanguage,
-        "Network"      to AppRoute.SettingsProxy,
-        "About"        to AppRoute.SettingsAbout,
+        "Playlists"  to AppRoute.SettingsPlaylists,
+        "Appearance" to AppRoute.SettingsAppearance,
+        "Player"     to AppRoute.SettingsPlayer,
+        "Sync"       to AppRoute.SettingsSyncSettings,
+        "Licence"    to AppRoute.SettingsLicence,
+        "Account"    to AppRoute.SettingsAccount,
+        "Profiles"   to AppRoute.SettingsProfiles,
+        "Navigation" to AppRoute.SettingsNavigation,
+        "Language"   to AppRoute.SettingsLanguage,
+        "Network"    to AppRoute.SettingsProxy,
+        "About"      to AppRoute.SettingsAbout,
     ) }
     val selectedSettingsLabel = remember(currentRoute) {
         settingsLabelToRoute.entries.firstOrNull { (_, route) -> route == currentRoute }?.key

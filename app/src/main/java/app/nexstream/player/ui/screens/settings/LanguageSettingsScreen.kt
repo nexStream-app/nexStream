@@ -26,18 +26,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getAppLanguageFlow
 import app.nexstream.player.ui.theme.saveAppLanguage
 
 @Composable
 fun LanguageSettingsScreen(firstItemFocusRequester: FocusRequester? = null) {
     val context = LocalContext.current
-    val sTheme = LocalNexStreamTheme.current.sidebar
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme  = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+    val uiStyle = rememberUiStyle()
 
     val currentLang by context.getAppLanguageFlow().collectAsState(initial = "")
 
     val systemDefault = stringResource(R.string.settings_language_system_default)
     val note = stringResource(R.string.settings_language_note)
+    val title = stringResource(R.string.settings_menu_language_title)
 
     val languages = remember(systemDefault) {
         listOf(
@@ -55,6 +60,16 @@ fun LanguageSettingsScreen(firstItemFocusRequester: FocusRequester? = null) {
         )
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (uiStyle != UiStyle.MODERN) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+            }
+            HorizontalDivider(color = sTheme.divider)
+        }
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -80,6 +95,7 @@ fun LanguageSettingsScreen(firstItemFocusRequester: FocusRequester? = null) {
             )
         }
     }
+    } // end Column
 }
 
 @Composable

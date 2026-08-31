@@ -181,7 +181,7 @@ fun PlayerSettingsScreen(
         if (uiStyle != UiStyle.MODERN) {
             Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart) {
-                Text(stringResource(R.string.player_settings_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = sTheme.categoryText)
+                Text(stringResource(R.string.player_settings_title), style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
             }
             HorizontalDivider(color = nsTheme.sidebar.divider)
         }

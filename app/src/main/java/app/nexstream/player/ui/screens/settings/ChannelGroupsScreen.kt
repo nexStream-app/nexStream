@@ -36,6 +36,7 @@ import app.nexstream.player.data.local.entity.ChannelGroupEntity
 import app.nexstream.player.data.local.entity.ChannelGroupMemberEntity
 import app.nexstream.player.ui.components.TvKeyboardSheet
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.UiStyle
 import kotlinx.coroutines.launch
 
 @Composable
@@ -44,6 +45,10 @@ fun ChannelGroupsScreen(
     viewModel: ChannelGroupsViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsState()
+    val nsTheme = LocalNexStreamTheme.current
+    val sTheme  = nsTheme.sidebar
+    val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
+    val uiStyle = rememberUiStyle()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var editingGroup by remember { mutableStateOf<ChannelGroupEntity?>(null) }
@@ -51,24 +56,27 @@ fun ChannelGroupsScreen(
     var managingGroup by remember { mutableStateOf<ChannelGroupEntity?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        if (uiStyle != UiStyle.MODERN) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text("Channel Groups", style = MaterialTheme.typography.titleMedium, color = sTheme.categoryText)
+            }
+            HorizontalDivider(color = sTheme.divider)
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
+            // New Group button row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Channel Groups",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
                 var addFocused by remember { mutableStateOf(false) }
                 val addFR = remember { FocusRequester() }
                 LaunchedEffect(Unit) {
