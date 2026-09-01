@@ -28,6 +28,9 @@ interface ChannelDao {
     @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
     fun getAllChannels(): Flow<List<ChannelEntity>>
 
+    @Query("SELECT c.* FROM channels c INNER JOIN playlists p ON c.playlistId = p.id WHERE p.enabled = 1 ORDER BY c.sortIndex ASC")
+    fun getEnabledChannels(): Flow<List<ChannelEntity>>
+
     @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
     suspend fun getAllChannelsOnce(): List<ChannelEntity>
 

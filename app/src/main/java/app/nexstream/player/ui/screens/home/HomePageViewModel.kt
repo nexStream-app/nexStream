@@ -128,9 +128,18 @@ class HomePageViewModel @Inject constructor(
         }
     }
 
+    private var lastLoadedDay: String = ""
+
+    private fun todayString(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+
     fun refresh() = loadSports()
 
     fun refreshSports() = loadSports(force = false)
+
+    fun refreshIfStale() {
+        if (lastLoadedDay != todayString()) loadSports()
+    }
 
     fun selectSportCategory(category: String?) {
         selectedSportCategory.value = category
@@ -247,6 +256,7 @@ class HomePageViewModel @Inject constructor(
                 Log.i(TAG, "loadSports: done — ${matched.size} events, ${withChannels.size} have matched channels")
                 _debugStatus.value = "${matched.size} events fetched, ${withChannels.size} matched to your channels"
                 _sportsEvents.value = enriched
+                lastLoadedDay = todayString()
             } catch (e: Exception) {
                 val msg = "Error: ${e.javaClass.simpleName}: ${e.message}"
                 _debugStatus.value = msg

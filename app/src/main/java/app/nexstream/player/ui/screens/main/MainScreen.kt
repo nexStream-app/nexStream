@@ -240,12 +240,6 @@ fun MainScreen(
     val vodRestricted     = accessState == AppAccessState.TRIAL_EXPIRED
     val xtreamPlaylist = remember(settingsPlaylists) { settingsPlaylists.firstOrNull { it.type == "XTREAM" } }
     val hasJellyfinPlaylist = remember(settingsPlaylists) { settingsPlaylists.any { it.type == "JELLYFIN" } }
-    LaunchedEffect(startRouteApplied) {
-        if (startRouteApplied) {
-            val loaded = settingsViewModel.playlists.first { it.isNotEmpty() }
-            settingsViewModel.checkPlaylistConnectivity(loaded)
-        }
-    }
     val hasDeviceFolders by deviceViewModel.hasDeviceFolders.collectAsState()
     val deviceDates      by deviceViewModel.deviceDates.collectAsState()
     var selectedDeviceDate by rememberSaveable { mutableStateOf<String?>(null) }
@@ -397,6 +391,8 @@ fun MainScreen(
         // Always dismiss search keyboard when changing routes
         showMovieSearch = false; showSeriesSearch = false
         showCatchUpSearch = false; showRecentSearch = false; showMyListSearch = false
+        // Refresh sports guide when Home is selected if data is stale
+        if (currentRoute == AppRoute.Home && !isFirstLoad) homePageViewModel.refreshIfStale()
         previousRoute = currentRoute
 
         if (uiStyle == UiStyle.MODERN) {

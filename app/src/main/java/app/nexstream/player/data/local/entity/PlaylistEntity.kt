@@ -17,4 +17,5 @@ data class PlaylistEntity(
     val addedDate: Long = System.currentTimeMillis(),
     val sortIndex: Int = 0,
     @ColumnInfo(name = "plex_token") val plexToken: String? = null,
+    @ColumnInfo(name = "enabled") val enabled: Boolean = true,
 )

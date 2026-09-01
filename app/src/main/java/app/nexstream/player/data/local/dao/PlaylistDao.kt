@@ -12,6 +12,12 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY sortIndex ASC, addedDate ASC")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM playlists WHERE enabled = 1 ORDER BY sortIndex ASC, addedDate ASC")
+    fun getEnabledPlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query("UPDATE playlists SET enabled = :enabled WHERE id = :playlistId")
+    suspend fun setEnabled(playlistId: String, enabled: Boolean)
+
     @Query("UPDATE playlists SET sortIndex = :sortIndex WHERE id = :playlistId")
     suspend fun updateSortIndex(playlistId: String, sortIndex: Int)
 

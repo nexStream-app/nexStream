@@ -176,6 +176,14 @@ class PlaylistRepository @Inject constructor(
         return database.playlistDao().getAllPlaylists()
     }
 
+    fun getEnabledPlaylists(): Flow<List<PlaylistEntity>> {
+        return database.playlistDao().getEnabledPlaylists()
+    }
+
+    suspend fun setPlaylistEnabled(playlistId: String, enabled: Boolean) {
+        database.playlistDao().setEnabled(playlistId, enabled)
+    }
+
     fun getChannelsByPlaylist(playlistId: String): Flow<List<ChannelEntity>> {
         return database.channelDao().getChannelsByPlaylist(playlistId)
     }
@@ -1492,7 +1500,7 @@ class PlaylistRepository @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getAllMovies(): Flow<List<MovieEntity>> {
-        return getAllPlaylists().flatMapLatest { playlists ->
+        return getEnabledPlaylists().flatMapLatest { playlists ->
             if (playlists.isEmpty()) flowOf(emptyList())
             else combine(playlists.map { database.movieDao().getMoviesByPlaylist(it.id) }) { movieArrays ->
                 movieArrays.flatMap { it }
@@ -1514,7 +1522,7 @@ class PlaylistRepository @Inject constructor(
     }
 
     fun getAllChannels(): Flow<List<ChannelEntity>> =
-        database.channelDao().getAllChannels()
+        database.channelDao().getEnabledChannels()
 
     suspend fun preloadChannelIcons(context: android.content.Context) {
         withContext(Dispatchers.IO) {

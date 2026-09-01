@@ -11,6 +11,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -40,8 +41,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @Composable
@@ -127,6 +129,7 @@ fun SettingsScreen(
                         isRefreshingAll = isRefreshingAll,
                         isAnyRefreshing = isAnyRefreshing,
                         connectivityStatus = playlistStatus[playlist.id],
+                        onToggleEnabled = { viewModel.setPlaylistEnabled(playlist, !playlist.enabled) },
                         onRefreshAll = { viewModel.refreshAll(playlist) },
                         onRefreshTV = { viewModel.refreshTVAndEPG(playlist) },
                         onRefreshMovies = { viewModel.refreshMovies(playlist) },
@@ -223,6 +226,7 @@ private fun PlaylistCard(
     isRefreshingAll: Boolean,
     isAnyRefreshing: Boolean,
     connectivityStatus: Boolean? = null,
+    onToggleEnabled: () -> Unit,
     onRefreshAll: () -> Unit,
     onRefreshTV: () -> Unit,
     onRefreshMovies: () -> Unit,
@@ -234,16 +238,18 @@ private fun PlaylistCard(
     val sTheme = LocalNexStreamTheme.current.sidebar
     val uiStyle = rememberUiStyle()
 
+    val disabledAlpha = if (playlist.enabled) 1f else 0.45f
     val cardModifier = if (uiStyle == UiStyle.MODERN)
         Modifier
             .fillMaxWidth()
             .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (playlist.enabled) 0.3f else 0.1f),
                 RoundedCornerShape(12.dp)
             )
             .padding(4.dp)
+            .graphicsLayer { alpha = disabledAlpha }
     else
-        Modifier.fillMaxWidth()
+        Modifier.fillMaxWidth().graphicsLayer { alpha = disabledAlpha }
 
     Column(modifier = cardModifier) {
         Row(
@@ -274,6 +280,12 @@ private fun PlaylistCard(
                     contentDescription = stringResource(R.string.playlists_priority_lower)
                 )
             }
+            SettingsFocusableIconButton(
+                onClick = onToggleEnabled,
+                icon = if (playlist.enabled) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                tint = if (playlist.enabled) sTheme.categoryText else sTheme.categoryText.copy(alpha = 0.5f),
+                contentDescription = if (playlist.enabled) "Disable playlist" else "Enable playlist"
+            )
             SettingsFocusableIconButton(
                 onClick = onDelete, icon = Icons.Default.Delete,
                 tint = MaterialTheme.colorScheme.error, contentDescription = stringResource(R.string.playlists_delete_playlist)
@@ -473,6 +485,19 @@ class SettingsViewModel @Inject constructor(
     private val _playlistStatus = MutableStateFlow<Map<String, Boolean?>>(emptyMap())
     val playlistStatus: StateFlow<Map<String, Boolean?>> = _playlistStatus.asStateFlow()
 
+    private val connectivityClient = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(6, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
+        .build()
+
+    init {
+        viewModelScope.launch {
+            val loaded = playlists.first { it.isNotEmpty() }
+            checkPlaylistConnectivity(loaded)
+        }
+    }
+
     fun checkPlaylistConnectivity(playlists: List<PlaylistEntity>) {
         viewModelScope.launch {
             playlists.forEach { playlist ->
@@ -482,15 +507,12 @@ class SettingsViewModel @Inject constructor(
                         else -> playlist.url.takeIf { it.isNotBlank() }
                     }
                     val reachable = if (urlStr.isNullOrBlank()) false else try {
-                        val connection = URL(urlStr).openConnection() as HttpURLConnection
-                        connection.connectTimeout = 5000
-                        connection.readTimeout = 5000
-                        connection.requestMethod = "HEAD"
-                        connection.instanceFollowRedirects = true
-                        val code = connection.responseCode
-                        connection.disconnect()
+                        val request = Request.Builder().url(urlStr).head().build()
+                        val response = connectivityClient.newCall(request).execute()
+                        val code = response.code
+                        response.close()
                         code in 100..499
-                    } catch (_: Exception) { false }
+                    } catch (e: Exception) { false }
                     _playlistStatus.update { it + (playlist.id to reachable) }
                 }
             }
@@ -591,6 +613,10 @@ class SettingsViewModel @Inject constructor(
 
     fun deletePlaylist(playlist: PlaylistEntity) {
         viewModelScope.launch { repository.deletePlaylist(playlist.id) }
+    }
+
+    fun setPlaylistEnabled(playlist: PlaylistEntity, enabled: Boolean) {
+        viewModelScope.launch { repository.setPlaylistEnabled(playlist.id, enabled) }
     }
 
     fun movePriority(playlists: List<PlaylistEntity>, fromIndex: Int, toIndex: Int) {
