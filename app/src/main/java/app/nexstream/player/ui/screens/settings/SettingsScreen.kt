@@ -24,6 +24,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.window.Dialog
+import app.nexstream.player.ui.components.TvKeyboard
 import app.nexstream.player.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +74,8 @@ fun SettingsScreen(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
+    var playlistToEdit by remember { mutableStateOf<PlaylistEntity?>(null) }
+    val isTv = remember { context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) }
 
     val addButtonFocus = remember { FocusRequester() }
     val firstCardFocus = remember { FocusRequester() }
@@ -135,6 +142,7 @@ fun SettingsScreen(
                         onRefreshMovies = { viewModel.refreshMovies(playlist) },
                         onRefreshSeries = { viewModel.refreshSeries(playlist) },
                         onDelete = { playlistToDelete = playlist; showDeleteDialog = true },
+                        onEdit = { playlistToEdit = playlist },
                         onMoveUp = if (index > 0) { { viewModel.movePriority(playlists, index, index - 1) } } else null,
                         onMoveDown = if (index < playlists.lastIndex) { { viewModel.movePriority(playlists, index, index + 1) } } else null,
                     )
@@ -168,6 +176,15 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (playlistToEdit != null) {
+        EditPlaylistDialog(
+            playlist = playlistToEdit!!,
+            isTv = isTv,
+            onDismiss = { playlistToEdit = null },
+            onSave = { updated -> viewModel.updatePlaylist(updated); playlistToEdit = null }
+        )
     }
 
     if (showDeleteDialog && playlistToDelete != null) {
@@ -227,6 +244,7 @@ private fun PlaylistCard(
     isAnyRefreshing: Boolean,
     connectivityStatus: Boolean? = null,
     onToggleEnabled: () -> Unit,
+    onEdit: () -> Unit,
     onRefreshAll: () -> Unit,
     onRefreshTV: () -> Unit,
     onRefreshMovies: () -> Unit,
@@ -285,6 +303,10 @@ private fun PlaylistCard(
                 icon = if (playlist.enabled) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                 tint = if (playlist.enabled) sTheme.categoryText else sTheme.categoryText.copy(alpha = 0.5f),
                 contentDescription = if (playlist.enabled) "Disable playlist" else "Enable playlist"
+            )
+            SettingsFocusableIconButton(
+                onClick = onEdit, icon = Icons.Default.Edit,
+                tint = sTheme.categoryText, contentDescription = "Edit playlist"
             )
             SettingsFocusableIconButton(
                 onClick = onDelete, icon = Icons.Default.Delete,
@@ -369,6 +391,177 @@ private fun PlaylistCard(
             }
         }
         HorizontalDivider(color = LocalNexStreamTheme.current.sidebar.divider.copy(alpha = 0.4f))
+    }
+}
+
+// ── Edit playlist dialog ──────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditPlaylistDialog(
+    playlist: PlaylistEntity,
+    isTv: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (PlaylistEntity) -> Unit
+) {
+    var name     by remember { mutableStateOf(playlist.name) }
+    var url      by remember { mutableStateOf(playlist.url) }
+    var host     by remember { mutableStateOf(playlist.xtreamHost ?: "") }
+    var username by remember { mutableStateOf(playlist.xtreamUsername ?: "") }
+    var password by remember { mutableStateOf(playlist.xtreamPassword ?: "") }
+
+    var keyboardTarget by remember { mutableStateOf<String?>(null) }
+    var keyboardValue  by remember { mutableStateOf("") }
+    var showKeyboard   by remember { mutableStateOf(false) }
+
+    fun openKeyboard(target: String, current: String) {
+        keyboardTarget = target; keyboardValue = current; showKeyboard = true
+    }
+    fun commitKeyboard() {
+        when (keyboardTarget) {
+            "name"     -> name     = keyboardValue
+            "url"      -> url      = keyboardValue
+            "host"     -> host     = keyboardValue
+            "username" -> username = keyboardValue
+            "password" -> password = keyboardValue
+        }
+        showKeyboard = false
+    }
+    fun buildUpdated() = when (playlist.type) {
+        "M3U"      -> playlist.copy(name = name.trim(), url = url.trim())
+        "XTREAM"   -> playlist.copy(xtreamHost = host.trim(), xtreamUsername = username.trim(), xtreamPassword = password.trim())
+        "JELLYFIN" -> playlist.copy(name = name.trim(), xtreamHost = host.trim(), xtreamUsername = username.trim(), xtreamPassword = password.trim())
+        else       -> playlist.copy(name = name.trim())
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
+            Column(
+                modifier = Modifier.padding(24.dp).widthIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Edit Playlist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                when (playlist.type) {
+                    "M3U" -> {
+                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                        EditField(isTv, "M3U URL", url, onValueChange = { url = it }, onFocusSelect = { openKeyboard("url", url) })
+                    }
+                    "XTREAM" -> {
+                        EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
+                        EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
+                        EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
+                    }
+                    "JELLYFIN" -> {
+                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                        EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
+                        EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
+                        EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
+                    }
+                    else -> {
+                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    var cancelFocused by remember { mutableStateOf(false) }
+                    var saveFocused   by remember { mutableStateOf(false) }
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).onFocusChanged { cancelFocused = it.isFocused }
+                            .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onDismiss(); true } else false },
+                        border = BorderStroke(if (cancelFocused) 2.dp else 1.dp, if (cancelFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                    ) { Text("Cancel") }
+                    Button(
+                        onClick = { onSave(buildUpdated()) },
+                        modifier = Modifier.weight(1f).onFocusChanged { saveFocused = it.isFocused }
+                            .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onSave(buildUpdated()); true } else false }
+                    ) { Text("Save") }
+                }
+            }
+        }
+    }
+
+    if (showKeyboard && isTv) {
+        ModalBottomSheet(
+            onDismissRequest = { showKeyboard = false },
+            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle       = null,
+            containerColor   = MaterialTheme.colorScheme.surface
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(keyboardTarget?.replaceFirstChar { it.uppercase() } ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = keyboardValue.ifEmpty { "..." },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (keyboardValue.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp),
+                        maxLines = 1
+                    )
+                }
+                TvKeyboard(value = keyboardValue, onValueChange = { keyboardValue = it },
+                    onDone = { commitKeyboard() }, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditField(
+    isTv: Boolean,
+    label: String,
+    value: String,
+    isPassword: Boolean = false,
+    onValueChange: (String) -> Unit,
+    onFocusSelect: () -> Unit
+) {
+    if (isTv) {
+        var isFocused by remember { mutableStateOf(false) }
+        Surface(
+            modifier = Modifier.fillMaxWidth()
+                .onFocusChanged { isFocused = it.isFocused }
+                .onKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown &&
+                        (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)
+                    ) { onFocusSelect(); true } else false
+                },
+            onClick = onFocusSelect,
+            shape = RoundedCornerShape(6.dp),
+            color = if (isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant,
+            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+            tonalElevation = if (isFocused) 4.dp else 1.dp
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(label, style = MaterialTheme.typography.labelSmall,
+                    color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(2.dp))
+                val display = if (isPassword && value.isNotEmpty()) "•".repeat(value.length) else value
+                Text(display.ifEmpty { "Tap to edit" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (value.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                            else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1)
+            }
+        }
+    } else {
+        OutlinedTextField(
+            value = value, onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = true,
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+        )
     }
 }
 
@@ -613,6 +806,14 @@ class SettingsViewModel @Inject constructor(
 
     fun deletePlaylist(playlist: PlaylistEntity) {
         viewModelScope.launch { repository.deletePlaylist(playlist.id) }
+    }
+
+    fun updatePlaylist(updated: PlaylistEntity) {
+        viewModelScope.launch {
+            repository.updatePlaylistDetails(updated)
+            _playlistStatus.update { it + (updated.id to null) }
+            checkPlaylistConnectivity(listOf(updated))
+        }
     }
 
     fun setPlaylistEnabled(playlist: PlaylistEntity, enabled: Boolean) {

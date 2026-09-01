@@ -1255,8 +1255,16 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun deletePlaylist(playlistId: String) {
         database.channelDao().deleteByPlaylist(playlistId)
+        database.movieDao().deleteByPlaylist(playlistId)
+        database.seriesDao().deleteSeriesByPlaylist(playlistId)
+        database.seriesDao().deleteEpisodesByPlaylist(playlistId)
+        database.musicDao().deleteByPlaylist(playlistId)
         val playlist = database.playlistDao().getPlaylistById(playlistId)
         playlist?.let { database.playlistDao().delete(it) }
+    }
+
+    suspend fun updatePlaylistDetails(playlist: PlaylistEntity) {
+        database.playlistDao().update(playlist)
     }
 
     suspend fun updatePlaylistSortIndex(playlistId: String, sortIndex: Int) {
