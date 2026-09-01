@@ -17,6 +17,7 @@ sftp.env
 local.properties
 keystore.properties
 nexstream.jks
+backend/config.php
 .claude/
 app/release/*.apk
 app/release/baselineProfiles/
