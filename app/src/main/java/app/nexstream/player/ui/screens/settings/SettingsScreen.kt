@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -249,23 +251,10 @@ private fun PlaylistCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            ConnectivityDot(status = connectivityStatus)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(playlist.name, style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold, color = sTheme.categoryText, maxLines = 1,
-                        modifier = Modifier.weight(1f, fill = false))
-                    if (connectivityStatus != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(
-                                    if (connectivityStatus) androidx.compose.ui.graphics.Color(0xFF22C55E)
-                                    else androidx.compose.ui.graphics.Color(0xFFEF4444),
-                                    CircleShape
-                                )
-                        )
-                    }
-                }
+                Text(playlist.name, style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold, color = sTheme.categoryText, maxLines = 1)
                 val meta = buildList {
                     add(playlist.type)
                     if (!playlist.xtreamUsername.isNullOrEmpty()) add(playlist.xtreamUsername!!)
@@ -369,6 +358,35 @@ private fun PlaylistCard(
         }
         HorizontalDivider(color = LocalNexStreamTheme.current.sidebar.divider.copy(alpha = 0.4f))
     }
+}
+
+// ── Connectivity dot ──────────────────────────────────────────────────────────
+
+@Composable
+private fun ConnectivityDot(status: Boolean?) {
+    val infiniteTransition = rememberInfiniteTransition(label = "connectivity")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotPulse"
+    )
+    val dotColor = when (status) {
+        true  -> Color(0xFF22C55E)
+        false -> Color(0xFFEF4444)
+        null  -> MaterialTheme.colorScheme.primary
+    }
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .background(
+                dotColor.copy(alpha = if (status == null) pulseAlpha else 1f),
+                CircleShape
+            )
+    )
 }
 
 // ── Focusable button helpers ──────────────────────────────────────────────────
