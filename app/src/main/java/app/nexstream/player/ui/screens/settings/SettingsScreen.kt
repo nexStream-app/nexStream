@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -34,8 +35,11 @@ import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getDeduplicateContentFlow
 import app.nexstream.player.ui.theme.saveDeduplicateContent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
 import javax.inject.Inject
 
 @Composable
@@ -46,6 +50,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val playlists by viewModel.playlists.collectAsState()
+    val playlistStatus by viewModel.playlistStatus.collectAsState()
     val isRefreshingTV by viewModel.isRefreshingTV.collectAsState()
     val isRefreshingMovies by viewModel.isRefreshingMovies.collectAsState()
     val isRefreshingSeries by viewModel.isRefreshingSeries.collectAsState()
@@ -119,6 +124,7 @@ fun SettingsScreen(
                         isRefreshingSeries = isRefreshingSeries,
                         isRefreshingAll = isRefreshingAll,
                         isAnyRefreshing = isAnyRefreshing,
+                        connectivityStatus = playlistStatus[playlist.id],
                         onRefreshAll = { viewModel.refreshAll(playlist) },
                         onRefreshTV = { viewModel.refreshTVAndEPG(playlist) },
                         onRefreshMovies = { viewModel.refreshMovies(playlist) },
@@ -214,6 +220,7 @@ private fun PlaylistCard(
     isRefreshingSeries: Boolean,
     isRefreshingAll: Boolean,
     isAnyRefreshing: Boolean,
+    connectivityStatus: Boolean? = null,
     onRefreshAll: () -> Unit,
     onRefreshTV: () -> Unit,
     onRefreshMovies: () -> Unit,
@@ -243,8 +250,22 @@ private fun PlaylistCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(playlist.name, style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold, color = sTheme.categoryText, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(playlist.name, style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold, color = sTheme.categoryText, maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false))
+                    if (connectivityStatus != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    if (connectivityStatus) androidx.compose.ui.graphics.Color(0xFF22C55E)
+                                    else androidx.compose.ui.graphics.Color(0xFFEF4444),
+                                    CircleShape
+                                )
+                        )
+                    }
+                }
                 val meta = buildList {
                     add(playlist.type)
                     if (!playlist.xtreamUsername.isNullOrEmpty()) add(playlist.xtreamUsername!!)
@@ -430,6 +451,34 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     val playlists = repository.getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _playlistStatus = MutableStateFlow<Map<String, Boolean?>>(emptyMap())
+    val playlistStatus: StateFlow<Map<String, Boolean?>> = _playlistStatus.asStateFlow()
+
+    fun checkPlaylistConnectivity(playlists: List<PlaylistEntity>) {
+        viewModelScope.launch {
+            playlists.forEach { playlist ->
+                launch(Dispatchers.IO) {
+                    val urlStr = when (playlist.type) {
+                        "XTREAM" -> playlist.xtreamHost
+                        else -> playlist.url.takeIf { it.isNotBlank() }
+                    }
+                    val reachable = if (urlStr.isNullOrBlank()) false else try {
+                        val connection = URL(urlStr).openConnection() as HttpURLConnection
+                        connection.connectTimeout = 5000
+                        connection.readTimeout = 5000
+                        connection.requestMethod = "HEAD"
+                        connection.instanceFollowRedirects = true
+                        val code = connection.responseCode
+                        connection.disconnect()
+                        code in 100..499
+                    } catch (_: Exception) { false }
+                    _playlistStatus.update { it + (playlist.id to reachable) }
+                }
+            }
+        }
+    }
+
     private val _isRefreshingTV = MutableStateFlow(false)
     val isRefreshingTV: StateFlow<Boolean> = _isRefreshingTV.asStateFlow()
     private val _isRefreshingMovies = MutableStateFlow(false)

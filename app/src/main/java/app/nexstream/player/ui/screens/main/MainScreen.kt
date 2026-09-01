@@ -240,6 +240,12 @@ fun MainScreen(
     val vodRestricted     = accessState == AppAccessState.TRIAL_EXPIRED
     val xtreamPlaylist = remember(settingsPlaylists) { settingsPlaylists.firstOrNull { it.type == "XTREAM" } }
     val hasJellyfinPlaylist = remember(settingsPlaylists) { settingsPlaylists.any { it.type == "JELLYFIN" } }
+    LaunchedEffect(startRouteApplied) {
+        if (startRouteApplied) {
+            val loaded = settingsViewModel.playlists.first { it.isNotEmpty() }
+            settingsViewModel.checkPlaylistConnectivity(loaded)
+        }
+    }
     val hasDeviceFolders by deviceViewModel.hasDeviceFolders.collectAsState()
     val deviceDates      by deviceViewModel.deviceDates.collectAsState()
     var selectedDeviceDate by rememberSaveable { mutableStateOf<String?>(null) }
