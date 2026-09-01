@@ -396,7 +396,6 @@ private fun PlaylistCard(
 
 // ── Edit playlist dialog ──────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditPlaylistDialog(
     playlist: PlaylistEntity,
@@ -434,82 +433,84 @@ private fun EditPlaylistDialog(
         else       -> playlist.copy(name = name.trim())
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (showKeyboard) commitKeyboard() else onDismiss() }) {
         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
-            Column(
-                modifier = Modifier.padding(24.dp).widthIn(max = 520.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Edit Playlist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                when (playlist.type) {
-                    "M3U" -> {
-                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
-                        EditField(isTv, "M3U URL", url, onValueChange = { url = it }, onFocusSelect = { openKeyboard("url", url) })
+            if (isTv && showKeyboard) {
+                // Keyboard mode — replaces the form inside the same dialog window
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            keyboardTarget?.replaceFirstChar { it.uppercase() } ?: "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = keyboardValue.ifEmpty { "…" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (keyboardValue.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f).padding(start = 12.dp),
+                            maxLines = 1
+                        )
                     }
-                    "XTREAM" -> {
-                        EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
-                        EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
-                        EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
-                    }
-                    "JELLYFIN" -> {
-                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
-                        EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
-                        EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
-                        EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
-                    }
-                    else -> {
-                        EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    var cancelFocused by remember { mutableStateOf(false) }
-                    var saveFocused   by remember { mutableStateOf(false) }
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f).onFocusChanged { cancelFocused = it.isFocused }
-                            .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onDismiss(); true } else false },
-                        border = BorderStroke(if (cancelFocused) 2.dp else 1.dp, if (cancelFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-                    ) { Text("Cancel") }
-                    Button(
-                        onClick = { onSave(buildUpdated()) },
-                        modifier = Modifier.weight(1f).onFocusChanged { saveFocused = it.isFocused }
-                            .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onSave(buildUpdated()); true } else false }
-                    ) { Text("Save") }
-                }
-            }
-        }
-    }
-
-    if (showKeyboard && isTv) {
-        ModalBottomSheet(
-            onDismissRequest = { showKeyboard = false },
-            sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            dragHandle       = null,
-            containerColor   = MaterialTheme.colorScheme.surface
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(keyboardTarget?.replaceFirstChar { it.uppercase() } ?: "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        text = keyboardValue.ifEmpty { "..." },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (keyboardValue.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f).padding(start = 12.dp),
-                        maxLines = 1
+                    TvKeyboard(
+                        value = keyboardValue,
+                        onValueChange = { keyboardValue = it },
+                        onDone = { commitKeyboard() },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                TvKeyboard(value = keyboardValue, onValueChange = { keyboardValue = it },
-                    onDone = { commitKeyboard() }, modifier = Modifier.fillMaxWidth())
+            } else {
+                // Form mode
+                Column(
+                    modifier = Modifier.padding(24.dp).widthIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Edit Playlist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    when (playlist.type) {
+                        "M3U" -> {
+                            EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                            EditField(isTv, "M3U URL", url, onValueChange = { url = it }, onFocusSelect = { openKeyboard("url", url) })
+                        }
+                        "XTREAM" -> {
+                            EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
+                            EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
+                            EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
+                        }
+                        "JELLYFIN" -> {
+                            EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                            EditField(isTv, "Server URL", host, onValueChange = { host = it }, onFocusSelect = { openKeyboard("host", host) })
+                            EditField(isTv, "Username", username, onValueChange = { username = it }, onFocusSelect = { openKeyboard("username", username) })
+                            EditField(isTv, "Password", password, isPassword = true, onValueChange = { password = it }, onFocusSelect = { openKeyboard("password", password) })
+                        }
+                        else -> {
+                            EditField(isTv, "Name", name, onValueChange = { name = it }, onFocusSelect = { openKeyboard("name", name) })
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        var cancelFocused by remember { mutableStateOf(false) }
+                        var saveFocused   by remember { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f).onFocusChanged { cancelFocused = it.isFocused }
+                                .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onDismiss(); true } else false },
+                            border = BorderStroke(if (cancelFocused) 2.dp else 1.dp, if (cancelFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        ) { Text("Cancel") }
+                        Button(
+                            onClick = { onSave(buildUpdated()) },
+                            modifier = Modifier.weight(1f).onFocusChanged { saveFocused = it.isFocused }
+                                .onKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) { onSave(buildUpdated()); true } else false }
+                        ) { Text("Save") }
+                    }
+                }
             }
         }
     }
