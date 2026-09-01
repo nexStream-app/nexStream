@@ -1267,7 +1267,6 @@ private fun SettingsPanel(
     data class SettingsEntry(val label: String, val route: AppRoute, val fr: FocusRequester)
 
     val playlistsFR   = remember { FocusRequester() }
-    val sportsFR      = remember { FocusRequester() }
     val appearanceFR    = remember { FocusRequester() }
     val playerFR        = remember { FocusRequester() }
     val syncFR          = remember { FocusRequester() }
@@ -1279,6 +1278,8 @@ private fun SettingsPanel(
     val channelGroupsFR = remember { FocusRequester() }
     val languageFR      = remember { FocusRequester() }
 
+    val networkFR = remember { FocusRequester() }
+
     val entries = remember(showSyncSettings) {
         buildList {
             add(SettingsEntry("About",          AppRoute.SettingsAbout,          aboutFR))
@@ -1288,10 +1289,10 @@ private fun SettingsPanel(
             add(SettingsEntry("Language",       AppRoute.SettingsLanguage,       languageFR))
             add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
             add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
+            add(SettingsEntry("Network",        AppRoute.SettingsProxy,          networkFR))
             add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))
             add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,      playlistsFR))
             add(SettingsEntry("Profiles",       AppRoute.SettingsProfiles,       profilesFR))
-            add(SettingsEntry("Sports Guide",   AppRoute.SettingsSports,         sportsFR))
             if (showSyncSettings) add(SettingsEntry("Sync and Update", AppRoute.SettingsSyncSettings, syncFR))
         }
     }
