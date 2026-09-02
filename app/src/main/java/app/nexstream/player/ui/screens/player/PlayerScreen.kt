@@ -527,11 +527,11 @@ fun PlayerScreen(
             val streamProxy: java.net.Proxy = when (proxyMode) {
                 "BUILTIN" -> java.net.Proxy(
                     java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress("proxy.nexstream.uk", 3129)
+                    java.net.InetSocketAddress.createUnresolved("proxy.nexstream.uk", 3129)
                 )
                 "CUSTOM"  -> if (proxyHost.isNotBlank()) java.net.Proxy(
                     if (proxyType == "SOCKS5") java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress(proxyHost, proxyPort)
+                    java.net.InetSocketAddress.createUnresolved(proxyHost, proxyPort)
                 ) else java.net.Proxy.NO_PROXY
                 else      -> java.net.Proxy.NO_PROXY
             }
