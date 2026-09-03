@@ -126,11 +126,15 @@ fun WatchlistScreen(
                 var base = viewModel.getMovieById(item.id)
                 // Fallback 1: exact stream URL match
                 if (base == null && !item.streamUrl.isNullOrEmpty()) base = viewModel.getMovieByStreamUrl(item.streamUrl)
-                // Fallback 2: Xtream stream ID from URL path (handles http→https, credential changes, format differences)
-                if (base == null) {
-                    val streamId = item.id.substringAfterLast('-')
-                    if (streamId.isNotEmpty() && streamId.all { it.isDigit() })
-                        base = viewModel.getMovieByXtreamStreamId(streamId)
+                // Fallback 2: Xtream VOD ID from stream URL path (handles credential changes between devices).
+                // Extract from the URL rather than the item ID, because the item ID suffix is a
+                // sequential counter for M3U movies and can falsely match an unrelated Xtream movie.
+                if (base == null && !item.streamUrl.isNullOrEmpty()) {
+                    val vodId = item.streamUrl
+                        .substringAfterLast('/')   // "12345.mp4" or "movie-title.mp4"
+                        .substringBefore('.')       // "12345" or "movie-title"
+                        .takeIf { it.isNotEmpty() && it.all { c -> c.isDigit() } }
+                    if (vodId != null) base = viewModel.getMovieByXtreamStreamId(vodId)
                 }
                 // Fallback 3: title match
                 if (base == null) base = viewModel.findMovieByName(item.name)
