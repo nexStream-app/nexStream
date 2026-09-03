@@ -436,12 +436,15 @@ fun SeriesScreen(
                                         isLoadingDetails = true
                                         selectedSeriesId = null
                                         scope.launch {
-                                            val fullSeries = viewModel.repository.getSeriesById(series.id)
-                                            selectedSeries = fullSeries
-                                            val rawId = series.id.removePrefix("${series.playlistId}-")
-                                            viewModel.loadSeriesDetails(playlistId = series.playlistId, seriesId = rawId)
-                                            selectedSeriesId = series.id
-                                            isLoadingDetails = false
+                                            try {
+                                                val fullSeries = viewModel.repository.getSeriesById(series.id)
+                                                selectedSeries = fullSeries
+                                                val rawId = series.id.removePrefix("${series.playlistId}-")
+                                                viewModel.loadSeriesDetails(playlistId = series.playlistId, seriesId = rawId)
+                                                selectedSeriesId = series.id
+                                            } finally {
+                                                isLoadingDetails = false
+                                            }
                                         }
                                     },
                                     onContinueWatchingClick = { item ->
@@ -473,16 +476,19 @@ fun SeriesScreen(
                                                     isLoadingDetails = true
                                                     selectedSeriesId = null
                                                     scope.launch {
-                                                        val fullSeries = viewModel.repository.getSeriesById(series.id)
-                                                        selectedSeries = fullSeries
-                                                        val rawId = series.id.removePrefix("${series.playlistId}-")
-                                                        // Fetch from server to ensure latest episode data
-                                                        viewModel.loadSeriesDetails(
-                                                            playlistId = series.playlistId, seriesId = rawId
-                                                        )
-                                                        // Now point the live Flow at this series — DB already has latest
-                                                        selectedSeriesId = series.id
-                                                        isLoadingDetails = false
+                                                        try {
+                                                            val fullSeries = viewModel.repository.getSeriesById(series.id)
+                                                            selectedSeries = fullSeries
+                                                            val rawId = series.id.removePrefix("${series.playlistId}-")
+                                                            // Fetch from server to ensure latest episode data
+                                                            viewModel.loadSeriesDetails(
+                                                                playlistId = series.playlistId, seriesId = rawId
+                                                            )
+                                                            // Now point the live Flow at this series — DB already has latest
+                                                            selectedSeriesId = series.id
+                                                        } finally {
+                                                            isLoadingDetails = false
+                                                        }
                                                     }
                                                 }
                                                 override fun onItemLongClick(item: PosterItem, index: Int) {

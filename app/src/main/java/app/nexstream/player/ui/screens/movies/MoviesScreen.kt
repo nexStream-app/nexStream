@@ -338,16 +338,19 @@ fun MoviesScreen(
                         onMovieClick     = { streamUrl, movieId, name ->
                             isLoadingDetails = true
                             scope.launch {
-                                val base = viewModel.repository.getMovieById(movieId)
-                                movieWithDetails = base
-                                val detailed = base?.let {
-                                    viewModel.repository.getMovieDetails(
-                                        playlistId = it.playlistId,
-                                        vodId      = it.id.removePrefix("${it.playlistId}-")
-                                    )
+                                try {
+                                    val base = viewModel.repository.getMovieById(movieId)
+                                    movieWithDetails = base
+                                    val detailed = base?.let {
+                                        viewModel.repository.getMovieDetails(
+                                            playlistId = it.playlistId,
+                                            vodId      = it.id.removePrefix("${it.playlistId}-")
+                                        )
+                                    }
+                                    if (detailed != null) movieWithDetails = detailed
+                                } finally {
+                                    isLoadingDetails = false
                                 }
-                                if (detailed != null) movieWithDetails = detailed
-                                isLoadingDetails = false
                             }
                         },
                         onMovieLongPress = { movie ->
@@ -489,14 +492,17 @@ fun MoviesScreen(
                                                 onItemFocused(if (resolvedIndex >= 0) resolvedIndex else index)
                                                 isLoadingDetails = true
                                                 scope.launch {
-                                                    val base = viewModel.repository.getMovieById(movie.id)
-                                                    movieWithDetails = base
-                                                    val detailed = viewModel.repository.getMovieDetails(
-                                                        playlistId = movie.playlistId,
-                                                        vodId = movie.id.removePrefix("${movie.playlistId}-")
-                                                    )
-                                                    if (detailed != null) movieWithDetails = detailed
-                                                    isLoadingDetails = false
+                                                    try {
+                                                        val base = viewModel.repository.getMovieById(movie.id)
+                                                        movieWithDetails = base
+                                                        val detailed = viewModel.repository.getMovieDetails(
+                                                            playlistId = movie.playlistId,
+                                                            vodId = movie.id.removePrefix("${movie.playlistId}-")
+                                                        )
+                                                        if (detailed != null) movieWithDetails = detailed
+                                                    } finally {
+                                                        isLoadingDetails = false
+                                                    }
                                                 }
                                             }
                                             override fun onItemLongClick(item: PosterItem, index: Int) {

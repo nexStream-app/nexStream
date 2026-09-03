@@ -254,7 +254,7 @@ fun PlayerScreen(
     var centreIndex  by remember { mutableStateOf(0) }
 
     val isAndroidTV  = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
-    val showAspectRatioButton = !isAndroidTV
+    val showAspectRatioButton = true
 
     // ── Casting (mobile only) ─────────────────────────────────────────────────
     val castManager = remember { CastManager(context) }
