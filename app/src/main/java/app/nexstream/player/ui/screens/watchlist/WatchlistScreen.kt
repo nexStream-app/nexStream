@@ -479,10 +479,6 @@ fun WatchlistScreen(
                         )
                         if (isSeriesBookmarked) { seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null }
                     },
-                    onGoToSeries = {
-                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
-                        onGoToSeries(selectedItem.name)
-                    },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
                     onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },

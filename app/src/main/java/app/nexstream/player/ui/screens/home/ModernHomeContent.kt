@@ -878,11 +878,11 @@ private fun SportEventDialog(
     fun confirm() {
         val ch = event.matchedChannels.getOrNull(selectedChannelIdx) ?: event.matchedChannels.firstOrNull()
         when (selectedButton) {
-            0           -> onDismiss()
-            idxWatchNow -> ch?.let { onWatch(it.streamUrl, it.channelName) }
-            idxGoToEpg  -> ch?.let { onGoToEpg(it.channelName) } ?: onDismiss()
-            idxRemindMe -> onRemind()
-            else        -> onDismiss()
+            0                -> onDismiss()
+            idxChannelPicker -> { /* channel picker — OK cycles focus, doesn't trigger an action */ }
+            idxWatchNow      -> ch?.let { onWatch(it.streamUrl, it.channelName) }
+            idxGoToEpg       -> ch?.let { onGoToEpg(it.channelName) } ?: onDismiss()
+            idxRemindMe      -> onRemind()
         }
     }
 

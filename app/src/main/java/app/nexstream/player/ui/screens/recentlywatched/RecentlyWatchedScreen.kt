@@ -107,48 +107,69 @@ fun RecentlyWatchedScreen(
         channelCurrentProgram   = null
         channelNextProgram      = null
         if (item == null) return@LaunchedEffect
-        when (item.type) {
-            RecentlyWatchedType.MOVIE -> {
-                val movieId = item.movieId ?: item.id
-                val base = viewModel.getMovieById(movieId)
-                movieDialogEntity = base
-                if (base != null) {
-                    movieResumePosition = viewModel.getMoviePosition(base.id)
-                    val detailed = viewModel.loadMovieDetails(base)
-                    if (detailed != null) movieDialogUpdated = detailed
-                }
-            }
-            RecentlyWatchedType.EPISODE -> {
-                val seriesId = item.seriesId ?: run { dialogLoadedForItem = item.id; return@LaunchedEffect }
-                val s = viewModel.getSeriesById(seriesId)
-                seriesDialogEntity = s
-                if (s != null) {
-                    seriesDialogProgressMap = viewModel.getEpisodeProgressMap(s.id)
-                    seriesDialogLoading = true
-                    val localEps = viewModel.getLocalEpisodes(s.id)
-                    if (localEps.isNotEmpty()) {
-                        seriesDialogEpisodes = localEps
-                        seriesDialogSeasons  = viewModel.getLocalSeasons(s.id)
-                    } else {
-                        val (updated, fetchedEps) = viewModel.loadSeriesDetails(s)
-                        seriesDialogEpisodes = fetchedEps
-                        seriesDialogSeasons  = fetchedEps.map { it.seasonNum }.distinct().sorted()
-                        if (updated != null) seriesDialogUpdated = updated
+        try {
+            when (item.type) {
+                RecentlyWatchedType.MOVIE -> {
+                    val movieId = item.movieId ?: item.id
+                    var base = viewModel.getMovieById(movieId)
+                    // Fallback 1: exact stream URL match
+                    if (base == null) base = watchlistViewModel.getMovieByStreamUrl(item.streamUrl)
+                    // Fallback 2: Xtream VOD ID from stream URL path
+                    if (base == null) {
+                        val vodId = item.streamUrl
+                            .substringAfterLast('/')
+                            .substringBefore('.')
+                            .takeIf { it.isNotEmpty() && it.all { c -> c.isDigit() } }
+                        if (vodId != null) base = watchlistViewModel.getMovieByXtreamStreamId(vodId)
                     }
-                    seriesDialogLoading = false
+                    // Fallback 3: title match
+                    if (base == null) base = watchlistViewModel.findMovieByName(item.name)
+                    movieDialogEntity = base
+                    if (base != null) {
+                        movieResumePosition = viewModel.getMoviePosition(base.id)
+                        val detailed = viewModel.loadMovieDetails(base)
+                        if (detailed != null) movieDialogUpdated = detailed
+                    }
+                }
+                RecentlyWatchedType.EPISODE -> {
+                    val seriesId = item.seriesId ?: run { dialogLoadedForItem = item.id; return@LaunchedEffect }
+                    var s = viewModel.getSeriesById(seriesId)
+                    // Fallback: name match when playlist IDs differ across devices
+                    if (s == null) s = watchlistViewModel.getSeriesByName(item.name)
+                    seriesDialogEntity = s
+                    if (s != null) {
+                        seriesDialogProgressMap = viewModel.getEpisodeProgressMap(s.id)
+                        seriesDialogLoading = true
+                        val localEps = viewModel.getLocalEpisodes(s.id)
+                        if (localEps.isNotEmpty()) {
+                            seriesDialogEpisodes = localEps
+                            seriesDialogSeasons  = viewModel.getLocalSeasons(s.id)
+                        } else {
+                            val (updated, fetchedEps) = viewModel.loadSeriesDetails(s)
+                            seriesDialogEpisodes = fetchedEps
+                            seriesDialogSeasons  = fetchedEps.map { it.seasonNum }.distinct().sorted()
+                            if (updated != null) seriesDialogUpdated = updated
+                        }
+                        seriesDialogLoading = false
+                    }
+                }
+                RecentlyWatchedType.CHANNEL -> {
+                    var ch = viewModel.getChannelById(item.id)
+                    // Fallback 1: exact stream URL match
+                    if (ch == null) ch = watchlistViewModel.getChannelByStreamUrl(item.streamUrl)
+                    // Fallback 2: name match
+                    if (ch == null) ch = watchlistViewModel.getChannelByName(item.name)
+                    channelDialogEntity = ch
+                    if (ch != null) {
+                        val epgId = ch.epgChannelId ?: ch.id
+                        channelCurrentProgram = viewModel.getCurrentProgram(epgId)
+                        channelNextProgram    = viewModel.getNextProgram(epgId)
+                    }
                 }
             }
-            RecentlyWatchedType.CHANNEL -> {
-                val ch = viewModel.getChannelById(item.id)
-                channelDialogEntity = ch
-                if (ch != null) {
-                    val epgId = ch.epgChannelId ?: ch.id
-                    channelCurrentProgram = viewModel.getCurrentProgram(epgId)
-                    channelNextProgram    = viewModel.getNextProgram(epgId)
-                }
-            }
+        } finally {
+            dialogLoadedForItem = item.id
         }
-        dialogLoadedForItem = item.id
     }
 
     var searchQuery    by remember { mutableStateOf("") }
@@ -424,10 +445,6 @@ fun RecentlyWatchedScreen(
                             ),
                             isSeriesBookmarked
                         )
-                    },
-                    onGoToSeries  = {
-                        seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
-                        onGoToSeries(selectedRecent.name)
                     },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
