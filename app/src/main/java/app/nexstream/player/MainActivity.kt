@@ -64,6 +64,7 @@ import app.nexstream.player.ui.screens.profile.ProfileSelectScreen
 import app.nexstream.player.ui.screens.trial.TrialExpiredScreen
 import app.nexstream.player.ui.theme.NexStreamThemeProvider
 import app.nexstream.player.ui.theme.ThemeViewModel
+import app.nexstream.player.worker.ContentRefreshWorker
 import app.nexstream.player.worker.EpgRefreshWorker
 import app.nexstream.player.worker.ReminderWorker
 import androidx.work.OneTimeWorkRequestBuilder
@@ -180,6 +181,7 @@ class MainActivity : ComponentActivity() {
         }
 
         EpgRefreshWorker.schedule(this)
+        ContentRefreshWorker.schedule(this)
 
         lifecycleScope.launch {
             AutoUpdateManager.checkAndPrompt(this@MainActivity)

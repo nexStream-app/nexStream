@@ -87,10 +87,10 @@ interface SeriesDao {
 
     data class WatchedCountRow(val seriesId: String, val count: Int)
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
     fun getSeriesGridItems(playlistId: String): Flow<List<SeriesGridItem>>
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
     fun getSeriesGridItemsByCategory(playlistId: String, category: String): Flow<List<SeriesGridItem>>
 
     @Query("UPDATE series SET certification = :certification WHERE id = :id")
@@ -123,4 +123,13 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series WHERE LOWER(name) IN (:lowerTitles)")
     suspend fun findSeriesByTitlesBatch(lowerTitles: List<String>): List<SeriesEntity>
+
+    @Query("UPDATE series SET hasNewEpisodes = :value WHERE id = :id")
+    suspend fun updateHasNewEpisodes(id: String, value: Boolean)
+
+    @Query("SELECT COUNT(*) FROM episodes WHERE seriesId = :seriesId")
+    suspend fun getEpisodeCountForSeries(seriesId: String): Int
+
+    @Query("SELECT id FROM series WHERE hasNewEpisodes = 1")
+    fun getSeriesIdsWithNewEpisodes(): Flow<List<String>>
 }

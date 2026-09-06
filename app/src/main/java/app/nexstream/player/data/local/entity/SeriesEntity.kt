@@ -29,5 +29,6 @@ data class SeriesEntity(
     val seasonCount: Int = 0,
     val playlistId: String,
     val certification:    String? = null,
-    val originalLanguage: String? = null
+    val originalLanguage: String? = null,
+    val hasNewEpisodes:   Boolean = false
 )

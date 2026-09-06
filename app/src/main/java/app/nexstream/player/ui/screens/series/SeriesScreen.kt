@@ -169,6 +169,7 @@ fun SeriesScreen(
                     id                = s.id,
                     name              = s.name,
                     posterUrl         = s.posterUrl,
+                    badge             = if (s.hasNewEpisodes) "NEW" else null,
                     showProgressBadge = (watchedCountsForProfile[s.id] ?: 0) > 0,
                     isBookmarked      = s.id in watchlistIds,
                     certification     = s.certification,

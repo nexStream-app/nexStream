@@ -47,6 +47,10 @@ class WatchlistViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val seriesIdsWithNewEpisodes: StateFlow<Set<String>> = repository.getSeriesIdsWithNewEpisodes()
+        .map { it.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     val watchlistIds: StateFlow<Set<String>> = profileManager.activeProfile
         .flatMapLatest { profile ->
             val profileId = profile?.id ?: "default"

@@ -76,7 +76,7 @@ class RecentlyWatchedTypeConverters {
         ChannelGroupMemberEntity::class,
         DeviceFolderEntity::class
     ],
-    version = 37,
+    version = 38,
     exportSchema = false
 )
 abstract class NexStreamDatabase : RoomDatabase() {
@@ -437,6 +437,12 @@ abstract class NexStreamDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE series ADD COLUMN hasNewEpisodes INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun create(context: Context): NexStreamDatabase {
             return Room.databaseBuilder(
                 context,
@@ -451,7 +457,8 @@ abstract class NexStreamDatabase : RoomDatabase() {
                     MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25,
                     MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29,
                     MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33,
-                    MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37
+                    MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37,
+                    MIGRATION_37_38
                 )
                 .build()
         }

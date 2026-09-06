@@ -1104,6 +1104,7 @@ class PlaylistRepository @Inject constructor(
                     }
 
                     val existingSeries = database.seriesDao().getSeriesById("$playlistId-$seriesId").first()
+                    database.seriesDao().updateHasNewEpisodes("$playlistId-$seriesId", false)
                     val seasonCount = episodes.map { it.seasonNum }.distinct().size
                     val updatedSeries = existingSeries?.copy(seasonCount = seasonCount)
                     if (updatedSeries != null) {
@@ -1131,6 +1132,9 @@ class PlaylistRepository @Inject constructor(
                 }
 
                 val existingSeries = database.seriesDao().getSeriesById("$playlistId-$seriesId").first()
+
+                // Clear the new-episode badge when the user opens the series
+                database.seriesDao().updateHasNewEpisodes("$playlistId-$seriesId", false)
 
                 val episodes = mutableListOf<EpisodeEntity>()
                 seriesInfo.episodes?.forEach { (seasonKey, episodeList) ->
@@ -2244,6 +2248,39 @@ class PlaylistRepository @Inject constructor(
             for ((id, cast, director) in updates) database.seriesDao().updateCastAndDirector(id, cast, director)
         }
         android.util.Log.d("TMDB", "Series cast enrichment complete")
+    }
+
+    fun getSeriesIdsWithNewEpisodes(): Flow<List<String>> =
+        database.seriesDao().getSeriesIdsWithNewEpisodes()
+
+    suspend fun checkForNewEpisodesInWatchlist() = withContext(Dispatchers.IO) {
+        val watchlistedSeries = database.watchlistDao().getAllItemsSuspend()
+            .filter { it.type == app.nexstream.player.data.local.entity.WatchlistType.SERIES }
+
+        for (item in watchlistedSeries) {
+            val series = database.seriesDao().getById(item.id) ?: continue
+            val cachedCount = database.seriesDao().getEpisodeCountForSeries(series.id)
+            if (cachedCount == 0) continue
+
+            val playlist = database.playlistDao().getPlaylistById(series.playlistId) ?: continue
+            if (playlist.type != "XTREAM") continue
+            val host     = playlist.xtreamHost ?: continue
+            val username = playlist.xtreamUsername ?: continue
+            val password = playlist.xtreamPassword ?: continue
+            if (host.isBlank() || username.isBlank() || password.isBlank()) continue
+
+            try {
+                val api = buildRetrofit(host).create(XtreamApiService::class.java)
+                val info = api.getSeriesInfo(username, password, seriesId = series.seriesId)
+                val apiCount = info.episodes?.values?.sumOf { it.size } ?: 0
+                if (apiCount > cachedCount) {
+                    database.seriesDao().updateHasNewEpisodes(series.id, true)
+                    android.util.Log.d("ContentRefresh", "New episodes for '${series.name}': $cachedCount → $apiCount")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("ContentRefresh", "Episode check failed for '${series.name}': ${e.message}")
+            }
+        }
     }
 
     companion object {

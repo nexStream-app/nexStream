@@ -90,6 +90,7 @@ fun WatchlistScreen(
     val allItems by viewModel.allItems.collectAsState()
     val progressMap by viewModel.progressMap.collectAsState()
     val watchlistIds by viewModel.watchlistIds.collectAsState()
+    val seriesWithNewEpisodes by viewModel.seriesIdsWithNewEpisodes.collectAsState()
     var dialogItem by remember { mutableStateOf<WatchlistEntity?>(null) }
 
     var movieDialogEntity      by remember { mutableStateOf<MovieEntity?>(null) }
@@ -358,6 +359,7 @@ fun WatchlistScreen(
                                             name            = ser.name,
                                             posterUrl       = ser.posterUrl,
                                             defaultIcon     = Icons.Default.VideoLibrary,
+                                            badge           = if (ser.id in seriesWithNewEpisodes) "NEW" else null,
                                             focusRequester  = if (idx == 0 && channels.isEmpty() && movies.isEmpty()) firstItemFR else null,
                                             onFocused       = {},
                                             onDirectionLeft = if (idx == 0) onRequestSidebarFocus else null,
@@ -391,6 +393,7 @@ fun WatchlistScreen(
                                     name = item.name,
                                     posterUrl = item.posterUrl,
                                     defaultIcon = icon,
+                                    badge = if (item.type == WatchlistType.SERIES && item.id in seriesWithNewEpisodes) "NEW" else null,
                                     focusRequester = if (index == 0) firstItemFR else null,
                                     onFocused = {},
                                     onClick = { dialogItem = item }

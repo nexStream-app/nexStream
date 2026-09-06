@@ -31,5 +31,6 @@ data class SeriesGridItem(
     val seasonCount: Int,
     val certification: String? = null,
     val rating: String? = null,
-    val releaseDate: String? = null
+    val releaseDate: String? = null,
+    val hasNewEpisodes: Boolean = false
 )
