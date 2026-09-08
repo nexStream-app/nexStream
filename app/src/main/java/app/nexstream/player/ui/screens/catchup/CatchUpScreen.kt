@@ -295,10 +295,12 @@ fun CatchUpScreen(
     var searchQuery    by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
     var showKeyboard   by remember { mutableStateOf(false) }
+    var searchConfirmed by remember { mutableStateOf(false) }
+    var showClearSearchDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(showSearch) {
-        if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
-        else { showKeyboard = false }
+        if (showSearch) { searchQuery = ""; debouncedQuery = ""; searchConfirmed = false; kotlinx.coroutines.delay(100); showKeyboard = true }
+        else { showKeyboard = false; if (!searchConfirmed) { searchQuery = ""; debouncedQuery = "" }; searchConfirmed = false }
     }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) { debouncedQuery = ""; return@LaunchedEffect }
@@ -309,7 +311,7 @@ fun CatchUpScreen(
     LaunchedEffect(showKeyboard) {
         if (!showKeyboard && wasShowingKeyboard) {
             kotlinx.coroutines.delay(200)
-            if (searchQuery.isNotBlank()) onKeyboardDismissed?.invoke()
+            if (searchQuery.isNotBlank()) { searchConfirmed = true; onKeyboardDismissed?.invoke() }
             else onKeyboardDismissedEmpty?.invoke()
         }
         wasShowingKeyboard = showKeyboard
@@ -361,7 +363,45 @@ fun CatchUpScreen(
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     BackHandler(enabled = showKeyboard) { showKeyboard = false }
+    BackHandler(enabled = debouncedQuery.isNotBlank() && !showKeyboard) { showClearSearchDialog = true }
     BackHandler(enabled = selectedProgramme != null) { selectedProgramme = null }
+
+    if (showClearSearchDialog) {
+        val clearFR = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(100)
+            try { clearFR.requestFocus() } catch (_: Exception) {}
+        }
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showClearSearchDialog = false }) {
+            Card(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFF1C1C1E)),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Text(
+                        text = "Clear search results?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = {
+                                searchQuery = ""; debouncedQuery = ""; searchConfirmed = false
+                                showClearSearchDialog = false
+                            },
+                            modifier = Modifier.focusRequester(clearFR)
+                        ) { Text("Clear") }
+                        OutlinedButton(onClick = { showClearSearchDialog = false }) { Text("Keep") }
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(selectedProgramme) { onDialogOpen(selectedProgramme != null) }
 
@@ -487,6 +527,7 @@ fun CatchUpScreen(
                         app.nexstream.player.ui.components.PosterGridView(ctx).also { gridViewRef.value = it; onGridViewReady(it) }.apply {
                             setColumnCount(6)
                             blockFocus()
+                            alwaysOnLeftEdge = true
                             callbacks = object : app.nexstream.player.ui.components.PosterGridCallbacks {
                                 override fun onItemClick(item: app.nexstream.player.ui.components.PosterItem, index: Int) {
                                     selectedProgramme = item.id

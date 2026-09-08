@@ -236,7 +236,8 @@ fun PlayerScreen(
     var showStillWatchingDialog by remember { mutableStateOf(false) }
 
     var showMediaSheet  by remember { mutableStateOf(false) }
-    var showControls    by remember { mutableStateOf(true) }
+    var showControls             by remember { mutableStateOf(true) }
+    var controlsInteractionTick by remember { mutableStateOf(0) }
     var isTrialExpired  by remember { mutableStateOf(false) }
     var subtitleAtTop   by remember { mutableStateOf(false) }
 
@@ -1022,7 +1023,7 @@ fun PlayerScreen(
     LaunchedEffect(showControls) {
         if (showControls) { dpadZone = DpadZone.CONTROLS }
     }
-    LaunchedEffect(showControls, effectiveIsPlaying) {
+    LaunchedEffect(showControls, effectiveIsPlaying, controlsInteractionTick) {
         if (showControls && effectiveIsPlaying) { kotlinx.coroutines.delay(5000); showControls = false }
     }
 
@@ -1033,32 +1034,24 @@ fun PlayerScreen(
     val hasChannelPrev = isLiveTV && onPreviousChannel != null
     val hasChannelNext = isLiveTV && onNextChannel != null
 
-    // Centre control button list (back, rewind, play, forward, next, …)
+    // Centre control button list — order matches visual render order
     val centreButtons by remember { derivedStateOf {
         buildList {
             add("back")
             if (hasChannelPrev) add("ch_prev")
-            if (episodeId != null) add("prev")
             if (hasScrubbing) add("rewind")
             add("playpause")
             if (hasScrubbing) add("forward")
+            if (episodeId != null) add("prev")
             if (episodeId != null) add("next")
+            if (!(isLiveTV || movieId == "catchup")) add("subtitles")
             if (hasChannelNext) add("ch_next")
-            // CC toggle when AI subtitles enabled (all content types); VOD also gets subtitles sheet button
-            if ((isLiveTV || movieId == "catchup") && whisperEnabled) add("cc")
-            if (!(isLiveTV || movieId == "catchup")) {
-                add("subtitles")
-                if (whisperEnabled) add("cc")
-            }
-            // Subtitle position toggle — visible whenever subtitles are showing
+            if (whisperEnabled) add("cc")
             if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_pos")
-            // Subtitle delay — visible when subtitles are active
             if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_delay")
-            // Sleep timer — live TV and catchup only
             if (isLiveTV || isCatchup) add("sleep")
-            // Playback speed — VOD and episodes (content with a scrub bar)
             if (hasScrubbing) add("speed")
-            // Stats overlay — always
+            if (showAspectRatioButton) add("aspect")
             add("stats")
         }
     }}
@@ -1069,11 +1062,10 @@ fun PlayerScreen(
         centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0))
     }
 
-    // Icon row: aspect ratio, cast (phone-only)
-    val iconButtons by remember(showAspectRatioButton, isAndroidTV) {
+    // Icon row: cast (phone-only); aspect is now in centreButtons
+    val iconButtons by remember(isAndroidTV) {
         derivedStateOf {
             buildList {
-                if (showAspectRatioButton) add("aspect")
                 if (!isAndroidTV) add("cast")
             }
         }
@@ -1146,6 +1138,21 @@ fun PlayerScreen(
                 "sub_delay" -> showSubtitleDelayDialog = true
                 "sleep"     -> showSleepTimerDialog = true
                 "speed"     -> showSpeedDialog = true
+                "aspect"    -> {
+                    val newResizeMode = when (currentResizeMode) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        else                                    -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    }
+                    resizeMode = newResizeMode
+                    val newAspectRatio = when (newResizeMode) {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatio.FIT
+                        AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatio.FILL
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatio.ZOOM
+                        else                                    -> AspectRatio.FIT
+                    }
+                    scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
+                }
                 "stats"     -> showStats = !showStats
                 else        -> Unit
             }
@@ -1177,55 +1184,85 @@ fun PlayerScreen(
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT,
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { showControls = true; true }
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (player?.isPlaying == true) player?.pause() else player?.play(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY  -> { player?.play(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> { player?.pause(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                        if (hasScrubbing) {
+                            showControls = true
+                            if (isCasting) { val dur = player?.duration ?: Long.MAX_VALUE; val np = (castPositionMs + 10_000L).coerceAtMost(dur); castPositionMs = np; castManager.seekTo(np) }
+                            else player?.seekForward()
+                        }; true
+                    }
+                    android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                        if (hasScrubbing) {
+                            showControls = true
+                            if (isCasting) { val np = (castPositionMs - 10_000L).coerceAtLeast(0L); castPositionMs = np; castManager.seekTo(np) }
+                            else player?.seekBack()
+                        }; true
+                    }
                     else -> false
                 }
                 else -> when (keyCode) {
                     android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER ->
-                    { activateFocusedButtonRef.value(); true }
+                    { activateFocusedButtonRef.value(); controlsInteractionTick++; true }
 
                     android.view.KeyEvent.KEYCODE_DPAD_UP -> when (currentDpadZone) {
                         DpadZone.CONTROLS -> {
                             if (hasScrubbing) dpadZone = DpadZone.SLIDER
                             else if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
-                            true
+                            controlsInteractionTick++; true
                         }
                         DpadZone.SLIDER -> {
                             if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
-                            true
+                            controlsInteractionTick++; true
                         }
-                        DpadZone.ICONS -> true // already at top
+                        DpadZone.ICONS -> { controlsInteractionTick++; true }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_DOWN -> when (currentDpadZone) {
-                        DpadZone.ICONS    -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.CONTROLS; true }
-                        DpadZone.SLIDER   -> { dpadZone = DpadZone.CONTROLS; true }
+                        DpadZone.ICONS    -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.CONTROLS; controlsInteractionTick++; true }
+                        DpadZone.SLIDER   -> { dpadZone = DpadZone.CONTROLS; controlsInteractionTick++; true }
                         DpadZone.CONTROLS -> { showControls = false; true }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> when (currentDpadZone) {
-                        DpadZone.ICONS    -> { if (currentIconIndex > 0) iconIndex-- ; true }
-                        DpadZone.CONTROLS -> { if (currentCentreIndex > 0) centreIndex--; true }
+                        DpadZone.ICONS    -> { if (currentIconIndex > 0) iconIndex--; controlsInteractionTick++; true }
+                        DpadZone.CONTROLS -> { if (currentCentreIndex > 0) centreIndex--; controlsInteractionTick++; true }
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
                             sliderPosition = (sliderPosition - 0.01f).coerceAtLeast(0f)
                             val seekPos = (sliderPosition * duration).toLong()
                             if (isCasting) { castPositionMs = seekPos; castManager.seekTo(seekPos) }
                             else player?.seekTo(seekPos)
-                            true
+                            controlsInteractionTick++; true
                         }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> when (currentDpadZone) {
-                        DpadZone.ICONS    -> { if (currentIconIndex < iconMax) iconIndex++; true }
-                        DpadZone.CONTROLS -> { if (currentCentreIndex < currentCentreButtons.size - 1) centreIndex++; true }
+                        DpadZone.ICONS    -> { if (currentIconIndex < iconMax) iconIndex++; controlsInteractionTick++; true }
+                        DpadZone.CONTROLS -> { if (currentCentreIndex < currentCentreButtons.size - 1) centreIndex++; controlsInteractionTick++; true }
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
                             sliderPosition = (sliderPosition + 0.01f).coerceAtMost(1f)
                             val seekPos = (sliderPosition * duration).toLong()
                             if (isCasting) { castPositionMs = seekPos; castManager.seekTo(seekPos) }
                             else player?.seekTo(seekPos)
-                            true
+                            controlsInteractionTick++; true
                         }
                     }
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
                     { if (player?.isPlaying == true) player?.pause() else player?.play(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY  -> { player?.play(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> { player?.pause(); true }
+                    android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                        if (hasScrubbing) {
+                            if (isCasting) { val dur = player?.duration ?: Long.MAX_VALUE; val np = (castPositionMs + 10_000L).coerceAtMost(dur); castPositionMs = np; castManager.seekTo(np) }
+                            else player?.seekForward()
+                        }; true
+                    }
+                    android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                        if (hasScrubbing) {
+                            if (isCasting) { val np = (castPositionMs - 10_000L).coerceAtLeast(0L); castPositionMs = np; castManager.seekTo(np) }
+                            else player?.seekBack()
+                        }; true
+                    }
                     else -> false
                 }
             }
@@ -1287,8 +1324,10 @@ fun PlayerScreen(
             } else {
                 AndroidView(
                     factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            this.player = fp; useController = false
+                        (android.view.LayoutInflater.from(ctx).inflate(
+                            app.nexstream.player.R.layout.nexstream_player_view, null
+                        ) as PlayerView).apply {
+                            this.player = fp
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
                             this.resizeMode = resizeMode
@@ -1311,8 +1350,10 @@ fun PlayerScreen(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
 
-                    // Subtle full-screen dark scrim (lighter than before — controls carry their own bg)
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
+                    // Full-screen scrim graduating from transparent at top to dark at bottom
+                    Box(modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)))
+                    ))
 
                     // ── Close button (PIP mode only on mobile/tablet) ─────────
                     if (!isTv && isInPipMode) {
@@ -1526,48 +1567,6 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (showAspectRatioButton) {
-                                    val aspectFocused = showControls && currentDpadZone == DpadZone.ICONS &&
-                                            currentIconButtons.getOrNull(currentIconIndex) == "aspect"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (aspectFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(onClick = {
-                                            val newResizeMode = when (resizeMode) {
-                                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                                AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                                                else -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                            }
-                                            resizeMode = newResizeMode
-                                            val newAspectRatio = when (newResizeMode) {
-                                                AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatio.FIT
-                                                AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatio.FILL
-                                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatio.ZOOM
-                                                else -> AspectRatio.FIT
-                                            }
-                                            scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
-                                        }) {
-                                            Icon(
-                                                imageVector = when (resizeMode) {
-                                                    AspectRatioFrameLayout.RESIZE_MODE_FIT  -> Icons.Default.FitScreen
-                                                    AspectRatioFrameLayout.RESIZE_MODE_FILL -> Icons.Default.Fullscreen
-                                                    else                                    -> Icons.Default.ZoomOutMap
-                                                },
-                                                contentDescription = "Aspect Ratio",
-                                                tint = controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
                                 // Cast button (mobile only)
                                 if (!isAndroidTV) {
                                     val castFocused = showControls && currentDpadZone == DpadZone.ICONS &&
@@ -2048,6 +2047,54 @@ fun PlayerScreen(
                                     }
                                 }
 
+                                // Aspect ratio button
+                                if (showAspectRatioButton) {
+                                    val aspectFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "aspect"
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .background(controlBg)
+                                                .then(
+                                                    if (aspectFocused)
+                                                        Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                    else Modifier
+                                                )
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    val newResizeMode = when (resizeMode) {
+                                                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                                        else -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                    }
+                                                    resizeMode = newResizeMode
+                                                    val newAspectRatio = when (newResizeMode) {
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatio.FIT
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatio.FILL
+                                                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatio.ZOOM
+                                                        else -> AspectRatio.FIT
+                                                    }
+                                                    scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
+                                                },
+                                                modifier = Modifier.size(52.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = when (resizeMode) {
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FIT  -> Icons.Default.FitScreen
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FILL -> Icons.Default.Fullscreen
+                                                        else                                    -> Icons.Default.ZoomOutMap
+                                                    },
+                                                    contentDescription = "Aspect Ratio",
+                                                    tint = controlText,
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // Stats overlay toggle — always visible
                                 val statsFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                         currentCentreButtons.getOrNull(currentCentreIndex) == "stats"
@@ -2097,6 +2144,13 @@ fun PlayerScreen(
         val audioLangName = remember(audioLangDetected) {
             audioLangDetected?.let { Locale(it).getDisplayLanguage(Locale.ENGLISH).ifBlank { it.uppercase() } } ?: ""
         }
+        val langPromptFR = remember { FocusRequester() }
+        LaunchedEffect(audioLangDetected, audioLangPromptDismissed) {
+            if (audioLangDetected != null && !audioLangPromptDismissed && !ccActive) {
+                kotlinx.coroutines.delay(150)
+                try { langPromptFR.requestFocus() } catch (_: Exception) {}
+            }
+        }
         if (autoLangDetect && !isCatchup && movieId == null && episodeId == null &&
                 audioLangDetected != null && !audioLangPromptDismissed && !ccActive) {
             Box(
@@ -2119,7 +2173,10 @@ fun PlayerScreen(
                         textAlign = TextAlign.Center
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { ccActive = true; audioLangPromptDismissed = true }) {
+                        Button(
+                            onClick = { ccActive = true; audioLangPromptDismissed = true },
+                            modifier = Modifier.focusRequester(langPromptFR)
+                        ) {
                             Text("Add Subtitles")
                         }
                         OutlinedButton(onClick = { audioLangPromptDismissed = true }) {
@@ -2294,6 +2351,13 @@ fun PlayerScreen(
 
         // ── Playback speed dialog ─────────────────────────────────────────────
         if (showSpeedDialog) {
+            val speedOptions = remember { listOf(0.5f to "0.5×", 0.75f to "0.75×", 1.0f to "1× (Normal)", 1.25f to "1.25×", 1.5f to "1.5×", 2.0f to "2×") }
+            val speedFRs = remember { List(speedOptions.size) { FocusRequester() } }
+            LaunchedEffect(Unit) {
+                val idx = speedOptions.indexOfFirst { it.first == playbackSpeed }.coerceAtLeast(0)
+                kotlinx.coroutines.delay(100)
+                try { speedFRs[idx].requestFocus() } catch (_: Exception) {}
+            }
             Dialog(onDismissRequest = { showSpeedDialog = false }) {
                 Card(
                     modifier = Modifier.widthIn(max = 320.dp),
@@ -2305,12 +2369,14 @@ fun PlayerScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("Playback Speed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        listOf(0.5f to "0.5×", 0.75f to "0.75×", 1.0f to "1× (Normal)", 1.25f to "1.25×", 1.5f to "1.5×", 2.0f to "2×").forEach { (speed, label) ->
+                        speedOptions.forEachIndexed { idx, (speed, label) ->
                             val isSelected = playbackSpeed == speed
                             Surface(
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable {
-                                    playbackSpeed = speed; showSpeedDialog = false
-                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(speedFRs[idx])
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { playbackSpeed = speed; showSpeedDialog = false },
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Row(

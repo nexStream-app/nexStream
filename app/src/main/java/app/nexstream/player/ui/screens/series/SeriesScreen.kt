@@ -239,10 +239,12 @@ fun SeriesScreen(
     }
     var isLoadingDetails by remember { mutableStateOf(false) }
     var showKeyboard by remember { mutableStateOf(false) }
+    var searchConfirmed by remember { mutableStateOf(false) }
+    var showClearSearchDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(showSearch) {
-        if (showSearch) { searchQuery = ""; debouncedQuery = ""; kotlinx.coroutines.delay(100); showKeyboard = true }
-        else { showKeyboard = false }
+        if (showSearch) { searchQuery = ""; debouncedQuery = ""; searchConfirmed = false; kotlinx.coroutines.delay(100); showKeyboard = true }
+        else { showKeyboard = false; if (!searchConfirmed) { searchQuery = ""; debouncedQuery = "" }; searchConfirmed = false }
     }
     // Pre-fill query and open keyboard when navigated from Picks
     LaunchedEffect(autoSearchQuery) {
@@ -257,6 +259,7 @@ fun SeriesScreen(
         if (!showKeyboard && wasShowingKeyboard) {
             if (searchQuery.isNotBlank()) {
                 debouncedQuery = searchQuery
+                searchConfirmed = true
                 kotlinx.coroutines.delay(200)
                 onKeyboardDismissed?.invoke()
             } else {
@@ -411,7 +414,7 @@ fun SeriesScreen(
                         }
                         // Only show spinner when actually loading — not when favourites/search is genuinely empty,
                         // and not during a silentGoTo (grid must be created so gridViewRef can be set)
-                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && !showSearch && silentFilterQuery == null -> {
+                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && !showSearch && silentFilterQuery == null && debouncedQuery.isBlank() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         }
                         seriesList.isEmpty() -> {
@@ -552,6 +555,44 @@ fun SeriesScreen(
     }
 
     androidx.activity.compose.BackHandler(enabled = showKeyboard) { showKeyboard = false }
+    androidx.activity.compose.BackHandler(enabled = debouncedQuery.isNotBlank() && !showKeyboard) { showClearSearchDialog = true }
+
+    if (showClearSearchDialog) {
+        val clearFR = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(100)
+            try { clearFR.requestFocus() } catch (_: Exception) {}
+        }
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showClearSearchDialog = false }) {
+            Card(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFF1C1C1E)),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Text(
+                        text = "Clear search results?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = {
+                                searchQuery = ""; debouncedQuery = ""; searchConfirmed = false
+                                showClearSearchDialog = false
+                            },
+                            modifier = Modifier.focusRequester(clearFR)
+                        ) { Text("Clear") }
+                        OutlinedButton(onClick = { showClearSearchDialog = false }) { Text("Keep") }
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(selectedSeries) {
         onDialogOpen(selectedSeries != null)
