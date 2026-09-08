@@ -47,6 +47,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
@@ -915,6 +916,25 @@ fun PlayerScreen(
         }
     }
 
+    // Track video aspect ratio so Compose can size the player view directly for FIT mode.
+    // AspectRatioFrameLayout doesn't reliably resize the hardware video surface on Android TV.
+    var videoAspectRatio by remember { mutableStateOf(16f / 9f) }
+    DisposableEffect(forwardingPlayer) {
+        val fp = forwardingPlayer ?: return@DisposableEffect onDispose {}
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                val w = videoSize.width; val h = videoSize.height
+                if (w > 0 && h > 0) videoAspectRatio = w.toFloat() * videoSize.pixelWidthHeightRatio / h
+            }
+        }
+        fp.addListener(listener)
+        fp.videoSize.also { vs ->
+            if (vs.width > 0 && vs.height > 0)
+                videoAspectRatio = vs.width.toFloat() * vs.pixelWidthHeightRatio / vs.height
+        }
+        onDispose { fp.removeListener(listener) }
+    }
+
     // ── Auto-save position ────────────────────────────────────────────────────
     LaunchedEffect(movieId, player) {
         if (movieId != null && movieId != "catchup" && player != null) {
@@ -1322,6 +1342,9 @@ fun PlayerScreen(
                     }
                 }
             } else {
+                // FIT mode: Compose sizes the view to the video's aspect ratio (black bars in the
+                // parent Box). FILL/ZOOM: full-screen as before. This bypasses AspectRatioFrameLayout
+                // resizing, which doesn't reliably move the hardware video surface on Android TV.
                 AndroidView(
                     factory = { ctx ->
                         (android.view.LayoutInflater.from(ctx).inflate(
@@ -1330,14 +1353,23 @@ fun PlayerScreen(
                             this.player = fp
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
-                            this.resizeMode = resizeMode
+                            this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
                             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                             setOnKeyListener { _, keyCode, event -> keyHandlerRef.value(keyCode, event) }
                             subtitleView?.visibility = android.view.View.GONE
                         }
                     },
-                    update = { pv -> pv.resizeMode = resizeMode },
-                    modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
+                    update = { pv ->
+                        pv.resizeMode = when (resizeMode) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            else -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        }
+                    },
+                    modifier = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                        Modifier.align(Alignment.Center).aspectRatio(videoAspectRatio).clickable { showControls = !showControls }
+                    } else {
+                        Modifier.fillMaxSize().clickable { showControls = !showControls }
+                    }
                 )
             }
 
