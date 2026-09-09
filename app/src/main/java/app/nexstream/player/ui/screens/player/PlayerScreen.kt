@@ -318,8 +318,11 @@ fun PlayerScreen(
     var currentProgrammeTime        by remember { mutableStateOf<String?>(null) }
     var currentProgrammeDescription by remember { mutableStateOf<String?>(null) }
     var nextProgramme               by remember { mutableStateOf<String?>(null) }
+    // Incrementing this re-runs the EPG LaunchedEffects with a fresh currentTimeMillis() so
+    // the Room query finds the next programme after the current one ends.
+    var epgRefreshTick              by remember { mutableStateOf(0) }
 
-    LaunchedEffect(channelUrl) {
+    LaunchedEffect(channelUrl, epgRefreshTick) {
         if (movieId == null && episodeId == null) {
             viewModel.getCurrentProgrammeForUrl(channelUrl).collectLatest { programme ->
                 if (programme != null) {
@@ -327,14 +330,19 @@ fun PlayerScreen(
                     currentProgrammeDescription = programme.description
                     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
                     currentProgrammeTime = "${timeFormat.format(Date(programme.startTime))} – ${timeFormat.format(Date(programme.endTime))}"
+                    // Wait until this programme ends then re-query with current time
+                    val remaining = programme.endTime - System.currentTimeMillis()
+                    if (remaining > 0) delay(remaining + 2_000L)
                 } else {
                     currentProgramme = null; currentProgrammeTime = null; currentProgrammeDescription = null
+                    delay(60_000L) // no programme found — retry in a minute
                 }
+                epgRefreshTick++
             }
         }
     }
 
-    LaunchedEffect(channelUrl) {
+    LaunchedEffect(channelUrl, epgRefreshTick) {
         if (movieId == null && episodeId == null) {
             viewModel.getNextProgrammeForUrl(channelUrl).collectLatest { programme ->
                 nextProgramme = programme?.title
