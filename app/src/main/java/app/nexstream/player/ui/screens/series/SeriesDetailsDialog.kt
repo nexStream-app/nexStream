@@ -553,6 +553,7 @@ function onYouTubeIframeAPIReady(){
 
                         when (e.key) {
                             Key.DirectionLeft -> {
+                                if (showTrailer) return@onKeyEvent true
                                 if (!inGrid) { selectedButton = (selectedButton - 1 + barButtonCount) % barButtonCount; true }
                                 else {
                                     if (focusedGridIndex > 0) {
@@ -567,6 +568,7 @@ function onYouTubeIframeAPIReady(){
                                 }
                             }
                             Key.DirectionRight -> {
+                                if (showTrailer) return@onKeyEvent true
                                 if (!inGrid) { selectedButton = (selectedButton + 1) % barButtonCount; true }
                                 else {
                                     if (focusedGridIndex < episodesForSeason.lastIndex) {
@@ -604,8 +606,9 @@ function onYouTubeIframeAPIReady(){
                                     true
                                 } else false
                             }
-                            Key.Back -> { onDismiss(); true }
+                            Key.Back -> { if (showTrailer) { showTrailer = false; true } else { onDismiss(); true } }
                             Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
+                                if (showTrailer) { showTrailer = false; return@onKeyEvent true }
                                 if (!inGrid) {
                                     val btn = selectedButton
                                     pressedButton = btn
@@ -654,6 +657,12 @@ function onYouTubeIframeAPIReady(){
                     modifier            = Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
+                    AnimatedVisibility(
+                        visible = !showTrailer,
+                        enter   = fadeIn(tween(400)),
+                        exit    = fadeOut(tween(400)),
+                    ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         text       = series.name,
                         fontSize   = 22.sp,
@@ -752,6 +761,8 @@ function onYouTubeIframeAPIReady(){
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    } // end Column
+                    } // end AnimatedVisibility
 
                     // ── Action buttons ────────────────────────────────────────
                     if (seasonsLoaded) {
@@ -760,68 +771,76 @@ function onYouTubeIframeAPIReady(){
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment     = Alignment.CenterVertically,
                         ) {
-                            DialogActionPill(
-                                icon      = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                label     = if (isBookmarked) "Remove" else "My List",
-                                selected  = !inGrid && selectedButton == 1,
-                                isPressed = pressedButton == 1,
-                                accent    = accent,
-                                onClick   = onToggleWatchlist,
-                            )
-                            if (hasGoToSeries) {
-                                DialogActionPill(
-                                    icon      = Icons.Default.VideoLibrary,
-                                    label     = "Go to Series",
-                                    selected  = !inGrid && selectedButton == goToSeriesIdx,
-                                    isPressed = pressedButton == goToSeriesIdx,
-                                    accent    = accent,
-                                    onClick   = { onGoToSeries?.invoke() },
-                                )
-                            }
-                            if (hasMultiSeason) {
-                                Box {
+                            AnimatedVisibility(
+                                visible = !showTrailer,
+                                enter   = fadeIn(tween(400)),
+                                exit    = fadeOut(tween(400)),
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     DialogActionPill(
-                                        icon      = Icons.Default.Tv,
-                                        label     = "Season $selectedSeason",
-                                        trailing  = Icons.Default.ArrowDropDown,
-                                        selected  = !inGrid && selectedButton == 2,
-                                        isPressed = pressedButton == 2,
+                                        icon      = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        label     = if (isBookmarked) "Remove" else "My List",
+                                        selected  = !inGrid && selectedButton == 1,
+                                        isPressed = pressedButton == 1,
                                         accent    = accent,
-                                        onClick   = { seasonDropdownExpanded = true },
+                                        onClick   = onToggleWatchlist,
                                     )
-                                    DropdownMenu(
-                                        expanded         = seasonDropdownExpanded,
-                                        onDismissRequest = {
-                                            seasonDropdownExpanded = false
-                                            selectedButton = seasonBaseIdx
-                                            try { dialogFocus.requestFocus() } catch (_: Exception) {}
-                                        }
-                                    ) {
-                                        seasons.forEach { season ->
-                                            DropdownMenuItem(
-                                                text = { Text("Season $season") },
-                                                onClick = { selectedSeason = season; seasonDropdownExpanded = false },
-                                                leadingIcon = {
-                                                    if (season == selectedSeason)
-                                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                                    else
-                                                        Icon(Icons.Default.Tv, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
+                                    if (hasGoToSeries) {
+                                        DialogActionPill(
+                                            icon      = Icons.Default.VideoLibrary,
+                                            label     = "Go to Series",
+                                            selected  = !inGrid && selectedButton == goToSeriesIdx,
+                                            isPressed = pressedButton == goToSeriesIdx,
+                                            accent    = accent,
+                                            onClick   = { onGoToSeries?.invoke() },
+                                        )
+                                    }
+                                    if (hasMultiSeason) {
+                                        Box {
+                                            DialogActionPill(
+                                                icon      = Icons.Default.Tv,
+                                                label     = "Season $selectedSeason",
+                                                trailing  = Icons.Default.ArrowDropDown,
+                                                selected  = !inGrid && selectedButton == 2,
+                                                isPressed = pressedButton == 2,
+                                                accent    = accent,
+                                                onClick   = { seasonDropdownExpanded = true },
                                             )
+                                            DropdownMenu(
+                                                expanded         = seasonDropdownExpanded,
+                                                onDismissRequest = {
+                                                    seasonDropdownExpanded = false
+                                                    selectedButton = seasonBaseIdx
+                                                    try { dialogFocus.requestFocus() } catch (_: Exception) {}
+                                                }
+                                            ) {
+                                                seasons.forEach { season ->
+                                                    DropdownMenuItem(
+                                                        text = { Text("Season $season") },
+                                                        onClick = { selectedSeason = season; seasonDropdownExpanded = false },
+                                                        leadingIcon = {
+                                                            if (season == selectedSeason)
+                                                                Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                            else
+                                                                Icon(Icons.Default.Tv, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        }
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
+                                    if (showVoiceTranslate) {
+                                        val modeLabel = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.second ?: "None"
+                                        DialogActionPill(
+                                            icon      = Icons.Default.RecordVoiceOver,
+                                            label     = "AI: $modeLabel",
+                                            selected  = !inGrid && selectedButton == whisperBtnIdx,
+                                            isPressed = pressedButton == whisperBtnIdx,
+                                            accent    = accent,
+                                            onClick   = { voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size },
+                                        )
+                                    }
                                 }
-                            }
-                            if (showVoiceTranslate) {
-                                val modeLabel = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.second ?: "None"
-                                DialogActionPill(
-                                    icon      = Icons.Default.RecordVoiceOver,
-                                    label     = "AI: $modeLabel",
-                                    selected  = !inGrid && selectedButton == whisperBtnIdx,
-                                    isPressed = pressedButton == whisperBtnIdx,
-                                    accent    = accent,
-                                    onClick   = { voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size },
-                                )
                             }
                             if (hasTrailer) {
                                 DialogActionPill(
@@ -838,6 +857,11 @@ function onYouTubeIframeAPIReady(){
                 }
 
                 // ── Info bar ──────────────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = !showTrailer,
+                    enter   = fadeIn(tween(400)),
+                    exit    = fadeOut(tween(400)),
+                ) {
                 val infoBarHeight = when (infoBarState) {
                     is InfoBarState.StorageInfo, is InfoBarState.LowSpaceWarning -> 72.dp
                     else -> 52.dp
@@ -980,8 +1004,14 @@ function onYouTubeIframeAPIReady(){
                         }
                     }
                 }
+                } // end AnimatedVisibility (info bar)
 
                 // ── Episode row ───────────────────────────────────────────────
+                AnimatedVisibility(
+                    visible = !showTrailer,
+                    enter   = fadeIn(tween(400)),
+                    exit    = fadeOut(tween(400)),
+                ) {
                 when {
                     isContentRestricted -> Box(
                         Modifier.fillMaxWidth().height(190.dp).background(Color.Black.copy(alpha = 0.70f)),
@@ -1128,10 +1158,11 @@ function onYouTubeIframeAPIReady(){
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(4.dp)
+                                            .height(6.dp)
                                             .align(Alignment.BottomCenter)
+                                            .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
                                     ) {
-                                        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.25f)))
+                                        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.40f)))
                                         Box(Modifier.fillMaxHeight().fillMaxWidth(progressFraction).background(accent))
                                     }
                                 }
@@ -1139,6 +1170,7 @@ function onYouTubeIframeAPIReady(){
                         }
                     }
                 }
+                } // end AnimatedVisibility (episode row)
             }
         }
     }
