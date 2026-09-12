@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -77,8 +78,8 @@ fun TvKeyboardSheet(
 
     val context = LocalContext.current
     val hasSpeechRecognition = remember(context) {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        context.packageManager.queryIntentActivities(intent, 0).isNotEmpty()
+        context.packageManager.hasSystemFeature("android.software.leanback") ||
+        context.packageManager.queryIntentActivities(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
     }
 
     val speechLauncher = rememberLauncherForActivityResult(
@@ -97,6 +98,7 @@ fun TvKeyboardSheet(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Search NexStream…")
         }
         try { speechLauncher.launch(intent) } catch (_: ActivityNotFoundException) {}
     }
@@ -142,6 +144,7 @@ fun TvKeyboardSheet(
                             Box(
                                 modifier = Modifier
                                     .size(38.dp)
+                                    .clip(CircleShape)
                                     .background(
                                         color = if (micFocused) accent else MaterialTheme.colorScheme.primaryContainer,
                                         shape = CircleShape
@@ -153,7 +156,10 @@ fun TvKeyboardSheet(
                                     )
                                     .focusRequester(micFR)
                                     .onFocusChanged { micFocused = it.isFocused }
-                                    .clickable { launchSpeech() }
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { launchSpeech() }
                                     .onKeyEvent { e ->
                                         if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                                         when (e.key) {

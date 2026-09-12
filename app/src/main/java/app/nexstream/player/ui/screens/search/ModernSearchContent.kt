@@ -3,6 +3,7 @@ package app.nexstream.player.ui.screens.search
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -93,7 +94,10 @@ fun ModernSearchContent(
                         else -> false
                     }
                 }
-                .clickable { onOpenKeyboard() }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onOpenKeyboard() }
                 .padding(horizontal = 18.dp, vertical = 12.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
