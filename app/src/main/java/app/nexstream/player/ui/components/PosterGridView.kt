@@ -184,6 +184,7 @@ class PosterGridView @JvmOverloads constructor(
         set(value) { field = value; posterAdapter.onSurfaceColor = value }
     var typeface: Typeface = Typeface.DEFAULT
         set(value) { field = value; posterAdapter.typeface = value }
+    var alwaysOnLeftEdge: Boolean = false
 
     private val recyclerView = object : RecyclerView(context) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -200,7 +201,7 @@ class PosterGridView @JvmOverloads constructor(
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     edgeKeyDownTime = 0L; edgeFired = false
-                    if (pos % cols == 0) {
+                    if (alwaysOnLeftEdge || pos % cols == 0) {
                         posterAdapter.onLeftEdge?.invoke()
                         return true
                     }

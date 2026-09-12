@@ -50,7 +50,6 @@ import app.nexstream.player.ui.theme.saveFontScale
 import app.nexstream.player.ui.theme.saveFontWeight
 import app.nexstream.player.ui.theme.saveOnboardingDone
 import app.nexstream.player.ui.theme.saveUiStyle
-import app.nexstream.player.ui.theme.saveWhisperSubtitles
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,7 +82,6 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     var selectedFontScale  by remember { mutableStateOf(1.0f) }
     var selectedFontWeight by remember { mutableStateOf("normal") }
     var selectedCloudSync  by remember { mutableStateOf(true) }
-    var selectedAiSubs     by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentThemeMode)  { selectedMode = currentThemeMode }
     LaunchedEffect(currentUiStyle)    { selectedStyle = currentUiStyle }
@@ -208,7 +206,6 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     context.saveFontScale(selectedFontScale)
                     context.saveFontWeight(selectedFontWeight)
                     context.saveCloudSyncEnabled(selectedCloudSync)
-                    context.saveWhisperSubtitles(selectedAiSubs)
                     context.saveOnboardingDone(true)
                     onComplete()
                 }
@@ -359,8 +356,7 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                             context.saveFontScale(selectedFontScale)
                             context.saveFontWeight(selectedFontWeight)
                             context.saveCloudSyncEnabled(selectedCloudSync)
-                            context.saveWhisperSubtitles(selectedAiSubs)
-                            context.saveOnboardingDone(true)
+                                    context.saveOnboardingDone(true)
                             onComplete()
                         }
                     }

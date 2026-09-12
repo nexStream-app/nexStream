@@ -61,7 +61,6 @@ nexStream is a premium IPTV and media player for **all Android devices** — And
 ### ▶️ Player
 - **ExoPlayer (Media3)** with FFmpeg decoder extension for maximum format support
 - Subtitles from [SubDL](https://subdl.com/) — search and download subtitles in multiple languages
-- **AI-powered subtitle generation** using Groq — automatic captions for streams without subtitles
 - Subtitle delay adjustment (sync offset)
 - Playback speed control (0.25× – 4×)
 - Sleep timer
@@ -179,7 +178,7 @@ A: Yes — nexStream works perfectly on Android phones and tablets, as well as T
 A: Yes — add it as a playlist source in Settings. For Plex, you'll authenticate with a PIN; for Jellyfin, use your server URL and credentials.
 
 **Q: Are subtitles supported?**  
-A: Yes — automatic subtitle search via SubDL, with AI-generated captions for streams that don't have them.
+A: Yes — automatic subtitle search and download via SubDL, with support for multiple languages.
 
 ---
 

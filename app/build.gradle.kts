@@ -32,23 +32,6 @@ android {
         versionName = "1.0.4"
         buildConfigField("String", "BUILD_NUMBER", "\"$buildNumber\"")
         buildConfigField("int",    "BUILD_NUMBER_INT", (buildNumber.toIntOrNull() ?: 1).toString())
-        buildConfigField("String", "GROQ_API_KEY",
-            "\"${localProps.getProperty("GROQ_API_KEY", "")}\"")
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                // Disable SIMD unavailable on all Android targets
-                arguments += listOf(
-                    "-DGGML_AVX=OFF",
-                    "-DGGML_AVX2=OFF",
-                    "-DGGML_F16C=OFF",
-                    "-DGGML_FMA=OFF"
-                )
-            }
-        }
     }
 
     signingConfigs {
@@ -63,13 +46,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     composeOptions {
@@ -172,8 +148,6 @@ dependencies {
     // Casting (Chromecast + DLNA/AirPlay discovery)
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("androidx.mediarouter:mediarouter:1.7.0")
-
-    // Whisper.cpp AI subtitles built via NDK — see app/src/main/cpp/
 
     }
 //

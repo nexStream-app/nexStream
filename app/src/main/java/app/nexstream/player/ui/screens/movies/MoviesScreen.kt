@@ -60,7 +60,6 @@ import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
-import app.nexstream.player.subtitle.WhisperSubtitleManager
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.LocalUiStyle
@@ -657,7 +656,6 @@ fun MoviesScreen(
             onPlay              = { startPosition -> movieWithDetails = null; isLoadingDetails = false; onMovieClick(movie.streamUrl, movie.id, startPosition, movie.name) },
             onFetchCertification = { viewModel.fetchCertificationIfMissing(movie.id, movie.name) },
             onFetchOriginalLanguage = { viewModel.fetchOriginalLanguageIfMissing(movie.id, movie.name) },
-            whisperManager = viewModel.whisperSubtitleManager,
             onFetchRtData       = { viewModel.fetchRtDataIfMissing(movie.id, movie.name) },
             onFetchTrailerUrl   = { viewModel.fetchTrailerUrl(movie) },
         )
@@ -806,7 +804,6 @@ private fun isAllowedByAgeRating(certification: String?, maxAgeRating: String?, 
 class MoviesViewModel @Inject constructor(
     val repository: PlaylistRepository,
     val progressRepository: WatchProgressRepository,
-    val whisperSubtitleManager: WhisperSubtitleManager
 ) : ViewModel() {
     @Inject lateinit var profileManager: ProfileManager
     val playlists: StateFlow<List<PlaylistEntity>> = repository.getAllPlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

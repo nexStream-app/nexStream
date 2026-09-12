@@ -435,6 +435,7 @@ private fun MainMenu(
         val isLoading: Boolean = false,
         val hasSubPanel: Boolean = false,
         val onReopenPanel: (() -> Unit)? = null,
+        val locked: Boolean = false,
     )
 
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -444,22 +445,23 @@ private fun MainMenu(
         storedHidden?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     }
 
-    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders) {
+    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders, isLicensed) {
+        val locked = !isLicensed
         buildMap {
-            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  context.getString(R.string.nav_sports_today), AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) }))
+            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  context.getString(R.string.nav_sports_today), AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) },   locked = locked))
             put("Recent",   MenuEntry(Icons.Default.History,       context.getString(R.string.nav_recent),       AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
             put("Guide",    MenuEntry(Icons.Default.CalendarToday, context.getString(R.string.nav_guide),        AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
-            put("Movies",   MenuEntry(Icons.Default.Movie,         context.getString(R.string.nav_movies),       AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true))
-            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  context.getString(R.string.nav_series),       AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true))
+            put("Movies",   MenuEntry(Icons.Default.Movie,         context.getString(R.string.nav_movies),       AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true, locked = locked))
+            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  context.getString(R.string.nav_series),       AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true, locked = locked))
             put("CatchUp",  MenuEntry(Icons.Default.Replay,        context.getString(R.string.nav_catch_up),     AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
-            put("Picks",    MenuEntry(Icons.Default.Stars,         context.getString(R.string.nav_picks),        AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) }))
+            put("Picks",    MenuEntry(Icons.Default.Stars,         context.getString(R.string.nav_picks),        AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) },   locked = locked))
             if (hasJellyfinPlaylist) {
                 put("Music", MenuEntry(Icons.Default.MusicNote,    context.getString(R.string.nav_music),        AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
             }
             if (hasDeviceFolders) {
                 put("Device", MenuEntry(Icons.Default.Folder,      context.getString(R.string.nav_device),       AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
             }
-            put("Search",   MenuEntry(Icons.Default.Search,        context.getString(R.string.nav_search),       AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) }))
+            put("Search",   MenuEntry(Icons.Default.Search,        context.getString(R.string.nav_search),       AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) },  locked = locked))
             put("MyList",   MenuEntry(Icons.Default.Bookmark,      context.getString(R.string.nav_my_list),      AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
             put("Settings", MenuEntry(Icons.Default.Settings,      context.getString(R.string.nav_settings),     AppRoute.Settings, settingsFocus))
         }
@@ -556,7 +558,7 @@ private fun MainMenu(
                 val prevFR  = if (isFirst) profileInfoFocus else menuItems[idx - 1].focusRequester
                 val nextFR  = if (isLast)  profileInfoFocus else menuItems[idx + 1].focusRequester
                 MenuItem(
-                    icon           = entry.icon,
+                    icon           = if (entry.locked) Icons.Default.Lock else entry.icon,
                     label          = entry.label,
                     route          = entry.route,
                     currentRoute   = currentRoute,
@@ -564,11 +566,12 @@ private fun MainMenu(
                     panelExpanded  = panelExpanded,
                     showLabels     = showLabels,
                     hasSubPanel    = entry.hasSubPanel,
+                    isLocked       = entry.locked,
                     focusRequester = entry.focusRequester,
                     onDpadRight    = onDpadRight,
-                    onClick        = { onNavigate(entry.route) },
+                    onClick        = if (entry.locked) { { onNavigate(AppRoute.SettingsLicence) } } else { { onNavigate(entry.route) } },
                     onExitPanelToRail = onExitPanelToRail,
-                    onReopenPanel  = entry.onReopenPanel,
+                    onReopenPanel  = if (entry.locked) null else entry.onReopenPanel,
                     isLoading      = entry.isLoading,
                     upFR           = prevFR,
                     downFR         = nextFR
@@ -597,6 +600,7 @@ private fun MenuItem(
     onEnterContent: () -> Unit = {},
     onExitPanelToRail: () -> Unit = {},
     onReopenPanel: (() -> Unit)? = null,
+    isLocked: Boolean = false,
     onFocused: () -> Unit = {},
     isLoading: Boolean = false,
     upFR: FocusRequester? = null,
@@ -642,7 +646,8 @@ private fun MenuItem(
     }
 
     val effectiveClick: () -> Unit = {
-        if (isCurrentRoute && !panelExpanded && route.hasCategoryPanel && onReopenPanel != null) onReopenPanel()
+        if (isLocked) onClick()
+        else if (isCurrentRoute && !panelExpanded && route.hasCategoryPanel && onReopenPanel != null) onReopenPanel()
         else onClick()
     }
 
@@ -662,9 +667,9 @@ private fun MenuItem(
         .onKeyEvent { e ->
             if (e.type == KeyEventType.KeyDown) when (e.key) {
                 Key.DirectionRight -> {
-                    if (!isCurrentRoute) {
+                    if (isLocked) { onClick(); true }
+                    else if (!isCurrentRoute) {
                         onClick()
-                        // If this route has a panel, also enter it
                         if (route.hasCategoryPanel) onEnterPanel()
                         true
                     } else if (route.hasCategoryPanel && !panelExpanded && onReopenPanel != null) { onReopenPanel(); true }

@@ -658,7 +658,7 @@ fun MainScreen(
     val sharedOnPlayNextEpisode: (app.nexstream.player.data.local.entity.EpisodeEntity) -> Unit = { nextEpisode ->
         currentChannelUrl = nextEpisode.streamUrl; currentEpisodeId = nextEpisode.id
         currentNowPlayingSubtitle = "S${nextEpisode.seasonNum}E${nextEpisode.episodeNum} - ${nextEpisode.name}"
-        currentNowPlayingDescription = null; currentStartPosition = 0L
+        currentNowPlayingDescription = null; currentStartPosition = 1L
         scope.launch {
             val series = currentSeriesId?.let { repository.getSeriesById(it) }
             currentNowPlayingDescription = nextEpisode.plot ?: series?.plot

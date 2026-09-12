@@ -66,8 +66,6 @@ import app.nexstream.player.license.AppAccessState
 import app.nexstream.player.service.NexStreamPlaybackService
 import app.nexstream.player.subtitle.SubtitleLanguage
 import app.nexstream.player.subtitle.SubtitleResult
-import app.nexstream.player.subtitle.WhisperSubtitleManager
-import app.nexstream.player.subtitle.WhisperTapProcessor
 import app.nexstream.player.ui.screens.series.SeriesViewModel
 import app.nexstream.player.ui.screens.trial.TrialExpiredScreen
 import app.nexstream.player.ui.theme.AspectRatio
@@ -75,17 +73,12 @@ import app.nexstream.player.ui.theme.AspectRatioType
 import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
-import app.nexstream.player.ui.theme.getWhisperSubtitlesFlow
-import app.nexstream.player.ui.theme.getWhisperTranslateToFlow
-import app.nexstream.player.ui.theme.getWhisperAutostartLiveFlow
-import app.nexstream.player.ui.theme.getAutoLangDetectFlow
 import app.nexstream.player.ui.theme.getProxyModeFlow
 import app.nexstream.player.ui.theme.getProxyHostFlow
 import app.nexstream.player.ui.theme.getProxyPortFlow
 import app.nexstream.player.ui.theme.getProxyTypeFlow
 import app.nexstream.player.ui.theme.getProxyUsernameFlow
 import app.nexstream.player.ui.theme.getProxyPasswordFlow
-import app.nexstream.player.ui.theme.saveWhisperTranslateTo
 import app.nexstream.player.ui.theme.saveAspectRatio
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import kotlinx.coroutines.delay
@@ -151,10 +144,6 @@ fun PlayerScreen(
     // ── Player prefs ──────────────────────────────────────────────────────────
     val autoFrameRate    by context.getAutoFrameRateFlow().collectAsState(initial = true)
     val smartBuffer      by context.getSmartBufferFlow().collectAsState(initial = true)
-    val whisperEnabled       by context.getWhisperSubtitlesFlow().collectAsState(initial = false)
-    val whisperTranslateTo   by context.getWhisperTranslateToFlow().collectAsState(initial = false)
-    val whisperAutoStartLive by context.getWhisperAutostartLiveFlow().collectAsState(initial = false)
-    val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
     val proxyMode by context.getProxyModeFlow().collectAsState(initial = "OFF")
     val proxyHost by context.getProxyHostFlow().collectAsState(initial = "")
     val proxyPort by context.getProxyPortFlow().collectAsState(initial = 8080)
@@ -168,46 +157,6 @@ fun PlayerScreen(
     val deviceId = remember {
         context.getSharedPreferences("nexstream_licence", android.content.Context.MODE_PRIVATE)
             .getString("stable_device_id", "unknown") ?: "unknown"
-    }
-
-    // ── Whisper AI subtitles ──────────────────────────────────────────────────
-    val whisperManager = viewModel.whisperSubtitleManager
-    val whisperTapProcessor = remember {
-        WhisperTapProcessor { shorts, rate, channels ->
-            whisperManager.processAudio(shorts, rate, channels)
-        }
-    }
-    val whisperText by whisperManager.currentText.collectAsState()
-    var ccActive by remember { mutableStateOf(false) }
-
-    // When feature is turned off in settings, deactivate the session
-    LaunchedEffect(whisperEnabled) {
-        if (!whisperEnabled) ccActive = false
-    }
-    // Auto-start on Live TV if the pref is set; or on VOD/Series whenever AI subtitles are enabled
-    LaunchedEffect(movieId, episodeId, whisperEnabled, whisperAutoStartLive) {
-        when {
-            whisperEnabled && whisperAutoStartLive && movieId == null && episodeId == null -> ccActive = true
-            whisperEnabled && (movieId != null || episodeId != null) -> ccActive = true
-        }
-    }
-    // Drive whisper manager from the session state.
-    // channelUrl is a key so that channel switches re-arm the processor even when ccActive hasn't changed
-    // (onDispose calls setEnabled(false)/deactivate(); without channelUrl this LaunchedEffect wouldn't re-fire).
-    LaunchedEffect(ccActive, channelUrl) {
-        whisperTapProcessor.setEnabled(ccActive)
-        if (ccActive) {
-            // Ensure translate preference is applied at activation time, not just on pref change.
-            // This prevents a race where initial=false fires first and resets translate mode.
-            whisperManager.setTranslateToEnglish(whisperTranslateTo)
-            whisperManager.activate(movieId == null && episodeId == null)
-        } else {
-            whisperManager.deactivate()
-        }
-    }
-
-    LaunchedEffect(whisperTranslateTo) {
-        whisperManager.setTranslateToEnglish(whisperTranslateTo)
     }
 
     // ── ExoPlayer subtitle cues → sidebar ─────────────────────────────────────
@@ -241,14 +190,6 @@ fun PlayerScreen(
     var controlsInteractionTick by remember { mutableStateOf(0) }
     var isTrialExpired  by remember { mutableStateOf(false) }
     var subtitleAtTop   by remember { mutableStateOf(false) }
-
-    // Audio language detection (live TV only) — resets on channel change
-    var audioLangDetected        by remember(channelUrl) { mutableStateOf<String?>(null) }
-    var audioLangPromptDismissed by remember(channelUrl) { mutableStateOf(false) }
-
-    LaunchedEffect(audioLangDetected) {
-        whisperManager.setDetectedLanguage(audioLangDetected)
-    }
 
     // D-pad: two zones — ICONS row and CONTROLS row (below), then SLIDER
     var dpadZone     by remember { mutableStateOf(DpadZone.CONTROLS) }
@@ -347,23 +288,6 @@ fun PlayerScreen(
             viewModel.getNextProgrammeForUrl(channelUrl).collectLatest { programme ->
                 nextProgramme = programme?.title
             }
-        }
-    }
-
-    // Update Whisper prompt whenever content metadata changes.
-    // Live TV/CatchUp use context prompts; movies and episodes use no prompt — passing title/description
-    // as a Whisper prompt causes hallucinations (model outputs the prompt text when audio is quiet).
-    LaunchedEffect(ccActive, movieId, episodeId, nowPlayingTitle, nowPlayingSubtitle, nowPlayingDescription, currentProgramme, currentProgrammeDescription) {
-        if (!ccActive) return@LaunchedEffect
-        val isLiveTV = movieId == null && episodeId == null
-        when {
-            isLiveTV -> whisperManager.setLiveTvContext(currentProgramme, currentProgrammeDescription)
-            episodeId != null || (movieId != null && movieId != "catchup") -> whisperManager.setInitialPrompt(null)
-            else -> whisperManager.setInitialPrompt(buildWhisperPrompt(
-                movieId, episodeId,
-                nowPlayingTitle, nowPlayingSubtitle, nowPlayingDescription,
-                currentProgramme, currentProgrammeDescription,
-            ))
         }
     }
 
@@ -512,11 +436,7 @@ fun PlayerScreen(
                         ))
                     }
                     return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
-                        // whisperTapProcessor MUST be first — it taps the raw decoded PCM
-                        // before ChannelMixingAudioProcessor transforms the buffer. If downMixer
-                        // is first, its output ByteBuffer arrives consumed (remaining==0) at
-                        // whisperTapProcessor, producing silent 0-sample chunks.
-                        .setAudioProcessors(arrayOf(whisperTapProcessor, downMixer))
+                        .setAudioProcessors(arrayOf(downMixer))
                         .setEnableFloatOutput(enableFloatOutput)
                         .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                         .build()
@@ -598,7 +518,7 @@ fun PlayerScreen(
                         setParameters(
                             buildUponParameters()
                                 .setPreferredAudioLanguage("en")
-                                .setTunnelingEnabled(false) // tunneling bypasses AudioProcessor chain, breaking Whisper tap
+                                .setTunnelingEnabled(false)
                                 .setMaxAudioChannelCount(2)
                                 .build()
                         )
@@ -656,19 +576,6 @@ fun PlayerScreen(
                                     }
                                 }
                             }
-                        } else {
-                            // Detect selected audio track language for live TV prompt
-                            val selectedLang = (0 until tracks.groups.size)
-                                .firstNotNullOfOrNull { i ->
-                                    val g = tracks.groups[i]
-                                    if (g.type != C.TRACK_TYPE_AUDIO) return@firstNotNullOfOrNull null
-                                    (0 until g.length).firstOrNull { j -> g.isTrackSelected(j) }
-                                        ?.let { j -> g.getTrackFormat(j).language }
-                                }
-                            val lc = selectedLang?.lowercase()?.take(2)
-                            if (!lc.isNullOrBlank() && lc != "und" && lc != "en") {
-                                audioLangDetected = lc
-                            }
                         }
                     }
                 }
@@ -711,8 +618,6 @@ fun PlayerScreen(
             player = exoPlayer
 
             onDispose {
-                whisperTapProcessor.setEnabled(false)
-                whisperManager.deactivate()
                 if (movieId != null && movieId != "catchup") {
                     val pos = exoPlayer.currentPosition; val dur = exoPlayer.duration
                     if (dur > 0 && pos < dur - 120_000) viewModel.savePlaybackPositionSync(movieId, pos, dur, profileId)
@@ -750,8 +655,6 @@ fun PlayerScreen(
                 catch (e: Exception) { android.util.Log.e("PlayerScreen", "Controller connection failed", e) }
             }, com.google.common.util.concurrent.MoreExecutors.directExecutor())
             onDispose {
-                whisperTapProcessor.setEnabled(false)
-                whisperManager.deactivate()
                 val ctrl = player
                 if (ctrl != null) {
                     if (movieId != null && movieId != "catchup") { val pos = ctrl.currentPosition; val dur = ctrl.duration; if (dur > 0 && pos < dur - 120_000) viewModel.savePlaybackPositionSync(movieId, pos, dur, profileId) }
@@ -1074,9 +977,8 @@ fun PlayerScreen(
             if (episodeId != null) add("next")
             if (!(isLiveTV || movieId == "catchup")) add("subtitles")
             if (hasChannelNext) add("ch_next")
-            if (whisperEnabled) add("cc")
-            if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_pos")
-            if (ccActive || subtitleCueLines.isNotEmpty()) add("sub_delay")
+            if (subtitleCueLines.isNotEmpty()) add("sub_pos")
+            if (subtitleCueLines.isNotEmpty()) add("sub_delay")
             if (isLiveTV || isCatchup) add("sleep")
             if (hasScrubbing) add("speed")
             if (showAspectRatioButton) add("aspect")
@@ -1161,7 +1063,6 @@ fun PlayerScreen(
                 "next"      -> { showNextEpisodePrompt = false; currentNextEpisode?.let { onPlayNextEpisode?.invoke(it) } }
                 "ch_next"   -> { onNextChannel?.invoke() }
                 "subtitles" -> showMediaSheet = true
-                "cc"        -> ccActive = !ccActive
                 "sub_pos"   -> subtitleAtTop = !subtitleAtTop
                 "sub_delay" -> showSubtitleDelayDialog = true
                 "sleep"     -> showSleepTimerDialog = true
@@ -1947,36 +1848,8 @@ fun PlayerScreen(
                                 }
 
 
-                                // CC button — all content types when AI subtitles enabled in settings
-                                if (whisperEnabled) {
-                                    val ccFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "cc"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(if (ccActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
-                                            .then(
-                                                if (ccFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { ccActive = !ccActive },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.ClosedCaption,
-                                                contentDescription = "Toggle AI Captions",
-                                                tint = if (ccActive) MaterialTheme.colorScheme.primary else controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
                                 // Subtitle position toggle — visible when any subtitles are showing
-                                if (ccActive || subtitleCueLines.isNotEmpty()) {
+                                if (subtitleCueLines.isNotEmpty()) {
                                     val subPosFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "sub_pos"
                                     Box(
@@ -2004,7 +1877,7 @@ fun PlayerScreen(
                                 }
 
                                 // Subtitle delay button — visible when subtitles are active
-                                if (ccActive || subtitleCueLines.isNotEmpty()) {
+                                if (subtitleCueLines.isNotEmpty()) {
                                     val subDelayFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
                                             currentCentreButtons.getOrNull(currentCentreIndex) == "sub_delay"
                                     Box(
@@ -2168,64 +2041,13 @@ fun PlayerScreen(
         } // end if fp != null
 
         // ── Subtitle sidebar ──────────────────────────────────────────────────
-        val subtitleDisplayLines = if (subtitleCueLines.isNotEmpty()) subtitleCueLines
-            else if (ccActive && whisperText.isNotBlank()) listOf(whisperText)
-            else emptyList()
         SubtitleSideBar(
-            lines     = subtitleDisplayLines,
-            isWhisper = subtitleCueLines.isEmpty() && ccActive,
-            modifier  = if (subtitleAtTop)
+            lines    = subtitleCueLines,
+            modifier = if (subtitleAtTop)
                 Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
             else
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
         )
-
-        // ── Non-English audio prompt ──────────────────────────────────────────
-        val audioLangName = remember(audioLangDetected) {
-            audioLangDetected?.let { Locale(it).getDisplayLanguage(Locale.ENGLISH).ifBlank { it.uppercase() } } ?: ""
-        }
-        val langPromptFR = remember { FocusRequester() }
-        LaunchedEffect(audioLangDetected, audioLangPromptDismissed) {
-            if (audioLangDetected != null && !audioLangPromptDismissed && !ccActive) {
-                kotlinx.coroutines.delay(150)
-                try { langPromptFR.requestFocus() } catch (_: Exception) {}
-            }
-        }
-        if (autoLangDetect && !isCatchup && movieId == null && episodeId == null &&
-                audioLangDetected != null && !audioLangPromptDismissed && !ccActive) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 32.dp, start = 24.dp, end = 24.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black.copy(alpha = 0.85f))
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "This programme appears to be in $audioLangName",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(
-                            onClick = { ccActive = true; audioLangPromptDismissed = true },
-                            modifier = Modifier.focusRequester(langPromptFR)
-                        ) {
-                            Text("Add Subtitles")
-                        }
-                        OutlinedButton(onClick = { audioLangPromptDismissed = true }) {
-                            Text("No Thanks")
-                        }
-                    }
-                }
-            }
-        }
 
         // ── Cast device sheet ─────────────────────────────────────────────────
         if (showCastSheet) {
@@ -2252,8 +2074,6 @@ fun PlayerScreen(
                 channelUrl       = channelUrl,
                 viewModel        = viewModel,
                 scope            = scope,
-                whisperEnabled   = whisperEnabled,
-                whisperManager   = whisperManager,
                 onDismiss        = { showMediaSheet = false }
             )
         }
@@ -2522,7 +2342,6 @@ fun PlayerScreen(
 @Composable
 private fun SubtitleSideBar(
     lines: List<String>,
-    isWhisper: Boolean,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -2547,19 +2366,10 @@ private fun SubtitleSideBar(
                         text       = line,
                         color      = Color.White,
                         fontSize   = 22.sp,
-                        fontStyle  = if (isWhisper) FontStyle.Italic else FontStyle.Normal,
+                        fontStyle  = FontStyle.Normal,
                         textAlign  = TextAlign.Center,
                         lineHeight = 28.sp,
                     )
-                }
-            }
-            if (isWhisper && lines.isNotEmpty()) {
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(Modifier.size(5.dp).background(Color.Red, CircleShape))
-                    Text("AI", color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
                 }
             }
         }
@@ -2690,46 +2500,6 @@ private fun UpNextOverlay(
 
 // ── TrackItem ─────────────────────────────────────────────────────────────────
 
-@Composable
-private fun WhisperModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val accent = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                when {
-                    selected  -> accent.copy(alpha = 0.30f)
-                    isFocused -> Color.White.copy(alpha = 0.15f)
-                    else      -> Color.White.copy(alpha = 0.07f)
-                }
-            )
-            .border(
-                width = if (selected || isFocused) 1.5.dp else 1.dp,
-                color = when {
-                    selected  -> accent
-                    isFocused -> Color.White.copy(alpha = 0.6f)
-                    else      -> Color.White.copy(alpha = 0.20f)
-                },
-                shape = RoundedCornerShape(20.dp)
-            )
-            .onFocusChanged { isFocused = it.isFocused }
-            .onKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown &&
-                    (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)
-                ) { onClick(); true } else false
-            }
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp)
-    ) {
-        Text(
-            text  = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) accent else Color.White.copy(alpha = if (isFocused) 1f else 0.75f)
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackItem(track: Track, onClick: () -> Unit) {
@@ -2848,7 +2618,6 @@ private fun MediaSheet(
     player: Player, isMovieOrEpisode: Boolean, movieId: String?, episodeId: String?, seriesId: String?,
     channelUrl: String, viewModel: PlayerViewModel,
     scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit,
-    whisperEnabled: Boolean = false, whisperManager: WhisperSubtitleManager? = null
 ) {
     val panelFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -3107,62 +2876,6 @@ private fun MediaSheet(
                 }
             }
 
-            // ── AI SUBTITLES (WHISPER) ─────────────────────────────────────────
-            if (whisperEnabled && whisperManager != null) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Text(
-                    text     = "AI SUBTITLES",
-                    style    = MaterialTheme.typography.labelSmall,
-                    color    = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-
-                val whisperIsLoadingSheet by whisperManager.isLoading.collectAsState()
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    if (whisperIsLoadingSheet) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                        Text("Transcribing…", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.70f))
-                    } else {
-                        Text("Server-based · live and on-demand", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.55f))
-                    }
-                }
-
-                val translateCtx = LocalContext.current
-                val translateToEn by whisperManager.translateToEnglish.collectAsState()
-                Text(
-                    text     = "MODE",
-                    style    = MaterialTheme.typography.labelSmall,
-                    color    = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    WhisperModeChip(
-                        label    = "Transcribe",
-                        selected = !translateToEn,
-                        onClick  = {
-                            whisperManager.setTranslateToEnglish(false)
-                            scope.launch { translateCtx.saveWhisperTranslateTo(false) }
-                        }
-                    )
-                    WhisperModeChip(
-                        label    = "Translate → EN",
-                        selected = translateToEn,
-                        onClick  = {
-                            whisperManager.setTranslateToEnglish(true)
-                            scope.launch { translateCtx.saveWhisperTranslateTo(true) }
-                        }
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
             Spacer(modifier = Modifier.height(32.dp))
         }
         } // end Surface
@@ -3185,38 +2898,3 @@ private fun formatDuration(ms: Long): String {
 private data class Track(val type: TrackType, val groupIndex: Int, val trackIndex: Int, val language: String, val label: String, val isSelected: Boolean)
 private enum class TrackType { AUDIO, SUBTITLE }
 
-private fun buildWhisperPrompt(
-    movieId: String?,
-    episodeId: String?,
-    nowPlayingTitle: String?,
-    nowPlayingSubtitle: String?,
-    nowPlayingDescription: String?,
-    epgProgramme: String?,
-    epgDescription: String?,
-): String {
-    val raw = when {
-        episodeId != null -> {
-            val title = nowPlayingSubtitle ?: nowPlayingTitle ?: ""
-            val desc  = nowPlayingDescription ?: ""
-            "TV episode. $title. $desc"
-        }
-        movieId != null && movieId != "catchup" -> {
-            val title    = nowPlayingTitle ?: ""
-            val overview = nowPlayingDescription ?: ""
-            "Movie. $title. $overview"
-        }
-        movieId == "catchup" -> {
-            val title = nowPlayingTitle ?: ""
-            val desc  = nowPlayingDescription ?: ""
-            if (title.isBlank()) "Live TV broadcast. Clear English speech."
-            else "Live TV broadcast. Clear English speech. Programme: $title. $desc"
-        }
-        else -> {
-            val programme = epgProgramme ?: ""
-            val desc      = epgDescription ?: ""
-            if (programme.isBlank()) "Video content. Clear English speech."
-            else "Live TV broadcast. Clear English speech. Programme: $programme. $desc"
-        }
-    }
-    return raw.trim().take(896)
-}

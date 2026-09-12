@@ -47,11 +47,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nexstream.player.data.local.entity.MovieEntity
 import app.nexstream.player.data.remote.RtData
-import app.nexstream.player.subtitle.WhisperSubtitleManager
 import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalNsBackground
-import app.nexstream.player.ui.theme.saveWhisperSubtitles
-import app.nexstream.player.ui.theme.saveWhisperTranslateTo
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -63,12 +60,6 @@ import java.net.URL
 
 private const val LOW_SPACE_BUFFER_MOVD = 250L * 1024 * 1024
 
-
-private val VOICE_SUBTITLE_MODES = listOf<Pair<Boolean?, String>>(
-    null  to "None",
-    false to "Transcribe",
-    true  to "→ English"
-)
 
 private fun getAvailableStorageBytesMD(): Long {
     val stat = StatFs(Environment.getExternalStorageDirectory().path)
@@ -137,7 +128,6 @@ fun ModernMovieDetailsDialog(
     onDownload: () -> Unit = {},
     onFetchCertification: (suspend () -> String?)? = null,
     onFetchOriginalLanguage: (suspend () -> String?)? = null,
-    whisperManager: WhisperSubtitleManager? = null,
     onFetchRtData: (suspend () -> RtData?)? = null,
     onRatingOverride: ((String) -> Unit)? = null,
     onFetchTrailerUrl: (suspend () -> String?)? = null,
@@ -145,7 +135,6 @@ fun ModernMovieDetailsDialog(
     val accent     = LocalNsAccent.current
 
     val hasProgress = resumePosition > 0L
-    val showVoiceTranslate = whisperManager != null
 
     var trailerUrl by remember(movie.id) { mutableStateOf(movie.trailerUrl) }
     LaunchedEffect(movie.id) {
@@ -161,18 +150,16 @@ fun ModernMovieDetailsDialog(
     var trailerStarted by trailerStartedState
     LaunchedEffect(showTrailer) { if (!showTrailer) trailerStartedState.value = false }
 
-    // Button indices: 0=Close  1=MyList  [2=Download  3=StartOver?  lastPlay=Play/Resume  [AI]  [Trailer]]
-    // Restricted:     0=Close  1=MyList  (no whisper/trailer when restricted)
-    val whisperCount = if (showVoiceTranslate && !isContentRestricted) 1 else 0
+    // Button indices: 0=Close  1=MyList  [2=Download  3=StartOver?  lastPlay=Play/Resume  [Trailer]]
+    // Restricted:     0=Close  1=MyList  (no trailer when restricted)
     val trailerCount = if (hasTrailer && !isContentRestricted) 1 else 0
     val buttonCount = when {
         isContentRestricted -> 2
-        hasProgress         -> 5 + whisperCount + trailerCount
-        else                -> 4 + whisperCount + trailerCount
+        hasProgress         -> 5 + trailerCount
+        else                -> 4 + trailerCount
     }
     val trailerBtnIdx = if (trailerCount > 0) buttonCount - 1 else -1
-    val whisperBtnIdx = if (whisperCount > 0) buttonCount - 1 - trailerCount else -1
-    var selectedButton by remember { mutableStateOf(if (isContentRestricted) 0 else buttonCount - 1 - whisperCount - trailerCount) }
+    var selectedButton by remember { mutableStateOf(if (isContentRestricted) 0 else buttonCount - 1 - trailerCount) }
     val scope         = rememberCoroutineScope()
     var pressedButton by remember { mutableStateOf<Int?>(null) }
 
@@ -200,9 +187,6 @@ fun ModernMovieDetailsDialog(
     }
 
     val context = LocalContext.current
-    val voiceTranslateOptions = VOICE_SUBTITLE_MODES
-
-    var voiceTranslateIndex by remember { mutableStateOf(0) }
 
     // Re-evaluate restriction if cert was fetched live and profile has an age limit
     val isEffectivelyRestricted by remember(isContentRestricted, maxAgeRating, allowNr) {
@@ -235,21 +219,6 @@ fun ModernMovieDetailsDialog(
                 rtAudienceScore = result.audienceScore
                 rtConsensus     = result.consensus
             }
-        }
-    }
-
-    fun playWithWhisper(action: () -> Unit) {
-        if (whisperManager == null) { action(); return }
-        val mode = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.first  // null=None, false=Transcribe, true=→EN
-        if (mode == null) {
-            scope.launch { context.saveWhisperSubtitles(false); action() }
-            return
-        }
-        whisperManager.setTranslateToEnglish(mode)
-        scope.launch {
-            context.saveWhisperSubtitles(true)
-            context.saveWhisperTranslateTo(mode)
-            action()
         }
     }
 
@@ -458,12 +427,10 @@ fun ModernMovieDetailsDialog(
                                     btn == 0 -> onDismiss()
                                     btn == 1 -> onToggleWatchlist()
                                     btn == 2 && !isEffectivelyRestricted -> { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }
-                                    btn == whisperBtnIdx && whisperBtnIdx >= 0 && showVoiceTranslate ->
-                                        voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size
                                     btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() ->
                                         showTrailer = !showTrailer
-                                    btn == 3 && !isEffectivelyRestricted -> playWithWhisper { onPlay(0) }
-                                    btn == 4 && !isEffectivelyRestricted -> playWithWhisper { onPlay(resumePosition) }
+                                    btn == 3 && !isEffectivelyRestricted -> onPlay(0)
+                                    btn == 4 && !isEffectivelyRestricted -> onPlay(resumePosition)
                                 }
                             }
                             true
@@ -834,7 +801,7 @@ function onYouTubeIframeAPIReady(){
                                         isSelected = selectedButton == 3,
                                         isPressed  = pressedButton == 3,
                                         accent     = accent,
-                                        onClick    = { playWithWhisper { onPlay(0) } },
+                                        onClick    = { onPlay(0) },
                                     )
                                     MovieDialogPill(
                                         label      = "Resume",
@@ -842,7 +809,7 @@ function onYouTubeIframeAPIReady(){
                                         isSelected = selectedButton == 4,
                                         isPressed  = pressedButton == 4,
                                         accent     = accent,
-                                        onClick    = { playWithWhisper { onPlay(resumePosition) } },
+                                        onClick    = { onPlay(resumePosition) },
                                     )
                                 } else {
                                     MovieDialogPill(
@@ -851,18 +818,7 @@ function onYouTubeIframeAPIReady(){
                                         isSelected = selectedButton == 3,
                                         isPressed  = pressedButton == 3,
                                         accent     = accent,
-                                        onClick    = { playWithWhisper { onPlay(0) } },
-                                    )
-                                }
-                                if (showVoiceTranslate && !isEffectivelyRestricted) {
-                                    val modeLabel = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.second ?: "None"
-                                    MovieDialogPill(
-                                        label      = "AI: $modeLabel",
-                                        icon       = Icons.Default.RecordVoiceOver,
-                                        isSelected = selectedButton == whisperBtnIdx,
-                                        isPressed  = pressedButton == whisperBtnIdx,
-                                        accent     = accent,
-                                        onClick    = { voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size },
+                                        onClick    = { onPlay(0) },
                                     )
                                 }
                             }

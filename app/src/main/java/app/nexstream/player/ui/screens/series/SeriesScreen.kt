@@ -622,7 +622,6 @@ fun SeriesScreen(
             onDownloadEpisode = onDownloadEpisode,
             onFetchCertification = { viewModel.fetchCertificationIfMissing(series.id, series.name) },
             onFetchOriginalLanguage = { viewModel.fetchOriginalLanguageIfMissing(series.id, series.name) },
-            whisperManager = viewModel.whisperSubtitleManager,
             onFetchTrailerUrl = { viewModel.fetchTrailerUrl(series.name) },
             onToggleWatchlist = {
                 watchlistViewModel.toggleWatchlist(WatchlistEntity(id = series.id,

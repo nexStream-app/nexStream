@@ -15,13 +15,9 @@ private val Context.playerPrefsDataStore by preferencesDataStore(name = "player_
 
 private val KEY_AUTO_FRAME_RATE      = booleanPreferencesKey("auto_frame_rate")
 private val KEY_SMART_BUFFER         = booleanPreferencesKey("smart_buffer")
-private val KEY_WHISPER_SUBTITLES    = booleanPreferencesKey("whisper_subtitles")
-private val KEY_WHISPER_TRANSLATE_TO = booleanPreferencesKey("whisper_translate_to_en")
-private val KEY_WHISPER_AUTOSTART_LIVE = booleanPreferencesKey("whisper_autostart_live")
 private val KEY_CLOUD_SYNC_ENABLED   = booleanPreferencesKey("cloud_sync_enabled")
 private val KEY_AUTO_UPDATE_ENABLED  = booleanPreferencesKey("auto_update_enabled")
 private val KEY_DOWNLOADS_LOCATION   = stringPreferencesKey("downloads_location")
-private val KEY_AUTO_LANG_DETECT     = booleanPreferencesKey("auto_lang_detect")
 private val KEY_DEDUPLICATE_CONTENT  = booleanPreferencesKey("deduplicate_content")
 private val KEY_EPG_MINI_PLAYER      = booleanPreferencesKey("epg_mini_player")
 
@@ -37,27 +33,6 @@ suspend fun Context.saveAutoFrameRate(enabled: Boolean) {
 
 suspend fun Context.saveSmartBuffer(enabled: Boolean) {
     playerPrefsDataStore.edit { it[KEY_SMART_BUFFER] = enabled }
-}
-
-fun Context.getWhisperSubtitlesFlow(): Flow<Boolean> =
-    playerPrefsDataStore.data.map { it[KEY_WHISPER_SUBTITLES] ?: false }
-
-suspend fun Context.saveWhisperSubtitles(enabled: Boolean) {
-    playerPrefsDataStore.edit { it[KEY_WHISPER_SUBTITLES] = enabled }
-}
-
-fun Context.getWhisperAutostartLiveFlow(): Flow<Boolean> =
-    playerPrefsDataStore.data.map { it[KEY_WHISPER_AUTOSTART_LIVE] ?: false }
-
-suspend fun Context.saveWhisperAutostartLive(enabled: Boolean) {
-    playerPrefsDataStore.edit { it[KEY_WHISPER_AUTOSTART_LIVE] = enabled }
-}
-
-fun Context.getWhisperTranslateToFlow(): Flow<Boolean> =
-    playerPrefsDataStore.data.map { it[KEY_WHISPER_TRANSLATE_TO] ?: false }
-
-suspend fun Context.saveWhisperTranslateTo(translateToEnglish: Boolean) {
-    playerPrefsDataStore.edit { it[KEY_WHISPER_TRANSLATE_TO] = translateToEnglish }
 }
 
 fun Context.getCloudSyncEnabledFlow(): Flow<Boolean> =
@@ -79,13 +54,6 @@ fun Context.getDownloadsLocationFlow(): Flow<String> =
 
 suspend fun Context.saveDownloadsLocation(path: String) {
     playerPrefsDataStore.edit { it[KEY_DOWNLOADS_LOCATION] = path }
-}
-
-fun Context.getAutoLangDetectFlow(): Flow<Boolean> =
-    playerPrefsDataStore.data.map { it[KEY_AUTO_LANG_DETECT] ?: false }
-
-suspend fun Context.saveAutoLangDetect(enabled: Boolean) {
-    playerPrefsDataStore.edit { it[KEY_AUTO_LANG_DETECT] = enabled }
 }
 
 fun Context.getDeduplicateContentFlow(): Flow<Boolean> =
@@ -180,10 +148,6 @@ suspend fun Context.collectSyncablePlayerPrefs(): Map<String, Any> {
     return buildMap {
         prefs[KEY_AUTO_FRAME_RATE]?.let { put("auto_frame_rate", it) }
         prefs[KEY_SMART_BUFFER]?.let { put("smart_buffer", it) }
-        prefs[KEY_WHISPER_SUBTITLES]?.let { put("whisper_subtitles", it) }
-        prefs[KEY_WHISPER_TRANSLATE_TO]?.let { put("whisper_translate_to_en", it) }
-        prefs[KEY_WHISPER_AUTOSTART_LIVE]?.let { put("whisper_autostart_live", it) }
-        prefs[KEY_AUTO_LANG_DETECT]?.let { put("auto_lang_detect", it) }
         prefs[KEY_DEDUPLICATE_CONTENT]?.let { put("deduplicate_content", it) }
         prefs[KEY_EPG_MINI_PLAYER]?.let { put("epg_mini_player", it) }
         prefs[KEY_KEYBOARD_FONT_SCALE]?.let { put("keyboard_font_scale", it) }
@@ -198,10 +162,6 @@ suspend fun Context.applySyncedPlayerPrefs(settings: Map<String, Any?>) {
     playerPrefsDataStore.edit { prefs ->
         (settings["auto_frame_rate"] as? Boolean)?.let { prefs[KEY_AUTO_FRAME_RATE] = it }
         (settings["smart_buffer"] as? Boolean)?.let { prefs[KEY_SMART_BUFFER] = it }
-        (settings["whisper_subtitles"] as? Boolean)?.let { prefs[KEY_WHISPER_SUBTITLES] = it }
-        (settings["whisper_translate_to_en"] as? Boolean)?.let { prefs[KEY_WHISPER_TRANSLATE_TO] = it }
-        (settings["whisper_autostart_live"] as? Boolean)?.let { prefs[KEY_WHISPER_AUTOSTART_LIVE] = it }
-        (settings["auto_lang_detect"] as? Boolean)?.let { prefs[KEY_AUTO_LANG_DETECT] = it }
         (settings["deduplicate_content"] as? Boolean)?.let { prefs[KEY_DEDUPLICATE_CONTENT] = it }
         (settings["epg_mini_player"] as? Boolean)?.let { prefs[KEY_EPG_MINI_PLAYER] = it }
         (settings["keyboard_font_scale"] as? Number)?.toFloat()?.let { prefs[KEY_KEYBOARD_FONT_SCALE] = it }

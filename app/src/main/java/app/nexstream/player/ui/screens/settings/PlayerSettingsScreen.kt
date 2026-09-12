@@ -29,14 +29,8 @@ import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
-import app.nexstream.player.ui.theme.getWhisperSubtitlesFlow
-import app.nexstream.player.ui.theme.getWhisperAutostartLiveFlow
-import app.nexstream.player.ui.theme.getAutoLangDetectFlow
 import app.nexstream.player.ui.theme.saveAutoFrameRate
 import app.nexstream.player.ui.theme.saveSmartBuffer
-import app.nexstream.player.ui.theme.saveWhisperSubtitles
-import app.nexstream.player.ui.theme.saveWhisperAutostartLive
-import app.nexstream.player.ui.theme.saveAutoLangDetect
 import app.nexstream.player.ui.screens.player.ExternalPlayerManager
 import app.nexstream.player.ui.theme.getExtPlayerLiveTvFlow
 import app.nexstream.player.ui.theme.getExtPlayerMoviesFlow
@@ -68,9 +62,6 @@ fun PlayerSettingsScreen(
 
     val autoFrameRate        by context.getAutoFrameRateFlow().collectAsState(initial = true)
     val smartBuffer          by context.getSmartBufferFlow().collectAsState(initial = true)
-    val whisperSubtitles     by context.getWhisperSubtitlesFlow().collectAsState(initial = false)
-    val whisperAutoStartLive by context.getWhisperAutostartLiveFlow().collectAsState(initial = false)
-    val autoLangDetect       by context.getAutoLangDetectFlow().collectAsState(initial = false)
 
     val adminNotifsEnabled by context.getAdminNotificationsEnabledFlow(profileId).collectAsState(initial = true)
     val epgTimeOffset      by context.getEpgTimeOffsetFlow().collectAsState(initial = 0)
@@ -292,38 +283,6 @@ fun PlayerSettingsScreen(
                     showDivider = false,
                 )
             }
-
-            // ── Privacy ───────────────────────────────────────────────────────
-            SettingsSectionContainer(
-                title = stringResource(R.string.player_section_privacy),
-                icon = Icons.Default.Security,
-                uiStyle = uiStyle
-            ) {
-                SettingsToggle(
-                    label = stringResource(R.string.player_whisper_label),
-                    description = stringResource(R.string.player_whisper_desc),
-                    checked = whisperSubtitles,
-                    uiStyle = uiStyle,
-                    onToggle = { scope.launch { context.saveWhisperSubtitles(!whisperSubtitles) } }
-                )
-                if (whisperSubtitles) {
-                    SettingsToggle(
-                        label = stringResource(R.string.player_whisper_autostart_label),
-                        description = stringResource(R.string.player_whisper_autostart_desc),
-                        checked = whisperAutoStartLive,
-                        uiStyle = uiStyle,
-                        onToggle = { scope.launch { context.saveWhisperAutostartLive(!whisperAutoStartLive) } }
-                    )
-                }
-                SettingsToggle(
-                    label = stringResource(R.string.player_auto_lang_label),
-                    description = stringResource(R.string.player_auto_lang_desc),
-                    checked = autoLangDetect,
-                    uiStyle = uiStyle,
-                    onToggle = { scope.launch { context.saveAutoLangDetect(!autoLangDetect) } }
-                )
-            }
-
 
             // ── Notifications ─────────────────────────────────────────────────
             SettingsSectionContainer(

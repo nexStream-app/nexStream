@@ -9,7 +9,6 @@ import app.nexstream.player.data.sync.ProgressSyncManager
 import app.nexstream.player.license.TrialManager
 import app.nexstream.player.subtitle.SubtitleManager
 import app.nexstream.player.subtitle.SubtitlePreferences
-import app.nexstream.player.subtitle.WhisperSubtitleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -24,7 +23,6 @@ class PlayerViewModel @Inject constructor(
     val trialManager:               TrialManager,
     val subtitleManager:            SubtitleManager,
     val subtitlePreferences:        SubtitlePreferences,
-    val whisperSubtitleManager:     WhisperSubtitleManager
 ) : ViewModel() {
 
     suspend fun getMovieById(movieId: String)     = repository.getMovieByIdOnce(movieId)

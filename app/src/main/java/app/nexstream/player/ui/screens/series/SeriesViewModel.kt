@@ -9,7 +9,6 @@ import app.nexstream.player.data.local.entity.PlaylistEntity
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
-import app.nexstream.player.subtitle.WhisperSubtitleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -19,7 +18,6 @@ import javax.inject.Inject
 class SeriesViewModel @Inject constructor(
     val repository: PlaylistRepository,
     val progressRepository: WatchProgressRepository,
-    val whisperSubtitleManager: WhisperSubtitleManager
 ) : ViewModel() {
 
     @Inject lateinit var profileManager: ProfileManager

@@ -52,11 +52,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nexstream.player.data.local.entity.EpisodeEntity
 import app.nexstream.player.data.local.entity.SeriesEntity
-import app.nexstream.player.subtitle.WhisperSubtitleManager
 import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalNsBackground
-import app.nexstream.player.ui.theme.saveWhisperSubtitles
-import app.nexstream.player.ui.theme.saveWhisperTranslateTo
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -67,12 +64,6 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
-// Whisper only: transcribe (output in detected language) or translate (always English)
-private val VOICE_SUBTITLE_MODES = listOf<Pair<Boolean?, String>>(
-    null  to "None",
-    false to "Transcribe",
-    true  to "→ English"
-)
 
 private fun extractYoutubeId(url: String): String? {
     val patterns = listOf(
@@ -158,7 +149,6 @@ fun SeriesDetailsDialog(
     onDownloadEpisode: ((streamUrl: String, title: String) -> Unit)? = null,
     onFetchCertification: (suspend () -> String?)? = null,
     onFetchOriginalLanguage: (suspend () -> String?)? = null,
-    whisperManager: WhisperSubtitleManager? = null,
     onRatingOverride: ((String) -> Unit)? = null,
     playlistName: String? = null,
     onFetchTrailerUrl: (suspend () -> String?)? = null,
@@ -199,8 +189,6 @@ fun SeriesDetailsDialog(
     val seasonsLoaded   = seasons.isNotEmpty()
 
     val context = LocalContext.current
-    val voiceTranslateOptions = VOICE_SUBTITLE_MODES
-    val showVoiceTranslate = whisperManager != null
 
     var trailerUrl by remember(series.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(series.id) {
@@ -220,9 +208,8 @@ fun SeriesDetailsDialog(
     val hasGoToSeries  = onGoToSeries != null
     val goToSeriesIdx  = if (hasGoToSeries) 2 else -1
     val seasonBaseIdx  = 2 + (if (hasGoToSeries) 1 else 0)
-    val whisperBtnIdx  = seasonBaseIdx + (if (hasMultiSeason) 1 else 0)
-    val trailerBtnIdx  = if (hasTrailer) whisperBtnIdx + (if (showVoiceTranslate) 1 else 0) else -1
-    val barButtonCount = 2 + (if (hasGoToSeries) 1 else 0) + (if (hasMultiSeason) 1 else 0) + (if (showVoiceTranslate) 1 else 0) + trailerCount
+    val trailerBtnIdx  = if (hasTrailer) seasonBaseIdx + (if (hasMultiSeason) 1 else 0) else -1
+    val barButtonCount = 2 + (if (hasGoToSeries) 1 else 0) + (if (hasMultiSeason) 1 else 0) + trailerCount
 
     var selectedButton  by remember { mutableStateOf(if (hasMultiSeason) seasonBaseIdx else 1) }
     var pressedButton   by remember { mutableStateOf<Int?>(null) }
@@ -235,7 +222,6 @@ fun SeriesDetailsDialog(
     var focusedGridIndex by remember { mutableStateOf(defaultIndex) }
     var infoBarState     by remember { mutableStateOf<InfoBarState>(InfoBarState.Idle) }
     var overlayButton    by remember { mutableStateOf(0) }
-    var voiceTranslateIndex by remember { mutableStateOf(0) }
 
     val focusedEpisode = remember(focusedGridIndex, episodesForSeason) {
         episodesForSeason.getOrNull(focusedGridIndex)
@@ -332,28 +318,11 @@ fun SeriesDetailsDialog(
         }
     }
 
-    fun playWithWhisper(action: () -> Unit) {
-        if (whisperManager == null) { action(); return }
-        val mode = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.first  // null=None, false=Transcribe, true=→EN
-        if (mode == null) {
-            scope.launch { context.saveWhisperSubtitles(false); action() }
-            return
-        }
-        whisperManager.setTranslateToEnglish(mode)
-        scope.launch {
-            context.saveWhisperSubtitles(true)
-            context.saveWhisperTranslateTo(mode)
-            action()
-        }
-    }
-
     fun playEp(ep: EpisodeEntity, fromStart: Boolean) {
         val resumePos = episodeProgressMap[ep.id] ?: 0L
-        playWithWhisper {
-            onPlayEpisode(ep.streamUrl, ep.id,
-                if (!fromStart && resumePos > 0L) resumePos else 0L,
-                series.id, series.name, ep.seasonNum, ep.episodeNum, ep.name)
-        }
+        onPlayEpisode(ep.streamUrl, ep.id,
+            if (!fromStart && resumePos > 0L) resumePos else 1L,
+            series.id, series.name, ep.seasonNum, ep.episodeNum, ep.name)
     }
 
     if (showRatingPicker) {
@@ -620,8 +589,6 @@ function onYouTubeIframeAPIReady(){
                                             btn == 1 -> onToggleWatchlist()
                                             btn == goToSeriesIdx && hasGoToSeries -> onGoToSeries?.invoke()
                                             btn == seasonBaseIdx && hasMultiSeason -> seasonDropdownExpanded = true
-                                            btn == whisperBtnIdx && showVoiceTranslate ->
-                                                voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size
                                             btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() -> showTrailer = !showTrailer
                                         }
                                     }
@@ -828,17 +795,6 @@ function onYouTubeIframeAPIReady(){
                                                 }
                                             }
                                         }
-                                    }
-                                    if (showVoiceTranslate) {
-                                        val modeLabel = voiceTranslateOptions.getOrNull(voiceTranslateIndex)?.second ?: "None"
-                                        DialogActionPill(
-                                            icon      = Icons.Default.RecordVoiceOver,
-                                            label     = "AI: $modeLabel",
-                                            selected  = !inGrid && selectedButton == whisperBtnIdx,
-                                            isPressed = pressedButton == whisperBtnIdx,
-                                            accent    = accent,
-                                            onClick   = { voiceTranslateIndex = (voiceTranslateIndex + 1) % voiceTranslateOptions.size },
-                                        )
                                     }
                                 }
                             }
