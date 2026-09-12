@@ -61,7 +61,6 @@ nexStream is a premium IPTV and media player for **all Android devices** — And
 ### ▶️ Player
 - **ExoPlayer (Media3)** with FFmpeg decoder extension for maximum format support
 - Subtitles from [SubDL](https://subdl.com/) — search and download subtitles in multiple languages
-- **AI-powered subtitle generation** using Groq — automatic captions for streams without subtitles
 - Subtitle delay adjustment (sync offset)
 - Playback speed control (0.25× – 4×)
 - Sleep timer
@@ -158,9 +157,40 @@ A free trial is available with no payment details required.
 
 ---
 
-## What's New in the Latest Release
+## What's New
 
-See the full changelog in [Releases](https://github.com/nexStream-app/nexStream/releases).
+### Build 0278
+- **Voice search on Fire TV** — tap the mic button in the keyboard to search by voice using the Fire TV microphone
+- Fixed square-edged focus highlight on the search bar — now correctly follows the rounded pill shape
+- Fixed square-edged focus highlight on the mic button — now circular
+
+### Build 0277
+- Locked navigation items (Movies, Series, Search, etc.) now show a padlock and redirect to the licence screen when unlicensed
+- Removed experimental AI subtitle generation
+
+### Build 0276
+- Series trailer now hides all player controls while playing, for a cleaner full-screen experience
+
+### Build 0271
+- EPG now auto-refreshes when the current programme ends, so "Now / Next" always shows live information
+
+### Build 0270
+- Aspect ratio handling rewritten at the Compose level for Android TV — fixes stretching on Allwinner and similar boxes
+
+### Build 0269
+- Search bar now shows a confirmation dialog before clearing a long query
+- Language selection prompt now receives correct D-pad focus on TV
+- Player overlay gradient improved for better readability
+
+### Build 0257
+- Playlists now auto-refresh every 24 hours in the background
+- Watchlisted series highlight new episodes since you last watched
+
+### Build 0256
+- Sports channel picker dialog fixed on TV D-pad
+- Recently Watched now shows sensible fallback content when history is empty
+
+See all releases at [Releases](https://github.com/nexStream-app/nexStream/releases).
 
 ---
 
@@ -179,7 +209,7 @@ A: Yes — nexStream works perfectly on Android phones and tablets, as well as T
 A: Yes — add it as a playlist source in Settings. For Plex, you'll authenticate with a PIN; for Jellyfin, use your server URL and credentials.
 
 **Q: Are subtitles supported?**  
-A: Yes — automatic subtitle search via SubDL, with AI-generated captions for streams that don't have them.
+A: Yes — automatic subtitle search and download via SubDL, with support for multiple languages.
 
 ---
 
