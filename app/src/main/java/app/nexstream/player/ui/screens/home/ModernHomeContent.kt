@@ -298,6 +298,45 @@ fun ModernHomeContent(
                 }
             }
 
+            // ── Time header chips ─────────────────────────────────────
+            if (upcomingEvents.isNotEmpty()) {
+                val upcomingHours = remember(upcomingEvents) {
+                    upcomingEvents.mapNotNull { e ->
+                        e.timeUk.split(":").firstOrNull()?.toIntOrNull()
+                    }.distinct().sorted()
+                }
+                val currentHour = currentUkMinutes / 60
+                LazyRow(
+                    contentPadding        = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(upcomingHours) { hour ->
+                        val isCurrentHour = hour == currentHour
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (isCurrentHour) accent.copy(alpha = 0.25f)
+                                    else textSecondary.copy(alpha = 0.1f)
+                                )
+                                .then(
+                                    if (isCurrentHour) Modifier.border(1.dp, accent, RoundedCornerShape(16.dp))
+                                    else Modifier
+                                )
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text       = String.format("%02d:00", hour),
+                                fontSize   = 11.sp,
+                                color      = if (isCurrentHour) accent else textSecondary,
+                                fontWeight = if (isCurrentHour) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+            }
+
             // ── Upcoming by category ──────────────────────────────────
             val sportGroups = remember(upcomingEvents, sportsCategoryOrder) {
                 val grouped = upcomingEvents.groupBy { it.sportCategory }
@@ -708,8 +747,20 @@ private fun SportEventCard(
             }
             .clickable(enabled = !past) { showDialog = true }
             .focusable()
-            .padding(12.dp)
     ) {
+        if (live) {
+            val startMs = parseUtcIsoMs(event.startUtc) ?: 0L
+            val endMs   = event.endEpochMs ?: (startMs + 120 * 60_000L)
+            val elapsed = ((System.currentTimeMillis() - startMs).toFloat() / (endMs - startMs).toFloat()).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(elapsed)
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .align(Alignment.CenterStart)
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Column(
             modifier            = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -816,7 +867,8 @@ private fun SportEventCard(
                 )
             }
         }
-    }
+        } // inner content Box
+    } // outer card Box
 
     if (showDialog) {
         SportEventDialog(
