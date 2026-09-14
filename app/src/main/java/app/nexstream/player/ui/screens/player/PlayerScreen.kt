@@ -1291,10 +1291,44 @@ fun PlayerScreen(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
 
-                    // Full-screen scrim graduating from transparent at top to dark at bottom
+                    // Full-screen scrim: 20% black at top graduating to full black at bottom
                     Box(modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)))
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0f to Color.Black.copy(alpha = 0.20f),
+                                1f to Color.Black.copy(alpha = 1f)
+                            )
+                        )
                     ))
+
+                    // Quality badge — top-right corner, always visible when controls are shown
+                    if (videoQualityLabel != null && !isCasting) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.Black.copy(alpha = 0.55f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Hd,
+                                    contentDescription = null,
+                                    tint = controlText.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text  = videoQualityLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = controlText.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
+                    }
 
                     // ── Close button (PIP mode only on mobile/tablet) ─────────
                     if (!isTv && isInPipMode) {
@@ -1468,36 +1502,6 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Stream quality badge
-                        if (videoQualityLabel != null && !isCasting) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = Color.Black.copy(alpha = 0.55f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Hd,
-                                            contentDescription = null,
-                                            tint = controlText.copy(alpha = 0.75f),
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text  = videoQualityLabel,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = controlText.copy(alpha = 0.75f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
 
                         // ── ICONS ROW: aspect ratio + cast (phone-only, hidden on TV) ────
                         if (iconButtons.isNotEmpty()) {
