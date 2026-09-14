@@ -77,7 +77,7 @@ import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 private enum class MovieSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), AGE_RATING("Age Rating")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
 }
 
 private val AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
@@ -200,6 +200,7 @@ fun MoviesScreen(
                 MovieSortOrder.Z_A             -> filtered.sortedByDescending { it.name.lowercase() }
                 MovieSortOrder.RATING          -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
                 MovieSortOrder.RECENTLY_ADDED  -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
+                MovieSortOrder.OLDEST_RELEASE  -> filtered.sortedBy { parseReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
                 MovieSortOrder.AGE_RATING      -> filtered.sortedBy { movieCertOrder(it.certification) }
             }
         }

@@ -61,7 +61,7 @@ import app.nexstream.player.ui.theme.getSeriesSortOrderFlow
 import app.nexstream.player.ui.theme.saveSeriesSortOrder
 
 private enum class SeriesSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), AGE_RATING("Age Rating")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
 }
 
 private val SERIES_AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
@@ -153,6 +153,7 @@ fun SeriesScreen(
                 SeriesSortOrder.Z_A            -> filtered.sortedByDescending { it.name.lowercase() }
                 SeriesSortOrder.RATING         -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
                 SeriesSortOrder.RECENTLY_ADDED -> filtered.sortedByDescending { parseSeriesReleaseDateSortKey(it.releaseDate) }
+                SeriesSortOrder.OLDEST_RELEASE -> filtered.sortedBy { parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
                 SeriesSortOrder.AGE_RATING     -> filtered.sortedBy { seriesCertOrder(it.certification) }
             }
         }

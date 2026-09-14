@@ -71,6 +71,9 @@ interface MovieDao {
     @Query("UPDATE movies SET originalLanguage = :lang WHERE id = :id")
     suspend fun updateOriginalLanguage(id: String, lang: String)
 
+    @Query("UPDATE movies SET releaseDate = :releaseDate WHERE id = :id")
+    suspend fun updateReleaseDate(id: String, releaseDate: String)
+
     @Query("UPDATE movies SET `cast` = :cast, director = :director WHERE id = :id")
     suspend fun updateCastAndDirector(id: String, cast: String?, director: String?)
 

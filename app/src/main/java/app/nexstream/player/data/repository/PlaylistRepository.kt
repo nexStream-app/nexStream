@@ -2039,7 +2039,6 @@ class PlaylistRepository @Inject constructor(
 
     // ── TMDB certification fetch ──────────────────────────────────────────────
 
-    private val tmdbToken = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhYzA2NjBlNjM2MGVlNDE0NmQyNDA3MzUyOTQ2ZmRkYiIsIm5iZiI6MTc3Njg3MzQ2OS4wNjA5OTk5LCJzdWIiOiI2OWU4ZWZmZDQyM2ZhZDJlYzhlMGNmY2QiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.1gbVrIUZezfVmRoFk692A__HsaO9GahlPeMT6h2JBKo"
     private val tmdbHttpClient = OkHttpClient()
     // Prevents the startup cert sweep and a concurrent import cert sweep from running simultaneously
     private val tmdbBatchMutex = kotlinx.coroutines.sync.Mutex()
@@ -2071,30 +2070,40 @@ class PlaylistRepository @Inject constructor(
             .filter { it.certification == null }
         android.util.Log.d("TMDB", "Certifications to fetch for ${movies.size} movies")
         if (movies.isEmpty()) return@withContext
-        // Collect all results first; single transaction at end → one Room invalidation instead of one per movie
-        val updates = mutableListOf<Pair<String, String>>()
+        val certUpdates = mutableListOf<Pair<String, String>>()
+        val dateUpdates = mutableListOf<Pair<String, String>>()
+        val langUpdates = mutableListOf<Pair<String, String>>()
         for (movie in movies) {
             try {
-                val tmdbId = tmdbSearchId(movie.name, "movie")
-                val cert = if (tmdbId != null) tmdbMovieCert(tmdbId)?.takeIf { it in KNOWN_CERTS } else null
-                updates += movie.id to (cert ?: "NR")
+                val obj  = fetchTmdbProxy(cleanTitleForTmdb(movie.name), "movie")
+                val cert = obj?.optString("certification")?.takeIf { it.isNotEmpty() && it in KNOWN_CERTS } ?: "NR"
+                val date = obj?.optString("release_date")?.takeIf { it.isNotEmpty() }
+                val lang = obj?.optString("original_language")?.takeIf { it.isNotEmpty() }
+                certUpdates += movie.id to cert
+                if (date != null) dateUpdates += movie.id to date
+                if (lang != null) langUpdates += movie.id to lang
                 delay(500)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
         database.withTransaction {
-            for ((id, cert) in updates) database.movieDao().updateCertification(id, cert)
+            for ((id, cert) in certUpdates) database.movieDao().updateCertification(id, cert)
+            for ((id, date) in dateUpdates) database.movieDao().updateReleaseDate(id, date)
+            for ((id, lang) in langUpdates) database.movieDao().updateOriginalLanguage(id, lang)
         }
     }
 
     suspend fun fetchCertificationForMovieSingle(movieId: String, movieName: String): String? = withContext(Dispatchers.IO) {
         try {
-            val tmdbId = tmdbSearchId(movieName, "movie") ?: return@withContext null
-            val cert = tmdbMovieCert(tmdbId)
-            val toSave = cert?.takeIf { it in KNOWN_CERTS } ?: "NR"
-            database.movieDao().updateCertification(movieId, toSave)
-            toSave
+            val obj  = fetchTmdbProxy(cleanTitleForTmdb(movieName), "movie") ?: return@withContext null
+            val cert = obj.optString("certification").takeIf { it.isNotEmpty() && it in KNOWN_CERTS } ?: "NR"
+            val date = obj.optString("release_date").takeIf { it.isNotEmpty() }
+            val lang = obj.optString("original_language").takeIf { it.isNotEmpty() }
+            database.movieDao().updateCertification(movieId, cert)
+            if (date != null) database.movieDao().updateReleaseDate(movieId, date)
+            if (lang != null) database.movieDao().updateOriginalLanguage(movieId, lang)
+            cert
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchCertMovie error for '$movieName': $e")
             null
@@ -2102,19 +2111,15 @@ class PlaylistRepository @Inject constructor(
     }
 
     suspend fun fetchCertificationForSeriesSingle(seriesId: String, seriesName: String): String? = withContext(Dispatchers.IO) {
-        android.util.Log.d("TMDB", "fetchCertSingle: seriesId=$seriesId name='$seriesName'")
         try {
-            val cleaned = cleanTitleForTmdb(seriesName)
-            android.util.Log.d("TMDB", "fetchCertSingle: cleaned title='$cleaned'")
-            val tmdbId = tmdbSearchId(seriesName, "tv")
-            android.util.Log.d("TMDB", "fetchCertSingle: tmdbId=$tmdbId")
-            if (tmdbId == null) return@withContext null
-            val cert = tmdbTvCert(tmdbId)
-            android.util.Log.d("TMDB", "fetchCertSingle: cert='$cert' inKnownCerts=${cert != null && cert in KNOWN_CERTS}")
-            val toSave = cert?.takeIf { it in KNOWN_CERTS } ?: "NR"
-            database.seriesDao().updateCertification(seriesId, toSave)
-            android.util.Log.d("TMDB", "fetchCertSingle: saved '$toSave' for seriesId=$seriesId")
-            toSave
+            val obj  = fetchTmdbProxy(cleanTitleForTmdb(seriesName), "tv") ?: return@withContext null
+            val cert = obj.optString("certification").takeIf { it.isNotEmpty() && it in KNOWN_CERTS } ?: "NR"
+            val date = obj.optString("release_date").takeIf { it.isNotEmpty() }
+            val lang = obj.optString("original_language").takeIf { it.isNotEmpty() }
+            database.seriesDao().updateCertification(seriesId, cert)
+            if (date != null) database.seriesDao().updateReleaseDate(seriesId, date)
+            if (lang != null) database.seriesDao().updateOriginalLanguage(seriesId, lang)
+            cert
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchCertSingle error for '$seriesName': $e")
             null
@@ -2122,14 +2127,14 @@ class PlaylistRepository @Inject constructor(
     }
 
     suspend fun fetchOriginalLanguageForMovieSingle(movieId: String, movieName: String): String? = withContext(Dispatchers.IO) {
-        android.util.Log.d("TMDB", "fetchOrigLangMovie: id=$movieId name='$movieName'")
         try {
-            val lang = tmdbSearchOriginalLanguage(movieName, "movie") ?: run {
-                android.util.Log.w("TMDB", "fetchOrigLangMovie: no lang found for '$movieName'")
-                return@withContext null
-            }
+            val obj  = fetchTmdbProxy(cleanTitleForTmdb(movieName), "movie") ?: return@withContext null
+            val lang = obj.optString("original_language").takeIf { it.isNotEmpty() } ?: return@withContext null
+            val cert = obj.optString("certification").takeIf { it.isNotEmpty() && it in KNOWN_CERTS }
+            val date = obj.optString("release_date").takeIf { it.isNotEmpty() }
             database.movieDao().updateOriginalLanguage(movieId, lang)
-            android.util.Log.d("TMDB", "fetchOrigLangMovie: saved lang=$lang for '$movieName'")
+            if (cert != null) database.movieDao().updateCertification(movieId, cert)
+            if (date != null) database.movieDao().updateReleaseDate(movieId, date)
             lang
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchOrigLangMovie error for '$movieName': $e")
@@ -2139,8 +2144,13 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun fetchOriginalLanguageForSeriesSingle(seriesId: String, seriesName: String): String? = withContext(Dispatchers.IO) {
         try {
-            val lang = tmdbSearchOriginalLanguage(seriesName, "tv") ?: return@withContext null
+            val obj  = fetchTmdbProxy(cleanTitleForTmdb(seriesName), "tv") ?: return@withContext null
+            val lang = obj.optString("original_language").takeIf { it.isNotEmpty() } ?: return@withContext null
+            val cert = obj.optString("certification").takeIf { it.isNotEmpty() && it in KNOWN_CERTS }
+            val date = obj.optString("release_date").takeIf { it.isNotEmpty() }
             database.seriesDao().updateOriginalLanguage(seriesId, lang)
+            if (cert != null) database.seriesDao().updateCertification(seriesId, cert)
+            if (date != null) database.seriesDao().updateReleaseDate(seriesId, date)
             lang
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchOrigLangSeries error for '$seriesName': $e")
@@ -2153,12 +2163,18 @@ class PlaylistRepository @Inject constructor(
             .filter { it.certification == null }
         android.util.Log.d("TMDB", "Series certs to fetch: ${seriesList.size}")
         if (seriesList.isEmpty()) return@withContext
-        val updates = mutableListOf<Pair<String, String>>()
+        val certUpdates = mutableListOf<Pair<String, String>>()
+        val dateUpdates = mutableListOf<Pair<String, String>>()
+        val langUpdates = mutableListOf<Pair<String, String>>()
         for (series in seriesList) {
             try {
-                val tmdbId = tmdbSearchId(series.name, "tv")
-                val cert = if (tmdbId != null) tmdbTvCert(tmdbId)?.takeIf { it in KNOWN_CERTS } else null
-                updates += series.id to (cert ?: "NR")
+                val obj  = fetchTmdbProxy(cleanTitleForTmdb(series.name), "tv")
+                val cert = obj?.optString("certification")?.takeIf { it.isNotEmpty() && it in KNOWN_CERTS } ?: "NR"
+                val date = obj?.optString("release_date")?.takeIf { it.isNotEmpty() }
+                val lang = obj?.optString("original_language")?.takeIf { it.isNotEmpty() }
+                certUpdates += series.id to cert
+                if (date != null) dateUpdates += series.id to date
+                if (lang != null) langUpdates += series.id to lang
                 delay(500)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2166,28 +2182,13 @@ class PlaylistRepository @Inject constructor(
             }
         }
         database.withTransaction {
-            for ((id, cert) in updates) database.seriesDao().updateCertification(id, cert)
+            for ((id, cert) in certUpdates) database.seriesDao().updateCertification(id, cert)
+            for ((id, date) in dateUpdates) database.seriesDao().updateReleaseDate(id, date)
+            for ((id, lang) in langUpdates) database.seriesDao().updateOriginalLanguage(id, lang)
         }
     }
 
     // ── TMDB trailer fetch ────────────────────────────────────────────────────
-
-    private fun tmdbTrailerKey(tmdbId: Int, type: String): String? {
-        val url = "https://api.themoviedb.org/3/$type/$tmdbId/videos"
-        val body = tmdbHttpClient.newCall(
-            okhttp3.Request.Builder().url(url).addHeader("Authorization", "Bearer $tmdbToken").build()
-        ).execute().body?.string() ?: return null
-        val results = org.json.JSONObject(body).optJSONArray("results") ?: return null
-        for (preferred in listOf("Trailer", "Teaser", "Clip")) {
-            for (i in 0 until results.length()) {
-                val item = results.getJSONObject(i)
-                if (item.optString("site") == "YouTube" && item.optString("type") == preferred) {
-                    return item.optString("key").takeIf { it.isNotBlank() }
-                }
-            }
-        }
-        return null
-    }
 
     suspend fun fetchTrailerUrlForMovie(movieName: String): String? = withContext(Dispatchers.IO) {
         try {
@@ -2308,17 +2309,6 @@ class PlaylistRepository @Inject constructor(
 
     companion object {
         private val KNOWN_CERTS = setOf("U", "PG", "12", "12A", "15", "18", "R18", "G", "PG-13", "R", "NC-17")
-
-        // US TV ratings → UK BBFC equivalents (applied when no GB rating is found)
-        private val US_TV_TO_UK = mapOf(
-            "TV-MA" to "18",
-            "TV-14" to "15",
-            "TV-PG" to "PG",
-            "TV-G"  to "U",
-            "TV-Y7" to "PG",
-            "TV-Y"  to "U",
-            "NR"    to null,
-        )
     }
 
     private fun cleanTitleForTmdb(title: String): String {
@@ -2335,147 +2325,4 @@ class PlaylistRepository @Inject constructor(
         return s.trim()
     }
 
-    private fun tmdbSearchOriginalLanguage(title: String, preferType: String): String? {
-        val cleaned = cleanTitleForTmdb(title)
-        val encoded = java.net.URLEncoder.encode(cleaned, "UTF-8")
-        val url = "https://api.themoviedb.org/3/search/multi?query=$encoded&language=en-US&include_adult=false&page=1"
-        val body = tmdbHttpClient.newCall(
-            okhttp3.Request.Builder().url(url).addHeader("Authorization", "Bearer $tmdbToken").build()
-        ).execute().body?.string() ?: run {
-            android.util.Log.w("TMDB", "tmdbSearchOrigLang: empty body for '$cleaned' (type=$preferType)")
-            return null
-        }
-        val results = org.json.JSONObject(body).optJSONArray("results") ?: run {
-            android.util.Log.w("TMDB", "tmdbSearchOrigLang: no results array for '$cleaned'")
-            return null
-        }
-        android.util.Log.d("TMDB", "tmdbSearchOrigLang: '$cleaned' (want=$preferType) → ${results.length()} results")
-        var fallbackLang: String? = null
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            val type = item.optString("media_type")
-            val name = item.optString("title").ifEmpty { item.optString("name") }
-            val lang = item.optString("original_language")
-            android.util.Log.d("TMDB", "  result[$i] type=$type name='$name' lang=$lang")
-            if (type == preferType) {
-                android.util.Log.d("TMDB", "tmdbSearchOrigLang: matched '$name' → lang=$lang")
-                return lang.takeIf { it.isNotEmpty() }
-            }
-            if (fallbackLang == null && type != "person" && lang.isNotEmpty()) {
-                fallbackLang = lang
-            }
-        }
-        if (fallbackLang != null) {
-            android.util.Log.d("TMDB", "tmdbSearchOrigLang: no '$preferType' result — using fallback lang=$fallbackLang for '$cleaned'")
-            return fallbackLang
-        }
-        android.util.Log.w("TMDB", "tmdbSearchOrigLang: no usable result for '$cleaned'")
-        return null
-    }
-
-    private fun tmdbSearchId(title: String, preferType: String): Int? {
-        val cleaned = cleanTitleForTmdb(title)
-        val encoded = java.net.URLEncoder.encode(cleaned, "UTF-8")
-        val url = "https://api.themoviedb.org/3/search/multi?query=$encoded&language=en-US&include_adult=false&page=1"
-        val body = tmdbHttpClient.newCall(
-            okhttp3.Request.Builder().url(url).addHeader("Authorization", "Bearer $tmdbToken").build()
-        ).execute().body?.string() ?: run {
-            android.util.Log.w("TMDB", "tmdbSearchId: empty body for '$cleaned'")
-            return null
-        }
-        val results = org.json.JSONObject(body).optJSONArray("results") ?: run {
-            android.util.Log.w("TMDB", "tmdbSearchId: no results array for '$cleaned'")
-            return null
-        }
-        android.util.Log.d("TMDB", "tmdbSearchId: '$cleaned' → ${results.length()} results")
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            val type = item.optString("media_type")
-            val id   = item.optInt("id")
-            val name = item.optString("title").ifEmpty { item.optString("name") }
-            android.util.Log.d("TMDB", "  result[$i] type=$type id=$id name='$name'")
-            if (type == preferType) {
-                android.util.Log.d("TMDB", "tmdbSearchId: matched '$name' id=$id")
-                return id
-            }
-        }
-        android.util.Log.w("TMDB", "tmdbSearchId: no $preferType match for '$cleaned'")
-        return null
-    }
-
-    private fun tmdbMovieCert(tmdbId: Int): String? {
-        val url = "https://api.themoviedb.org/3/movie/$tmdbId/release_dates"
-        val body = tmdbHttpClient.newCall(
-            okhttp3.Request.Builder().url(url).addHeader("Authorization", "Bearer $tmdbToken").build()
-        ).execute().body?.string() ?: return null
-        val results = org.json.JSONObject(body).optJSONArray("results") ?: return null
-        return tmdbFindReleaseCert(results, "GB") ?: tmdbFindReleaseCert(results, "US")
-    }
-
-    private fun tmdbFindReleaseCert(results: org.json.JSONArray, country: String): String? {
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            if (item.optString("iso_3166_1") == country) {
-                val dates = item.optJSONArray("release_dates") ?: continue
-                for (j in 0 until dates.length()) {
-                    val cert = dates.getJSONObject(j).optString("certification").takeIf { it.isNotEmpty() }
-                    if (cert != null) return cert
-                }
-            }
-        }
-        return null
-    }
-
-    private fun tmdbTvCert(tmdbId: Int): String? {
-        val url = "https://api.themoviedb.org/3/tv/$tmdbId/content_ratings"
-        val body = tmdbHttpClient.newCall(
-            okhttp3.Request.Builder().url(url).addHeader("Authorization", "Bearer $tmdbToken").build()
-        ).execute().body?.string() ?: run {
-            android.util.Log.w("TMDB", "tmdbTvCert: empty body for tmdbId=$tmdbId")
-            return null
-        }
-        val results = org.json.JSONObject(body).optJSONArray("results") ?: run {
-            android.util.Log.w("TMDB", "tmdbTvCert: no results for tmdbId=$tmdbId")
-            return null
-        }
-        // Log all available country ratings to aid debugging
-        android.util.Log.d("TMDB", "tmdbTvCert: tmdbId=$tmdbId ratings available:")
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            android.util.Log.d("TMDB", "  ${item.optString("iso_3166_1")}=${item.optString("rating")}")
-        }
-        val gbCert = tmdbFindTvCert(results, "GB")
-        if (gbCert != null) {
-            android.util.Log.d("TMDB", "tmdbTvCert: using GB cert '$gbCert'")
-            return gbCert
-        }
-        val usCert = tmdbFindTvCert(results, "US")
-        if (usCert != null) {
-            val ukEquiv = US_TV_TO_UK[usCert]
-            android.util.Log.d("TMDB", "tmdbTvCert: no GB cert, US='$usCert' → UK='$ukEquiv'")
-            return ukEquiv
-        }
-        // Fallback: scan all countries for any cert we directly recognise
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            val rating = item.optString("rating")
-            if (rating in KNOWN_CERTS) {
-                val country = item.optString("iso_3166_1")
-                android.util.Log.d("TMDB", "tmdbTvCert: fallback $country='$rating'")
-                return rating
-            }
-        }
-        android.util.Log.w("TMDB", "tmdbTvCert: no recognisable cert for tmdbId=$tmdbId")
-        return null
-    }
-
-    private fun tmdbFindTvCert(results: org.json.JSONArray, country: String): String? {
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            if (item.optString("iso_3166_1") == country) {
-                return item.optString("rating").takeIf { it.isNotEmpty() }
-            }
-        }
-        return null
-    }
 }
