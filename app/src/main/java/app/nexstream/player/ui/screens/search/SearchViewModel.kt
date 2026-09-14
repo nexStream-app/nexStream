@@ -396,6 +396,9 @@ class SearchViewModel @Inject constructor(
     suspend fun fetchMovieRtData(movieId: String, movieName: String): RtData? =
         repository.fetchRtDataForMovieSingle(movieId, movieName)
 
+    suspend fun fetchSeriesRtData(seriesId: String, seriesName: String) =
+        repository.fetchRtDataForSeriesSingle(seriesId, seriesName)
+
     suspend fun fetchMovieTrailerUrl(movie: MovieEntity): String? {
         if (!movie.trailerUrl.isNullOrBlank()) return movie.trailerUrl
         return repository.fetchTrailerUrlForMovie(movie.name)

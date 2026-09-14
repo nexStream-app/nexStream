@@ -30,5 +30,7 @@ data class SeriesEntity(
     val playlistId: String,
     val certification:    String? = null,
     val originalLanguage: String? = null,
-    val hasNewEpisodes:   Boolean = false
+    val hasNewEpisodes:   Boolean = false,
+    val rtCriticsScore:   Int?    = null,
+    val metascore:        Int?    = null,
 )

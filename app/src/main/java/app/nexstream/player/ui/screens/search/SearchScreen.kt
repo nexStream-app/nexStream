@@ -416,6 +416,7 @@ fun SearchScreen(
                 },
                 onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                 onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
+                onFetchRtData           = { viewModel.fetchSeriesRtData(displaySeries.id, displaySeries.name) },
                 onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
                 onPlayEpisode           = { streamUrl, _, _, _, seriesName, _, _, episodeName ->
                     onChannelClick(streamUrl, "$seriesName — $episodeName")

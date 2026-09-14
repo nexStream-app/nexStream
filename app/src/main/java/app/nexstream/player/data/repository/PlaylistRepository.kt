@@ -6,7 +6,6 @@ import app.nexstream.player.data.local.entity.PlaylistEntity
 import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.WatchlistEntity
 import app.nexstream.player.data.remote.M3UParser
-import app.nexstream.player.data.remote.RtApiService
 import app.nexstream.player.data.remote.RtData
 import app.nexstream.player.data.remote.XtreamApiService
 import kotlinx.coroutines.flow.Flow
@@ -74,7 +73,6 @@ class PlaylistRepository @Inject constructor(
     private val database: NexStreamDatabase,
     private val profileManager: ProfileManager,
     @ApplicationContext private val appContext: Context,
-    private val rtApiService: RtApiService,
     private val licencePreferences: LicencePreferences,
     private val recentlySyncManager: RecentlySyncManager,
 ) {
@@ -1993,23 +1991,48 @@ class PlaylistRepository @Inject constructor(
         } catch (e: Exception) { null }
     }
 
-    // ── Rotten Tomatoes fetch ─────────────────────────────────────────────────
+    // ── OMDb ratings fetch (via nexstream.uk backend proxy) ──────────────────
+
+    private suspend fun fetchOmdbData(title: String, type: String): org.json.JSONObject? = withContext(Dispatchers.IO) {
+        try {
+            val encoded = java.net.URLEncoder.encode(title, "UTF-8")
+            val url = "https://nexstream.uk/api/omdb.php?title=$encoded&type=$type"
+            val body = tmdbHttpClient.newCall(
+                okhttp3.Request.Builder().url(url).build()
+            ).execute().body?.string() ?: return@withContext null
+            val obj = org.json.JSONObject(body)
+            if (obj.has("error")) null else obj
+        } catch (_: Exception) { null }
+    }
 
     suspend fun fetchRtDataForMovieSingle(movieId: String, movieName: String): RtData? =
         withContext(Dispatchers.IO) {
             try {
-                val resp = rtApiService.searchByName(cleanTitleForTmdb(movieName))
-                val consensus = resp.criticsConsensus
-                    ?.replace("Critics Consensus", "")
-                    ?.replace("Read Critics Reviews", "")
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                if (resp.tomatometerScore != null || resp.audienceScore != null || consensus != null) {
-                    database.movieDao().updateRtData(movieId, resp.tomatometerScore, resp.audienceScore, consensus)
+                val obj = fetchOmdbData(cleanTitleForTmdb(movieName), "movie") ?: return@withContext null
+                val rtScore   = if (obj.isNull("rt_score"))  null else obj.getInt("rt_score")
+                val metascore = if (obj.isNull("metascore")) null else obj.getInt("metascore")
+                if (rtScore != null || metascore != null) {
+                    database.movieDao().updateRtData(movieId, rtScore, null, null, metascore)
                 }
-                RtData(resp.tomatometerScore, resp.audienceScore, consensus)
+                RtData(rtScore, null, null, metascore)
             } catch (e: Exception) {
-                android.util.Log.w("RT", "fetchRt failed for $movieName: ${e.message}")
+                android.util.Log.w("OMDB", "fetchOmdb movie failed for $movieName: ${e.message}")
+                null
+            }
+        }
+
+    suspend fun fetchRtDataForSeriesSingle(seriesId: String, seriesName: String): RtData? =
+        withContext(Dispatchers.IO) {
+            try {
+                val obj = fetchOmdbData(cleanTitleForTmdb(seriesName), "series") ?: return@withContext null
+                val rtScore   = if (obj.isNull("rt_score"))  null else obj.getInt("rt_score")
+                val metascore = if (obj.isNull("metascore")) null else obj.getInt("metascore")
+                if (rtScore != null || metascore != null) {
+                    database.seriesDao().updateRtData(seriesId, rtScore, metascore)
+                }
+                RtData(rtScore, null, null, metascore)
+            } catch (e: Exception) {
+                android.util.Log.w("OMDB", "fetchOmdb series failed for $seriesName: ${e.message}")
                 null
             }
         }

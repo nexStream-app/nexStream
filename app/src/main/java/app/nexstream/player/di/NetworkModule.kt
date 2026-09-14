@@ -2,7 +2,6 @@ package app.nexstream.player.di
 
 import android.content.Context
 import app.nexstream.player.data.remote.RecentlyWatchedApiService
-import app.nexstream.player.data.remote.RtApiService
 import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.data.remote.ThemeApiService
 import app.nexstream.player.data.remote.WatchlistApiService
@@ -147,29 +146,6 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(SportsApiService::class.java)
-    }
-
-    @Provides
-    @Singleton
-    fun provideRtApiService(): RtApiService {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
-                        .addHeader("x-rapidapi-key", "5f6bf6dc08mshc10acb7cff1462ep1d1f1cjsn291de038dc0b")
-                        .addHeader("x-rapidapi-host", "rottentomato.p.rapidapi.com")
-                        .build()
-                )
-            }
-            .build()
-        return Retrofit.Builder()
-            .baseUrl("https://rottentomato.p.rapidapi.com/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(RtApiService::class.java)
     }
 
 }

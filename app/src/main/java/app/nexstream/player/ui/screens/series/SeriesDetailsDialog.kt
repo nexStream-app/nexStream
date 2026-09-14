@@ -149,6 +149,7 @@ fun SeriesDetailsDialog(
     onDownloadEpisode: ((streamUrl: String, title: String) -> Unit)? = null,
     onFetchCertification: (suspend () -> String?)? = null,
     onFetchOriginalLanguage: (suspend () -> String?)? = null,
+    onFetchRtData: (suspend () -> app.nexstream.player.data.remote.RtData?)? = null,
     onRatingOverride: ((String) -> Unit)? = null,
     playlistName: String? = null,
     onFetchTrailerUrl: (suspend () -> String?)? = null,
@@ -249,6 +250,18 @@ fun SeriesDetailsDialog(
         if (displayedLang.isNullOrBlank() && onFetchOriginalLanguage != null) {
             val fetched = onFetchOriginalLanguage()
             if (!fetched.isNullOrBlank()) displayedLang = fetched
+        }
+    }
+
+    var rtCriticsScore by remember(series.id) { mutableStateOf(series.rtCriticsScore) }
+    var metascore      by remember(series.id) { mutableStateOf(series.metascore) }
+    LaunchedEffect(series.id) {
+        if (rtCriticsScore == null && metascore == null && onFetchRtData != null) {
+            val result = onFetchRtData()
+            if (result != null) {
+                rtCriticsScore = result.criticsScore
+                metascore      = result.metascore
+            }
         }
     }
 
@@ -703,6 +716,65 @@ function onYouTubeIframeAPIReady(){
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(Icons.Default.PlaylistPlay, null, modifier = Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.45f))
                             Text(playlistName, fontSize = 11.sp, color = Color.White.copy(alpha = 0.45f), maxLines = 1)
+                        }
+                    }
+                    if (rtCriticsScore != null || metascore != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                        ) {
+                            if (rtCriticsScore != null) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                            .background(if (rtCriticsScore!! >= 60) Color(0xFF3CB371) else Color(0xFFCC3333))
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("RT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                    Text(
+                                        text       = "${rtCriticsScore}%",
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = if (rtCriticsScore!! >= 60) Color(0xFF3CB371) else Color(0xFFCC3333),
+                                    )
+                                    Text("Critics", fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
+                                }
+                            }
+                            if (metascore != null) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                            .background(when {
+                                                metascore!! >= 61 -> Color(0xFF3CB371)
+                                                metascore!! >= 40 -> Color(0xFFD4A017)
+                                                else              -> Color(0xFFCC3333)
+                                            })
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("MC", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                    Text(
+                                        text       = "$metascore",
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = when {
+                                            metascore!! >= 61 -> Color(0xFF3CB371)
+                                            metascore!! >= 40 -> Color(0xFFD4A017)
+                                            else              -> Color(0xFFCC3333)
+                                        },
+                                    )
+                                    Text("Metascore", fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
+                                }
+                            }
                         }
                     }
                     if (!series.director.isNullOrEmpty()) {

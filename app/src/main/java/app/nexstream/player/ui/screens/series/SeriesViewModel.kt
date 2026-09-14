@@ -92,4 +92,7 @@ class SeriesViewModel @Inject constructor(
     suspend fun fetchTrailerUrl(seriesName: String): String? =
         repository.fetchTrailerUrlForSeries(seriesName)
 
+    suspend fun fetchRtDataIfMissing(seriesId: String, seriesName: String) =
+        repository.fetchRtDataForSeriesSingle(seriesId, seriesName)
+
 }

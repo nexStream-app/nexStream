@@ -213,13 +213,15 @@ fun ModernMovieDetailsDialog(
     var rtCriticsScore  by remember(movie.id) { mutableStateOf(movie.rtCriticsScore) }
     var rtAudienceScore by remember(movie.id) { mutableStateOf(movie.rtAudienceScore) }
     var rtConsensus     by remember(movie.id) { mutableStateOf(movie.rtConsensus) }
+    var metascore       by remember(movie.id) { mutableStateOf(movie.metascore) }
     LaunchedEffect(movie.id) {
-        if (rtCriticsScore == null && rtAudienceScore == null && rtConsensus.isNullOrBlank() && onFetchRtData != null) {
+        if (rtCriticsScore == null && rtAudienceScore == null && rtConsensus.isNullOrBlank() && metascore == null && onFetchRtData != null) {
             val result = onFetchRtData()
             if (result != null) {
                 rtCriticsScore  = result.criticsScore
                 rtAudienceScore = result.audienceScore
                 rtConsensus     = result.consensus
+                metascore       = result.metascore
             }
         }
     }
@@ -634,8 +636,8 @@ function onYouTubeIframeAPIReady(){
                     }
                 }
 
-                // Rotten Tomatoes scores
-                if (rtCriticsScore != null || rtAudienceScore != null) {
+                // Ratings row — RT Critics + Metascore (audience/consensus kept for legacy data)
+                if (rtCriticsScore != null || rtAudienceScore != null || metascore != null) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment     = Alignment.CenterVertically,
@@ -682,6 +684,36 @@ function onYouTubeIframeAPIReady(){
                                     color      = if (rtAudienceScore!! >= 60) Color(0xFF3CB371) else Color(0xFFCC3333),
                                 )
                                 Text("Audience", fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
+                            }
+                        }
+                        if (metascore != null) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment     = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                        .background(when {
+                                            metascore!! >= 61 -> Color(0xFF3CB371)
+                                            metascore!! >= 40 -> Color(0xFFD4A017)
+                                            else              -> Color(0xFFCC3333)
+                                        })
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                                ) {
+                                    Text("MC", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                }
+                                Text(
+                                    text       = "$metascore",
+                                    fontSize   = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color      = when {
+                                        metascore!! >= 61 -> Color(0xFF3CB371)
+                                        metascore!! >= 40 -> Color(0xFFD4A017)
+                                        else              -> Color(0xFFCC3333)
+                                    },
+                                )
+                                Text("Metascore", fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
                             }
                         }
                     }

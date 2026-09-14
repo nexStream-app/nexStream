@@ -107,6 +107,9 @@ interface SeriesDao {
 
     data class SeriesNameRow(val id: String, val name: String)
 
+    @Query("UPDATE series SET rtCriticsScore = :criticsScore, metascore = :metascore WHERE id = :id")
+    suspend fun updateRtData(id: String, criticsScore: Int?, metascore: Int?)
+
     @Query("SELECT id, certification FROM series WHERE playlistId = :playlistId AND certification IS NOT NULL")
     suspend fun getExistingCertifications(playlistId: String): List<SeriesCertRow>
 

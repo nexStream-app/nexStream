@@ -291,6 +291,9 @@ class PicksViewModel @Inject constructor(
     suspend fun fetchMovieRtData(movieId: String, movieName: String) =
         repository.fetchRtDataForMovieSingle(movieId, movieName)
 
+    suspend fun fetchSeriesRtData(seriesId: String, seriesName: String) =
+        repository.fetchRtDataForSeriesSingle(seriesId, seriesName)
+
     suspend fun fetchMovieTrailerUrl(movie: MovieEntity): String? {
         if (!movie.trailerUrl.isNullOrBlank()) return movie.trailerUrl
         return repository.fetchTrailerUrlForMovie(movie.name)
@@ -553,6 +556,7 @@ fun PicksScreen(
                     },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
+                    onFetchRtData           = { viewModel.fetchSeriesRtData(displaySeries.id, displaySeries.name) },
                     onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
                     onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
                         onPlayerLaunch?.invoke(streamUrl, null, episodeId, seriesId, startPos, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)

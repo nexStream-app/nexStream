@@ -38,6 +38,7 @@ data class MovieEntity(
     val rtAudienceScore:  Int?    = null,
     val rtConsensus:      String? = null,
     val originalLanguage: String? = null,
+    val metascore:        Int?    = null,
     @Ignore val trailerUrl: String? = null,
 ) {
     // Room KSP requires a constructor whose every parameter maps to a DB column.
@@ -51,12 +52,12 @@ data class MovieEntity(
         isFavourite: Boolean, lastPlayedPosition: Long, lastPlayedTimestamp: Long,
         certification: String?, addedAt: Long,
         rtCriticsScore: Int?, rtAudienceScore: Int?, rtConsensus: String?,
-        originalLanguage: String?,
+        originalLanguage: String?, metascore: Int?,
     ) : this(
         id, name, streamUrl, posterUrl, backdropUrl, plot, cast, director,
         genre, releaseDate, rating, duration, categoryId, categoryName, playlistId,
         isFavourite, lastPlayedPosition, lastPlayedTimestamp, certification, addedAt,
-        rtCriticsScore, rtAudienceScore, rtConsensus, originalLanguage,
+        rtCriticsScore, rtAudienceScore, rtConsensus, originalLanguage, metascore,
         trailerUrl = null,
     )
 }

@@ -458,6 +458,7 @@ fun RecentlyWatchedScreen(
                     },
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
+                    onFetchRtData           = { viewModel.fetchSeriesRtData(displaySeries.id, displaySeries.name) },
                     onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
                     onRemoveFromRecent      = { viewModel.delete(selectedRecent.id); seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
                     onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
