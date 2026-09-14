@@ -103,7 +103,7 @@ fun SeriesScreen(
     viewModel: SeriesViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
-    val categoryForFlow = if (selectedCategory == "__favourites__") null else selectedCategory
+    val categoryForFlow = if (selectedCategory == "__favourites__" || selectedCategory == "__recent__") null else selectedCategory
     val _allSeriesList by remember(categoryForFlow) { viewModel.getSeriesByCategory(categoryForFlow) }
         .collectAsState(initial = emptyList())
     val playlists by viewModel.playlists.collectAsState()
@@ -133,15 +133,21 @@ fun SeriesScreen(
     var selectedSeries by remember { mutableStateOf<SeriesEntity?>(null) }
     val openDialogSeriesId = selectedSeries?.id
     val needsFavoritesFilter = selectedCategory == "__favourites__"
+    val needsRecentFilter    = selectedCategory == "__recent__"
     val sortOrderName by androidx.compose.ui.platform.LocalContext.current.applicationContext.getSeriesSortOrderFlow().collectAsState(initial = SeriesSortOrder.A_Z.name)
     val sortOrder = SeriesSortOrder.entries.firstOrNull { it.name == sortOrderName } ?: SeriesSortOrder.A_Z
     var showSortDialog by remember { mutableStateOf(false) }
     val sortButtonFR = remember { FocusRequester() }
     var isSorting by remember { mutableStateOf(false) }
-    LaunchedEffect(System.identityHashCode(_allSeriesList), System.identityHashCode(watchlistIds), needsFavoritesFilter, debouncedQuery, maxAgeRating, allowNr, openDialogSeriesId, silentFilterQuery, sortOrder) {
+    LaunchedEffect(System.identityHashCode(_allSeriesList), System.identityHashCode(watchlistIds), needsFavoritesFilter, needsRecentFilter, debouncedQuery, maxAgeRating, allowNr, openDialogSeriesId, silentFilterQuery, sortOrder) {
         isSorting = true
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            val base = if (needsFavoritesFilter) _allSeriesList.filter { it.id in watchlistIds } else _allSeriesList
+            val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            val base = when {
+                needsFavoritesFilter -> _allSeriesList.filter { it.id in watchlistIds }
+                needsRecentFilter    -> _allSeriesList.filter { it.addedAt > recentCutoff }
+                else                 -> _allSeriesList
+            }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base
             val filtered = when {
                 silentFilterQuery != null -> ageFiltered.filter { it.name.contains(silentFilterQuery, ignoreCase = true) }
@@ -364,6 +370,7 @@ fun SeriesScreen(
                                     Text(
                                         text = when (selectedCategory) {
                                             "__favourites__" -> "Favourites"
+                                            "__recent__"     -> "Recently Added"
                                             null -> "All"
                                             else -> selectedCategory
                                         },
@@ -415,13 +422,14 @@ fun SeriesScreen(
                         }
                         // Only show spinner when actually loading — not when favourites/search is genuinely empty,
                         // and not during a silentGoTo (grid must be created so gridViewRef can be set)
-                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && !showSearch && silentFilterQuery == null && debouncedQuery.isBlank() -> {
+                        allSeriesList.isEmpty() && selectedCategory != "__favourites__" && selectedCategory != "__recent__" && !showSearch && silentFilterQuery == null && debouncedQuery.isBlank() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         }
                         seriesList.isEmpty() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(when {
                                     selectedCategory == "__favourites__" -> "No series in your favourites yet"
+                                    selectedCategory == "__recent__"     -> "No recently added series"
                                     silentFilterQuery != null -> "No series found"
                                     showSearch -> "No results found"
                                     else -> "No series in this category"

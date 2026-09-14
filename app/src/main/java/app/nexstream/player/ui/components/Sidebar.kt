@@ -98,6 +98,7 @@ fun Sidebar(
     isLoadingCatchUp: Boolean = false,
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: (route: AppRoute) -> Unit = {},
+    onRecentlyAddedSelected: (route: AppRoute) -> Unit = {},
     selectedRecentType: String? = null,
     onRecentTypeSelected: (String?) -> Unit = {},
     selectedSearchType: String? = null,
@@ -306,9 +307,11 @@ fun Sidebar(
                         onRequestContentFocus = { onEnterContent() },
                         onRequestRailFocus    = { onExitPanelToRail() },
                         onSearchRequest       = onSearchRequest,
-                        onFavouritesSelected  = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
+                        onFavouritesSelected     = { expandedRoute?.let { r -> onFavouritesSelected(r) } },
+                        onRecentlyAddedSelected  = { expandedRoute?.let { r -> onRecentlyAddedSelected(r) } },
                         showSearch            = false,
                         showFavourites        = expandedRoute == AppRoute.Guide || expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series || expandedRoute == AppRoute.Music,
+                        showRecentlyAdded     = expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series,
                         supportsKeyboardSearch = expandedRoute == AppRoute.Movies || expandedRoute == AppRoute.Series
                             || expandedRoute == AppRoute.Recent || expandedRoute == AppRoute.MyList,
                         showClearAll          = expandedRoute == AppRoute.Recent || expandedRoute == AppRoute.MyList,
@@ -762,8 +765,10 @@ private fun CategoryPanel(
     onRequestRailFocus: () -> Unit = {},
     onSearchRequest: () -> Unit = {},
     onFavouritesSelected: () -> Unit = {},
+    onRecentlyAddedSelected: () -> Unit = {},
     showSearch: Boolean = true,
     showFavourites: Boolean = true,
+    showRecentlyAdded: Boolean = false,
     showClearAll: Boolean = false,
     onClearAll: () -> Unit = {},
     header: String = "Categories",
@@ -778,24 +783,27 @@ private fun CategoryPanel(
     val textScale = nsTheme.typography.scale.coerceIn(0.85f, 1.5f)
     val headerHeight = (56 * textScale).dp
 
-    val allFR         = remember { FocusRequester() }
-    val searchFR      = remember { FocusRequester() }
-    val favouritesFR  = remember { FocusRequester() }
+    val allFR             = remember { FocusRequester() }
+    val searchFR          = remember { FocusRequester() }
+    val favouritesFR      = remember { FocusRequester() }
+    val recentlyAddedFR   = remember { FocusRequester() }
     val categoryFocusMap = remember { androidx.compose.runtime.mutableStateMapOf<String, FocusRequester>() }
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     // Stable index constants so focusTick can scroll to the target before requesting focus
-    val favouritesIndex = if (showSearch) 1 else 0
-    val groupsOffset    = if (showFavourites) channelGroups.size else 0
-    val allIndex        = (if (showSearch) 1 else 0) + (if (showFavourites) 1 else 0) + groupsOffset
-    val fixedCount      = allIndex + 1
+    val favouritesIndex    = if (showSearch) 1 else 0
+    val groupsOffset       = if (showFavourites) channelGroups.size else 0
+    val recentlyAddedIndex = (if (showSearch) 1 else 0) + (if (showFavourites) 1 else 0) + groupsOffset
+    val allIndex           = recentlyAddedIndex + (if (showRecentlyAdded) 1 else 0)
+    val fixedCount         = allIndex + 1
 
     LaunchedEffect(focusTick) {
         if (focusTick == 0) return@LaunchedEffect
         val targetIndex = when {
-            selectedCategory == "__search__"     -> 0
-            selectedCategory == "__favourites__" -> favouritesIndex
+            selectedCategory == "__search__"       -> 0
+            selectedCategory == "__favourites__"   -> favouritesIndex
+            selectedCategory == "__recent__"       -> recentlyAddedIndex
             selectedCategory?.startsWith("__grp_") == true -> {
                 val grpIdx = channelGroups.indexOfFirst { "__grp_${it.id}" == selectedCategory }
                 if (grpIdx >= 0) favouritesIndex + 1 + grpIdx else allIndex
@@ -813,6 +821,7 @@ private fun CategoryPanel(
         val target = when (selectedCategory) {
             "__search__"     -> searchFR
             "__favourites__" -> favouritesFR
+            "__recent__"     -> recentlyAddedFR
             null             -> allFR
             else             -> categoryFocusMap[selectedCategory] ?: allFR
         }
@@ -888,6 +897,19 @@ private fun CategoryPanel(
                         onFocused             = { onPanelFocusChanged(true) },
                         onClick               = { onFavouritesSelected() }
                     )
+                }
+                if (showRecentlyAdded) {
+                    item(key = "__recent__") {
+                        PanelItem(
+                            text                  = "Recently Added",
+                            isSelected            = selectedCategory == "__recent__",
+                            focusRequester        = recentlyAddedFR,
+                            onRequestContentFocus = onRequestContentFocus,
+                            onRequestRailFocus    = onRequestRailFocus,
+                            onFocused             = { onPanelFocusChanged(true) },
+                            onClick               = { onRecentlyAddedSelected() }
+                        )
+                    }
                 }
                 // Channel groups — shown as sub-items under Favourites
                 items(channelGroups, key = { "__grp_${it.id}" }) { group ->

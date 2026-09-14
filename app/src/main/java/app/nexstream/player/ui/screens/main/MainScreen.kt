@@ -483,8 +483,8 @@ fun MainScreen(
         if (currentRoute == AppRoute.Movies) { lastMovieIndex = 0; movieGridViewRef?.scrollToIndex(0); pendingMovieGoTo = null }
         if (currentRoute == AppRoute.Series) { lastSeriesIndex = 0; seriesGridViewRef?.scrollToIndex(0); pendingSeriesGoTo = null }
         movieGridViewRef?.blockFocus(); seriesGridViewRef?.blockFocus(); catchUpGridViewRef?.blockFocus()
-        if (selectedMovieCategory == "__favourites__") selectedMovieCategory = null
-        if (selectedSeriesCategory == "__favourites__") selectedSeriesCategory = null
+        if (selectedMovieCategory == "__favourites__" || selectedMovieCategory == "__recent__") selectedMovieCategory = null
+        if (selectedSeriesCategory == "__favourites__" || selectedSeriesCategory == "__recent__") selectedSeriesCategory = null
         showMovieSearch = false; showSeriesSearch = false
         showCatchUpSearch = false; showRecentSearch = false; showMyListSearch = false
         if (currentRoute.hasCategoryPanel) {
@@ -1406,6 +1406,14 @@ private fun ClassicMainLayout(
         }
     }
 
+    val onRecentlyAddedSelected: (AppRoute) -> Unit = { route ->
+        when (route) {
+            AppRoute.Movies -> setSelectedMovieCategory("__recent__")
+            AppRoute.Series -> setSelectedSeriesCategory("__recent__")
+            else -> Unit
+        }
+    }
+
     // Classic-specific MainContentArea callbacks
     val classicOnGoToMovie: (String) -> Unit = { name ->
         setPendingMovieGoTo(name); setShowMovieSearch(false)
@@ -1535,7 +1543,8 @@ private fun ClassicMainLayout(
                 activeProfileEmoji = activeProfileEmoji,
                 onProfileClick     = { setShowProfileSwitch(true) },
                 onSearchRequest    = onSearchRequest,
-                onFavouritesSelected = onFavouritesSelected,
+                onFavouritesSelected    = onFavouritesSelected,
+                onRecentlyAddedSelected = onRecentlyAddedSelected,
                 showSyncSettings   = showSyncSettings,
                 channelGroups      = channelGroups,
             )

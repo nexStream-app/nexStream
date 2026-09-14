@@ -32,5 +32,9 @@ data class SeriesGridItem(
     val certification: String? = null,
     val rating: String? = null,
     val releaseDate: String? = null,
-    val hasNewEpisodes: Boolean = false
+    val hasNewEpisodes: Boolean = false,
+    val addedAt: Long = 0L
 )
+
+/** Minimal projection used when pre-fetching addedAt values before a batch import. */
+data class IdAddedAt(val id: String, val addedAt: Long)

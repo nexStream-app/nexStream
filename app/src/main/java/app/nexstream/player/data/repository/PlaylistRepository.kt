@@ -902,9 +902,11 @@ class PlaylistRepository @Inject constructor(
                 // Corrected to the real count in the finally block.
                 _vodTotalCount.value = Int.MAX_VALUE
 
-                // Snapshot existing certifications so INSERT OR REPLACE doesn't wipe them.
+                // Snapshot existing certifications and addedAt so INSERT OR REPLACE doesn't wipe them.
                 val existingCerts = database.movieDao().getExistingCertifications(playlistId)
                     .associate { it.id to it.certification }
+                val existingMovieAddedAt = database.movieDao().getMovieAddedAtForPlaylist(playlistId)
+                    .associate { it.id to it.addedAt }
 
                 var batchIndex = 0
                 var totalInserted = 0
@@ -932,7 +934,7 @@ class PlaylistRepository @Inject constructor(
                             playlistId = playlistId,
                             isFavourite = false,
                             certification = existingCerts[movieId],
-                            addedAt = importTime,
+                            addedAt = existingMovieAddedAt[movieId] ?: importTime,
                             originalLanguage = stream.originalLanguage
                         )
                     }
@@ -979,15 +981,18 @@ class PlaylistRepository @Inject constructor(
                     emptyList()
                 }
 
-                // Snapshot existing certifications so INSERT OR REPLACE doesn't wipe them.
+                // Snapshot existing certifications and addedAt so INSERT OR REPLACE doesn't wipe them.
                 val existingSeriesCerts = database.seriesDao().getExistingCertifications(playlistId)
                     .associate { it.id to it.certification }
+                val existingSeriesAddedAt = database.seriesDao().getSeriesAddedAtForPlaylist(playlistId)
+                    .associate { it.id to it.addedAt }
 
                 _seriesLoadedCount.value = 0
 
                 var batchIndex = 0
                 var totalInserted = 0
 
+                val seriesImportTime = System.currentTimeMillis()
                 streamSeriesItems(host, username, password) { batch ->
                     val seriesEntities = batch.map { series ->
                         val seriesId2 = "$playlistId-${series.seriesId}"
@@ -1009,7 +1014,8 @@ class PlaylistRepository @Inject constructor(
                             seasonCount = 0,
                             playlistId = playlistId,
                             certification = existingSeriesCerts[seriesId2],
-                            originalLanguage = series.originalLanguage
+                            originalLanguage = series.originalLanguage,
+                            addedAt = existingSeriesAddedAt[seriesId2] ?: seriesImportTime
                         )
                     }
 

@@ -2,6 +2,7 @@ package app.nexstream.player.data.local.dao
 
 import androidx.room.*
 import app.nexstream.player.data.local.entity.EpisodeEntity
+import app.nexstream.player.data.local.entity.IdAddedAt
 import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.data.local.entity.SeriesGridItem
 import kotlinx.coroutines.flow.Flow
@@ -87,11 +88,14 @@ interface SeriesDao {
 
     data class WatchedCountRow(val seriesId: String, val count: Int)
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes, addedAt FROM series WHERE playlistId = :playlistId ORDER BY name ASC")
     fun getSeriesGridItems(playlistId: String): Flow<List<SeriesGridItem>>
 
-    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes, addedAt FROM series WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
     fun getSeriesGridItemsByCategory(playlistId: String, category: String): Flow<List<SeriesGridItem>>
+
+    @Query("SELECT id, addedAt FROM series WHERE playlistId = :playlistId")
+    suspend fun getSeriesAddedAtForPlaylist(playlistId: String): List<IdAddedAt>
 
     @Query("UPDATE series SET certification = :certification WHERE id = :id")
     suspend fun updateCertification(id: String, certification: String?)

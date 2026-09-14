@@ -1,6 +1,7 @@
 package app.nexstream.player.data.local.dao
 
 import androidx.room.*
+import app.nexstream.player.data.local.entity.IdAddedAt
 import app.nexstream.player.data.local.entity.MovieEntity
 import app.nexstream.player.data.local.entity.MovieGridItem
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +65,9 @@ interface MovieDao {
     // Category-filtered version
     @Query("SELECT id, name, posterUrl, categoryName, streamUrl, playlistId, lastPlayedPosition, certification, rating, addedAt, releaseDate FROM movies WHERE playlistId = :playlistId AND categoryName = :category ORDER BY name ASC")
     fun getMovieGridItemsByCategory(playlistId: String, category: String): Flow<List<MovieGridItem>>
+
+    @Query("SELECT id, addedAt FROM movies WHERE playlistId = :playlistId")
+    suspend fun getMovieAddedAtForPlaylist(playlistId: String): List<IdAddedAt>
 
     @Query("UPDATE movies SET certification = :certification WHERE id = :id")
     suspend fun updateCertification(id: String, certification: String?)

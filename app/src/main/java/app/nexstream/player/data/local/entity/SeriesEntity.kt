@@ -33,4 +33,5 @@ data class SeriesEntity(
     val hasNewEpisodes:   Boolean = false,
     val rtCriticsScore:   Int?    = null,
     val metascore:        Int?    = null,
+    val addedAt:          Long    = 0L,
 )

@@ -118,7 +118,7 @@ fun MoviesScreen(
     viewModel: MoviesViewModel = hiltViewModel(),
     watchlistViewModel: WatchlistViewModel = hiltViewModel()
 ) {
-    val categoryForFlow = if (selectedCategory == "__favourites__") null else selectedCategory
+    val categoryForFlow = if (selectedCategory == "__favourites__" || selectedCategory == "__recent__") null else selectedCategory
     val _allMovies by remember(categoryForFlow) { viewModel.getMoviesByCategory(categoryForFlow) }
         .collectAsState(initial = emptyList())
     val playlists by viewModel.playlists.collectAsState()
@@ -184,11 +184,17 @@ fun MoviesScreen(
     var posterItems by remember { mutableStateOf<List<PosterItem>>(emptyList()) }
     val openDialogMovieId = movieWithDetails?.id
     val needsFavoritesFilter = selectedCategory == "__favourites__"
+    val needsRecentFilter    = selectedCategory == "__recent__"
     var isSorting by remember { mutableStateOf(false) }
-    LaunchedEffect(System.identityHashCode(_allMovies), System.identityHashCode(watchlistIds), needsFavoritesFilter, debouncedQuery, maxAgeRating, allowNr, openDialogMovieId, silentFilterQuery, sortOrder) {
+    LaunchedEffect(System.identityHashCode(_allMovies), System.identityHashCode(watchlistIds), needsFavoritesFilter, needsRecentFilter, debouncedQuery, maxAgeRating, allowNr, openDialogMovieId, silentFilterQuery, sortOrder) {
         isSorting = true
         val result = withContext(Dispatchers.Default) {
-            val base = if (needsFavoritesFilter) _allMovies.filter { it.id in watchlistIds } else _allMovies
+            val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            val base = when {
+                needsFavoritesFilter -> _allMovies.filter { it.id in watchlistIds }
+                needsRecentFilter    -> _allMovies.filter { it.addedAt > recentCutoff }
+                else                 -> _allMovies
+            }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogMovieId } else base
             val filtered = when {
                 silentFilterQuery != null -> ageFiltered.filter { it.name.contains(silentFilterQuery, ignoreCase = true) }
@@ -410,6 +416,7 @@ fun MoviesScreen(
                                     Text(
                                         text = when (selectedCategory) {
                                             "__favourites__" -> "Favourites"
+                                            "__recent__"     -> "Recently Added"
                                             null             -> "All"
                                             else             -> selectedCategory
                                         },
@@ -460,7 +467,7 @@ fun MoviesScreen(
                         }
                         (isLoadingVod || (vodTotal > 0 && vodLoaded < vodTotal) ||
                                 (playlists.isNotEmpty() && movies.isEmpty())) &&
-                                selectedCategory != "__favourites__" && !showSearch &&
+                                selectedCategory != "__favourites__" && selectedCategory != "__recent__" && !showSearch &&
                                 silentFilterQuery == null && debouncedQuery.isBlank() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         }
@@ -468,6 +475,7 @@ fun MoviesScreen(
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(when {
                                     selectedCategory == "__favourites__" -> "No movies in your favourites yet"
+                                    selectedCategory == "__recent__"     -> "No recently added movies"
                                     silentFilterQuery != null -> "No movies found"
                                     showSearch -> "No results found"
                                     else -> "No movies in this category"
