@@ -42,13 +42,16 @@ fun ChannelDetailsDialog(
     onDismiss: () -> Unit,
     onWatch: () -> Unit,
     onToggleWatchlist: () -> Unit = {},
-    onGoToEpg: (() -> Unit)? = null
+    onGoToEpg: (() -> Unit)? = null,
+    onRemoveFromRecent: (() -> Unit)? = null,
 ) {
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val accent = LocalNsAccent.current
 
-    // Button indices: 0=Close, 1=MyList, 2=Watch, 3=GoToEpg
-    val buttonCount = if (onGoToEpg != null) 4 else 3
+    // Button indices: 0=Close, 1=MyList, 2=Watch, 3=RemoveRecent?, 3/4=GoToEpg?
+    val removeRecentBtnCount = if (onRemoveFromRecent != null) 1 else 0
+    val goToEpgIdx = if (onGoToEpg != null) 3 + removeRecentBtnCount else -1
+    val buttonCount = 3 + removeRecentBtnCount + (if (onGoToEpg != null) 1 else 0)
     var selectedButton by remember { mutableStateOf(2) }
     val dialogFocus = remember { FocusRequester() }
 
@@ -82,7 +85,8 @@ fun ChannelDetailsDialog(
                                     0 -> onDismiss()
                                     1 -> onToggleWatchlist()
                                     2 -> onWatch()
-                                    3 -> onGoToEpg?.invoke()
+                                    3 -> if (removeRecentBtnCount > 0) { onRemoveFromRecent?.invoke(); onDismiss() } else onGoToEpg?.invoke()
+                                    4 -> onGoToEpg?.invoke()
                                 }
                                 true
                             }
@@ -236,12 +240,22 @@ fun ChannelDetailsDialog(
                             accent     = accent,
                             onClick    = onToggleWatchlist
                         )
-                        // 3 = Go to EPG
+                        // 3 = Remove from Recent (when provided)
+                        if (onRemoveFromRecent != null) {
+                            ChannelActionPill(
+                                icon       = Icons.Default.Delete,
+                                label      = "Remove from Recent",
+                                isSelected = selectedButton == 3,
+                                accent     = accent,
+                                onClick    = { onRemoveFromRecent(); onDismiss() }
+                            )
+                        }
+                        // goToEpgIdx = Go to EPG
                         if (onGoToEpg != null) {
                             ChannelActionPill(
                                 icon       = Icons.Default.CalendarToday,
                                 label      = "Go to EPG",
-                                isSelected = selectedButton == 3,
+                                isSelected = selectedButton == goToEpgIdx,
                                 accent     = accent,
                                 onClick    = onGoToEpg
                             )

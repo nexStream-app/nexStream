@@ -159,6 +159,11 @@ A free trial is available with no payment details required.
 
 ## What's New
 
+### Build 0280
+- **Remove from Recent** — Movies, Series, and Live TV dialogs opened from Recently Watched now have a "Remove from Recent" button
+- **Cross-device My List** — "Remove from List" and "Resume" now correctly appear for items added/watched on a different device
+- Resume position now resolves correctly when progress was recorded under a different device's playlist ID
+
 ### Build 0279
 - **Sports Today** — live event cards now show an elapsed-time progress bar (dark overlay from the left, proportional to how far through the event you are)
 - **Sports Today** — hour chips above the upcoming events section show which hours have events; current hour highlighted

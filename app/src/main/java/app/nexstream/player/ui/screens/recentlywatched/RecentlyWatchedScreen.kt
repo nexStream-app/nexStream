@@ -76,6 +76,7 @@ fun RecentlyWatchedScreen(
     val items by viewModel.recentlyWatched.collectAsState()
     val progressMap by viewModel.progressMap.collectAsState()
     val watchlistIds by watchlistViewModel.watchlistIds.collectAsState()
+    val allWatchlistItems by watchlistViewModel.allItems.collectAsState()
     var dialogItem by remember { mutableStateOf<RecentlyWatchedEntity?>(null) }
 
     var movieDialogEntity       by remember { mutableStateOf<MovieEntity?>(null) }
@@ -127,6 +128,10 @@ fun RecentlyWatchedScreen(
                     movieDialogEntity = base
                     if (base != null) {
                         movieResumePosition = viewModel.getMoviePosition(base.id)
+                        // Cross-device: progress may be keyed by original device's movie ID
+                        if (movieResumePosition == 0L && !item.movieId.isNullOrEmpty() && item.movieId != base.id) {
+                            movieResumePosition = viewModel.getMoviePosition(item.movieId!!)
+                        }
                         val detailed = viewModel.loadMovieDetails(base)
                         if (detailed != null) movieDialogUpdated = detailed
                     }
@@ -389,7 +394,10 @@ fun RecentlyWatchedScreen(
         when {
             selectedRecent.type == RecentlyWatchedType.MOVIE && movie != null -> {
                 val displayMovie = movieDialogUpdated ?: movie
-                val isMovieBookmarked = displayMovie.id in watchlistIds
+                val isMovieBookmarked = displayMovie.id in watchlistIds ||
+                    (!displayMovie.streamUrl.isNullOrEmpty() && allWatchlistItems.any {
+                        it.type == WatchlistType.MOVIE && it.streamUrl == displayMovie.streamUrl
+                    })
                 ModernMovieDetailsDialog(
                     movie          = displayMovie,
                     resumePosition = movieResumePosition,
@@ -416,11 +424,13 @@ fun RecentlyWatchedScreen(
                     onFetchOriginalLanguage = { viewModel.fetchMovieOriginalLanguage(displayMovie.id, displayMovie.name) },
                     onFetchRtData           = { viewModel.fetchMovieRtData(displayMovie.id, displayMovie.name) },
                     onFetchTrailerUrl       = { viewModel.fetchMovieTrailerUrl(displayMovie) },
+                    onRemoveFromRecent      = { viewModel.delete(selectedRecent.id); movieDialogEntity = null; movieDialogUpdated = null; dialogItem = null },
                 )
             }
             selectedRecent.type == RecentlyWatchedType.EPISODE && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
-                val isSeriesBookmarked = displaySeries.id in watchlistIds
+                val isSeriesBookmarked = displaySeries.id in watchlistIds ||
+                    allWatchlistItems.any { it.type == WatchlistType.SERIES && it.name == displaySeries.name }
                 val recentProfileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default"
                 SeriesDetailsDialog(
                     series             = displaySeries,
@@ -449,6 +459,7 @@ fun RecentlyWatchedScreen(
                     onFetchCertification    = { viewModel.fetchSeriesCertification(displaySeries.id, displaySeries.name) },
                     onFetchOriginalLanguage = { viewModel.fetchSeriesOriginalLanguage(displaySeries.id, displaySeries.name) },
                     onFetchTrailerUrl       = { viewModel.fetchSeriesTrailerUrl(displaySeries.name) },
+                    onRemoveFromRecent      = { viewModel.delete(selectedRecent.id); seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null },
                     onPlayEpisode = { streamUrl, episodeId, startPos, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
                         onLaunchPlayer(streamUrl, null, episodeId, seriesId, startPos, seriesName, "S${seasonNum}E${episodeNum} - $episodeName")
                         seriesDialogEntity = null; seriesDialogUpdated = null; dialogItem = null
@@ -484,7 +495,8 @@ fun RecentlyWatchedScreen(
                     onGoToEpg      = {
                         onGoToEpgForChannel(ch.name)
                         channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null
-                    }
+                    },
+                    onRemoveFromRecent = { viewModel.delete(selectedRecent.id); channelCurrentProgram = null; channelNextProgram = null; channelDialogEntity = null; dialogItem = null },
                 )
             }
             else -> {

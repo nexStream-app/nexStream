@@ -153,6 +153,7 @@ fun SeriesDetailsDialog(
     playlistName: String? = null,
     onFetchTrailerUrl: (suspend () -> String?)? = null,
     onGoToSeries: (() -> Unit)? = null,
+    onRemoveFromRecent: (() -> Unit)? = null,
     onPlayEpisode: (streamUrl: String, episodeId: String, startPosition: Long, seriesId: String, seriesName: String, seasonNum: Int, episodeNum: Int, episodeName: String) -> Unit
 ) {
     val accent     = LocalNsAccent.current
@@ -204,12 +205,14 @@ fun SeriesDetailsDialog(
     var trailerStarted by trailerStartedState
     LaunchedEffect(showTrailer) { if (!showTrailer) trailerStartedState.value = false }
 
-    val trailerCount   = if (hasTrailer) 1 else 0
-    val hasGoToSeries  = onGoToSeries != null
-    val goToSeriesIdx  = if (hasGoToSeries) 2 else -1
-    val seasonBaseIdx  = 2 + (if (hasGoToSeries) 1 else 0)
-    val trailerBtnIdx  = if (hasTrailer) seasonBaseIdx + (if (hasMultiSeason) 1 else 0) else -1
-    val barButtonCount = 2 + (if (hasGoToSeries) 1 else 0) + (if (hasMultiSeason) 1 else 0) + trailerCount
+    val trailerCount       = if (hasTrailer) 1 else 0
+    val hasGoToSeries      = onGoToSeries != null
+    val removeRecentBtnCount = if (onRemoveFromRecent != null) 1 else 0
+    val removeRecentBtnIdx = if (onRemoveFromRecent != null) 2 else -1
+    val goToSeriesIdx      = if (hasGoToSeries) 2 + removeRecentBtnCount else -1
+    val seasonBaseIdx      = 2 + removeRecentBtnCount + (if (hasGoToSeries) 1 else 0)
+    val trailerBtnIdx      = if (hasTrailer) seasonBaseIdx + (if (hasMultiSeason) 1 else 0) else -1
+    val barButtonCount     = 2 + removeRecentBtnCount + (if (hasGoToSeries) 1 else 0) + (if (hasMultiSeason) 1 else 0) + trailerCount
 
     var selectedButton  by remember { mutableStateOf(if (hasMultiSeason) seasonBaseIdx else 1) }
     var pressedButton   by remember { mutableStateOf<Int?>(null) }
@@ -587,6 +590,7 @@ function onYouTubeIframeAPIReady(){
                                         when {
                                             btn == 0 -> onDismiss()
                                             btn == 1 -> onToggleWatchlist()
+                                            btn == removeRecentBtnIdx && removeRecentBtnIdx >= 0 -> { onRemoveFromRecent?.invoke(); onDismiss() }
                                             btn == goToSeriesIdx && hasGoToSeries -> onGoToSeries?.invoke()
                                             btn == seasonBaseIdx && hasMultiSeason -> seasonDropdownExpanded = true
                                             btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() -> showTrailer = !showTrailer
@@ -752,6 +756,16 @@ function onYouTubeIframeAPIReady(){
                                         accent    = accent,
                                         onClick   = onToggleWatchlist,
                                     )
+                                    if (onRemoveFromRecent != null) {
+                                        DialogActionPill(
+                                            icon      = Icons.Default.Delete,
+                                            label     = "Remove from Recent",
+                                            selected  = !inGrid && selectedButton == removeRecentBtnIdx,
+                                            isPressed = pressedButton == removeRecentBtnIdx,
+                                            accent    = accent,
+                                            onClick   = { onRemoveFromRecent(); onDismiss() },
+                                        )
+                                    }
                                     if (hasGoToSeries) {
                                         DialogActionPill(
                                             icon      = Icons.Default.VideoLibrary,
@@ -768,8 +782,8 @@ function onYouTubeIframeAPIReady(){
                                                 icon      = Icons.Default.Tv,
                                                 label     = "Season $selectedSeason",
                                                 trailing  = Icons.Default.ArrowDropDown,
-                                                selected  = !inGrid && selectedButton == 2,
-                                                isPressed = pressedButton == 2,
+                                                selected  = !inGrid && selectedButton == seasonBaseIdx,
+                                                isPressed = pressedButton == seasonBaseIdx,
                                                 accent    = accent,
                                                 onClick   = { seasonDropdownExpanded = true },
                                             )

@@ -424,7 +424,7 @@ fun WatchlistScreen(
         when {
             selectedItem.type == WatchlistType.MOVIE && movie != null -> {
                 val displayMovie = movieDialogUpdated ?: movie
-                val isMovieBookmarked = displayMovie.id in watchlistIds
+                val isMovieBookmarked = displayMovie.id in watchlistIds || selectedItem.id in watchlistIds
                 ModernMovieDetailsDialog(
                     movie          = displayMovie,
                     resumePosition = movieResumePosition,
@@ -456,7 +456,7 @@ fun WatchlistScreen(
             }
             selectedItem.type == WatchlistType.SERIES && series != null -> {
                 val displaySeries = seriesDialogUpdated ?: series
-                val isSeriesBookmarked = displaySeries.id in watchlistIds
+                val isSeriesBookmarked = displaySeries.id in watchlistIds || selectedItem.id in watchlistIds
                 SeriesDetailsDialog(
                     series              = displaySeries,
                     episodes            = seriesDialogEpisodes,

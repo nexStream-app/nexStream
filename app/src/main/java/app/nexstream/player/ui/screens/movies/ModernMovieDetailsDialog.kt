@@ -131,6 +131,7 @@ fun ModernMovieDetailsDialog(
     onFetchRtData: (suspend () -> RtData?)? = null,
     onRatingOverride: ((String) -> Unit)? = null,
     onFetchTrailerUrl: (suspend () -> String?)? = null,
+    onRemoveFromRecent: (() -> Unit)? = null,
 ) {
     val accent     = LocalNsAccent.current
 
@@ -150,13 +151,14 @@ fun ModernMovieDetailsDialog(
     var trailerStarted by trailerStartedState
     LaunchedEffect(showTrailer) { if (!showTrailer) trailerStartedState.value = false }
 
-    // Button indices: 0=Close  1=MyList  [2=Download  3=StartOver?  lastPlay=Play/Resume  [Trailer]]
-    // Restricted:     0=Close  1=MyList  (no trailer when restricted)
+    // Button indices: 0=Close  1=MyList  2=Download  [3=RemoveRecent]  3/4=StartOver?  last=Play/Resume  [Trailer]
+    // Restricted:     0=Close  1=MyList  [2=RemoveRecent]
     val trailerCount = if (hasTrailer && !isContentRestricted) 1 else 0
+    val removeRecentBtnCount = if (onRemoveFromRecent != null) 1 else 0
     val buttonCount = when {
-        isContentRestricted -> 2
-        hasProgress         -> 5 + trailerCount
-        else                -> 4 + trailerCount
+        isContentRestricted -> 2 + removeRecentBtnCount
+        hasProgress         -> 5 + trailerCount + removeRecentBtnCount
+        else                -> 4 + trailerCount + removeRecentBtnCount
     }
     val trailerBtnIdx = if (trailerCount > 0) buttonCount - 1 else -1
     var selectedButton by remember { mutableStateOf(if (isContentRestricted) 0 else buttonCount - 1 - trailerCount) }
@@ -427,10 +429,12 @@ fun ModernMovieDetailsDialog(
                                     btn == 0 -> onDismiss()
                                     btn == 1 -> onToggleWatchlist()
                                     btn == 2 && !isEffectivelyRestricted -> { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true }
+                                    btn == 3 && removeRecentBtnCount > 0 -> { onRemoveFromRecent?.invoke(); onDismiss() }
+                                    btn == 2 && isEffectivelyRestricted && removeRecentBtnCount > 0 -> { onRemoveFromRecent?.invoke(); onDismiss() }
                                     btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() ->
                                         showTrailer = !showTrailer
-                                    btn == 3 && !isEffectivelyRestricted -> onPlay(0)
-                                    btn == 4 && !isEffectivelyRestricted -> onPlay(resumePosition)
+                                    btn == 3 + removeRecentBtnCount && !isEffectivelyRestricted -> onPlay(0)
+                                    btn == 4 + removeRecentBtnCount && !isEffectivelyRestricted -> onPlay(resumePosition)
                                 }
                             }
                             true
@@ -762,6 +766,16 @@ function onYouTubeIframeAPIReady(){
                                 accent     = accent,
                                 onClick    = onToggleWatchlist,
                             )
+                            if (onRemoveFromRecent != null) {
+                                MovieDialogPill(
+                                    label      = "Remove from Recent",
+                                    icon       = Icons.Default.Delete,
+                                    isSelected = selectedButton == 2,
+                                    isPressed  = pressedButton == 2,
+                                    accent     = accent,
+                                    onClick    = { onRemoveFromRecent(); onDismiss() },
+                                )
+                            }
                         }
                     }
                 } else {
@@ -789,6 +803,16 @@ function onYouTubeIframeAPIReady(){
                                     accent     = accent,
                                     onClick    = { movieSizeBytes = null; availableBytes = 0L; showStorageInfo = true },
                                 )
+                                if (onRemoveFromRecent != null) {
+                                    MovieDialogPill(
+                                        label      = "Remove from Recent",
+                                        icon       = Icons.Default.Delete,
+                                        isSelected = selectedButton == 3,
+                                        isPressed  = pressedButton == 3,
+                                        accent     = accent,
+                                        onClick    = { onRemoveFromRecent(); onDismiss() },
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.weight(1f))
@@ -798,16 +822,16 @@ function onYouTubeIframeAPIReady(){
                                     MovieDialogPill(
                                         label      = "Start Over",
                                         icon       = Icons.Default.Refresh,
-                                        isSelected = selectedButton == 3,
-                                        isPressed  = pressedButton == 3,
+                                        isSelected = selectedButton == 3 + removeRecentBtnCount,
+                                        isPressed  = pressedButton == 3 + removeRecentBtnCount,
                                         accent     = accent,
                                         onClick    = { onPlay(0) },
                                     )
                                     MovieDialogPill(
                                         label      = "Resume",
                                         icon       = Icons.Default.PlayArrow,
-                                        isSelected = selectedButton == 4,
-                                        isPressed  = pressedButton == 4,
+                                        isSelected = selectedButton == 4 + removeRecentBtnCount,
+                                        isPressed  = pressedButton == 4 + removeRecentBtnCount,
                                         accent     = accent,
                                         onClick    = { onPlay(resumePosition) },
                                     )
@@ -815,8 +839,8 @@ function onYouTubeIframeAPIReady(){
                                     MovieDialogPill(
                                         label      = "Play Movie",
                                         icon       = Icons.Default.PlayArrow,
-                                        isSelected = selectedButton == 3,
-                                        isPressed  = pressedButton == 3,
+                                        isSelected = selectedButton == 3 + removeRecentBtnCount,
+                                        isPressed  = pressedButton == 3 + removeRecentBtnCount,
                                         accent     = accent,
                                         onClick    = { onPlay(0) },
                                     )
