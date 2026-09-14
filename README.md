@@ -159,6 +159,12 @@ A free trial is available with no payment details required.
 
 ## What's New
 
+### Build 0279
+- **Sports Today** — live event cards now show an elapsed-time progress bar (dark overlay from the left, proportional to how far through the event you are)
+- **Sports Today** — hour chips above the upcoming events section show which hours have events; current hour highlighted
+- Player overlay gradient updated to 20% → 100% black (full screen height)
+- Stream quality badge moved to top-right corner of the player overlay
+
 ### Build 0278
 - **Voice search on Fire TV** — tap the mic button in the keyboard to search by voice using the Fire TV microphone
 - Fixed square-edged focus highlight on the search bar — now correctly follows the rounded pill shape
