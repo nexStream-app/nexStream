@@ -61,12 +61,26 @@ import app.nexstream.player.ui.theme.getSeriesSortOrderFlow
 import app.nexstream.player.ui.theme.saveSeriesSortOrder
 
 private enum class SeriesSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
 }
 
 private val SERIES_AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
 private fun seriesCertOrder(cert: String?): Int =
     if (cert == null || cert == "NR") Int.MAX_VALUE else SERIES_AGE_CERT_ORDER[cert] ?: Int.MAX_VALUE
+
+private fun parseSeriesReleaseDateEpochMs(date: String?): Long {
+    if (date.isNullOrBlank()) return 0L
+    return try {
+        val parts = date.trim().split("-")
+        val year  = parts.getOrNull(0)?.toIntOrNull() ?: return 0L
+        val month = parts.getOrNull(1)?.toIntOrNull() ?: 1
+        val day   = parts.getOrNull(2)?.toIntOrNull() ?: 1
+        val cal = java.util.Calendar.getInstance()
+        cal.set(year, month - 1, day, 0, 0, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.timeInMillis
+    } catch (_: Exception) { 0L }
+}
 
 private fun parseSeriesReleaseDateSortKey(date: String?): Long {
     if (date.isNullOrBlank()) return 0L
@@ -145,7 +159,7 @@ fun SeriesScreen(
             val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
             val base = when {
                 needsFavoritesFilter -> _allSeriesList.filter { it.id in watchlistIds }
-                needsRecentFilter    -> _allSeriesList.filter { it.addedAt > recentCutoff }
+                needsRecentFilter    -> _allSeriesList.filter { parseSeriesReleaseDateEpochMs(it.releaseDate).let { ms -> ms > 0L && ms > recentCutoff } }
                 else                 -> _allSeriesList
             }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base
@@ -158,7 +172,7 @@ fun SeriesScreen(
                 SeriesSortOrder.A_Z            -> filtered.sortedBy { it.name.lowercase() }
                 SeriesSortOrder.Z_A            -> filtered.sortedByDescending { it.name.lowercase() }
                 SeriesSortOrder.RATING         -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
-                SeriesSortOrder.RECENTLY_ADDED -> filtered.sortedByDescending { parseSeriesReleaseDateSortKey(it.releaseDate) }
+                SeriesSortOrder.NEWEST_RELEASE -> filtered.sortedByDescending { parseSeriesReleaseDateSortKey(it.releaseDate) }
                 SeriesSortOrder.OLDEST_RELEASE -> filtered.sortedBy { parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
                 SeriesSortOrder.AGE_RATING     -> filtered.sortedBy { seriesCertOrder(it.certification) }
             }

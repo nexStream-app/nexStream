@@ -48,11 +48,11 @@ fun ChannelDetailsDialog(
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val accent = LocalNsAccent.current
 
-    // Button indices: 0=Close, 1=MyList, 2=Watch, 3=RemoveRecent?, 3/4=GoToEpg?
-    val removeRecentBtnCount = if (onRemoveFromRecent != null) 1 else 0
-    val goToEpgIdx = if (onGoToEpg != null) 3 + removeRecentBtnCount else -1
-    val buttonCount = 3 + removeRecentBtnCount + (if (onGoToEpg != null) 1 else 0)
-    var selectedButton by remember { mutableStateOf(2) }
+    // Button indices: 0=Close, 1=Watch, 2=MyList, 3=GoToEpg?, 4=RemoveRecent?
+    val goToEpgIdx      = if (onGoToEpg        != null) 3 else -1
+    val removeRecentIdx = if (onRemoveFromRecent != null) 3 + (if (onGoToEpg != null) 1 else 0) else -1
+    val buttonCount     = 3 + (if (onGoToEpg != null) 1 else 0) + (if (onRemoveFromRecent != null) 1 else 0)
+    var selectedButton by remember { mutableStateOf(1) }
     val dialogFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -81,12 +81,12 @@ fun ChannelDetailsDialog(
                             Key.DirectionLeft  -> { selectedButton = (selectedButton - 1 + buttonCount) % buttonCount; true }
                             Key.DirectionRight -> { selectedButton = (selectedButton + 1) % buttonCount; true }
                             Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                when (selectedButton) {
-                                    0 -> onDismiss()
-                                    1 -> onToggleWatchlist()
-                                    2 -> onWatch()
-                                    3 -> if (removeRecentBtnCount > 0) { onRemoveFromRecent?.invoke(); onDismiss() } else onGoToEpg?.invoke()
-                                    4 -> onGoToEpg?.invoke()
+                                when {
+                                    selectedButton == 0 -> onDismiss()
+                                    selectedButton == 1 -> onWatch()
+                                    selectedButton == 2 -> onToggleWatchlist()
+                                    selectedButton == goToEpgIdx      -> onGoToEpg?.invoke()
+                                    selectedButton == removeRecentIdx -> { onRemoveFromRecent?.invoke(); onDismiss() }
                                 }
                                 true
                             }
@@ -232,24 +232,22 @@ fun ChannelDetailsDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1 = My List
+                        // 1 = Watch Now (primary, first)
+                        ChannelActionPill(
+                            icon       = Icons.Default.PlayArrow,
+                            label      = "Watch Now",
+                            isSelected = selectedButton == 1,
+                            accent     = accent,
+                            onClick    = onWatch
+                        )
+                        // 2 = My List
                         ChannelActionPill(
                             icon       = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                             label      = if (isBookmarked) "Remove" else "My List",
-                            isSelected = selectedButton == 1,
+                            isSelected = selectedButton == 2,
                             accent     = accent,
                             onClick    = onToggleWatchlist
                         )
-                        // 3 = Remove from Recent (when provided)
-                        if (onRemoveFromRecent != null) {
-                            ChannelActionPill(
-                                icon       = Icons.Default.Delete,
-                                label      = "Remove from Recent",
-                                isSelected = selectedButton == 3,
-                                accent     = accent,
-                                onClick    = { onRemoveFromRecent(); onDismiss() }
-                            )
-                        }
                         // goToEpgIdx = Go to EPG
                         if (onGoToEpg != null) {
                             ChannelActionPill(
@@ -260,15 +258,16 @@ fun ChannelDetailsDialog(
                                 onClick    = onGoToEpg
                             )
                         }
-                        Spacer(Modifier.weight(1f))
-                        // 2 = Watch Now (default, right-aligned)
-                        ChannelActionPill(
-                            icon       = Icons.Default.PlayArrow,
-                            label      = "Watch Now",
-                            isSelected = selectedButton == 2,
-                            accent     = accent,
-                            onClick    = onWatch
-                        )
+                        // removeRecentIdx = Remove from Recent
+                        if (onRemoveFromRecent != null) {
+                            ChannelActionPill(
+                                icon       = Icons.Default.Delete,
+                                label      = "Remove from Recent",
+                                isSelected = selectedButton == removeRecentIdx,
+                                accent     = accent,
+                                onClick    = { onRemoveFromRecent(); onDismiss() }
+                            )
+                        }
                     }
                 }
             }

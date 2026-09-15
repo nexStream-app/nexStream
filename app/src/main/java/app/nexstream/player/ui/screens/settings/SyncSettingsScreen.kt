@@ -36,9 +36,8 @@ import app.nexstream.player.ui.theme.applySyncedPlayerPrefs
 import app.nexstream.player.ui.theme.applySyncedThemePrefs
 import app.nexstream.player.ui.theme.collectSyncablePlayerPrefs
 import app.nexstream.player.ui.theme.collectSyncableThemePrefs
-import app.nexstream.player.ui.theme.getAutoUpdateEnabledFlow
-import app.nexstream.player.ui.theme.saveAutoUpdateEnabled
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
+import app.nexstream.player.update.AutoUpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -176,11 +175,12 @@ fun SyncSettingsScreen(
     val uiStyle  = rememberUiStyle()
 
     val uiState by viewModel.uiState.collectAsState()
-    val autoUpdateEnabled by context.getAutoUpdateEnabledFlow().collectAsState(initial = false)
 
     val firstFR   = firstItemFocusRequester ?: remember { FocusRequester() }
     val syncBtnFR = remember { FocusRequester() }
     val scope     = rememberCoroutineScope()
+    var isCheckingUpdate  by remember { mutableStateOf(false) }
+    var updateCheckResult by remember { mutableStateOf<String?>(null) }
 
     val strProfileCountOne   = stringResource(R.string.sync_profile_count_one)
     val strProfileCountOther = stringResource(R.string.sync_profile_count_other)
@@ -207,15 +207,29 @@ fun SyncSettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Auto Update ───────────────────────────────────────────────────
+            // ── Updates ───────────────────────────────────────────────────────
             SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
-                SettingsToggle(
-                    label          = stringResource(R.string.sync_auto_update_label),
-                    description    = stringResource(R.string.sync_auto_update_desc),
-                    checked        = autoUpdateEnabled,
+                SettingsActionItem(
+                    label          = "Check for Update",
+                    description    = if (isCheckingUpdate) "Downloading…" else (updateCheckResult ?: "Check for a newer version of NexStream"),
+                    value          = "",
                     uiStyle        = uiStyle,
                     focusRequester = firstFR,
-                    onToggle       = { scope.launch { context.saveAutoUpdateEnabled(!autoUpdateEnabled) } },
+                    showDivider    = false,
+                    onClick        = {
+                        if (!isCheckingUpdate) {
+                            updateCheckResult = null
+                            scope.launch {
+                                isCheckingUpdate = true
+                                updateCheckResult = try {
+                                    AutoUpdateManager.checkNow(context)
+                                } catch (_: Exception) {
+                                    "Check failed — try again"
+                                }
+                                isCheckingUpdate = false
+                            }
+                        }
+                    }
                 )
             }
 

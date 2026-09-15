@@ -72,7 +72,6 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 import app.nexstream.player.data.profile.ProfileManager
-import app.nexstream.player.update.AutoUpdateManager
 import app.nexstream.player.ui.theme.getAppLanguageBlocking
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -182,10 +181,6 @@ class MainActivity : ComponentActivity() {
 
         EpgRefreshWorker.schedule(this)
         ContentRefreshWorker.schedule(this)
-
-        lifecycleScope.launch {
-            AutoUpdateManager.checkAndPrompt(this@MainActivity)
-        }
 
         lifecycleScope.launch(Dispatchers.IO) {
             val sevenDaysAgo = System.currentTimeMillis() - (8 * 24 * 60 * 60 * 1000L)

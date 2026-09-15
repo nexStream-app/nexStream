@@ -1,14 +1,11 @@
 package app.nexstream.player.update
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.FileProvider
 import app.nexstream.player.BuildConfig
-import app.nexstream.player.ui.theme.getAutoUpdateEnabledFlow
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
@@ -21,30 +18,16 @@ object AutoUpdateManager {
     private fun apkUrl(@Suppress("UNUSED_PARAMETER") build: Int) =
         "https://github.com/nexStream-app/nexStream/releases/latest/download/nexStream.apk"
 
-    suspend fun checkAndPrompt(activity: Activity) = withContext(Dispatchers.IO) {
-        try {
-            if (!activity.getAutoUpdateEnabledFlow().first()) {
-                Log.d(TAG, "Auto-update disabled — skipping")
-                return@withContext
-            }
-
-            val remoteStr = URL(BUILD_URL).readText(Charsets.UTF_8).trim()
-            val remote    = remoteStr.toIntOrNull() ?: return@withContext
-            val local     = BuildConfig.BUILD_NUMBER_INT
-
-            Log.d(TAG, "Local build: $local, Remote build: $remote")
-            if (remote <= local) return@withContext
-
-            Log.d(TAG, "Update available — downloading build $remote")
-            val apkFile = downloadApk(activity, apkUrl(remote))
-            if (apkFile != null) {
-                withContext(Dispatchers.Main) {
-                    installApk(activity, apkFile)
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Update check failed: ${e.message}")
-        }
+    suspend fun checkNow(context: Context): String = withContext(Dispatchers.IO) {
+        val remoteStr = URL(BUILD_URL).readText(Charsets.UTF_8).trim()
+        val remote    = remoteStr.toIntOrNull() ?: return@withContext "Could not read version info"
+        val local     = BuildConfig.BUILD_NUMBER_INT
+        Log.d(TAG, "Local build: $local, Remote build: $remote")
+        if (remote <= local) return@withContext "Already up to date (build $local)"
+        Log.d(TAG, "Update available — downloading build $remote")
+        val apkFile = downloadApk(context, apkUrl(remote)) ?: return@withContext "Download failed"
+        withContext(Dispatchers.Main) { installApk(context, apkFile) }
+        "Updating to build $remote…"
     }
 
     private fun downloadApk(context: Context, url: String): File? {
@@ -62,13 +45,13 @@ object AutoUpdateManager {
         }
     }
 
-    private fun installApk(activity: Activity, apk: File) {
-        val uri = FileProvider.getUriForFile(activity, AUTHORITY, apk)
+    private fun installApk(context: Context, apk: File) {
+        val uri = FileProvider.getUriForFile(context, AUTHORITY, apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        activity.startActivity(intent)
+        context.startActivity(intent)
     }
 }

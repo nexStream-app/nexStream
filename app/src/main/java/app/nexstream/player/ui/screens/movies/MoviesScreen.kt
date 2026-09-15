@@ -77,12 +77,26 @@ import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 private enum class MovieSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), RECENTLY_ADDED("Newest Added"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
 }
 
 private val AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
 private fun movieCertOrder(cert: String?): Int =
     if (cert == null || cert == "NR") Int.MAX_VALUE else AGE_CERT_ORDER[cert] ?: Int.MAX_VALUE
+
+private fun parseReleaseDateEpochMs(date: String?): Long {
+    if (date.isNullOrBlank()) return 0L
+    return try {
+        val parts = date.trim().split("-")
+        val year  = parts.getOrNull(0)?.toIntOrNull() ?: return 0L
+        val month = parts.getOrNull(1)?.toIntOrNull() ?: 1
+        val day   = parts.getOrNull(2)?.toIntOrNull() ?: 1
+        val cal = java.util.Calendar.getInstance()
+        cal.set(year, month - 1, day, 0, 0, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.timeInMillis
+    } catch (_: Exception) { 0L }
+}
 
 private fun parseReleaseDateSortKey(date: String?): Long {
     if (date.isNullOrBlank()) return 0L
@@ -192,7 +206,7 @@ fun MoviesScreen(
             val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
             val base = when {
                 needsFavoritesFilter -> _allMovies.filter { it.id in watchlistIds }
-                needsRecentFilter    -> _allMovies.filter { it.addedAt > recentCutoff }
+                needsRecentFilter    -> _allMovies.filter { parseReleaseDateEpochMs(it.releaseDate).let { ms -> ms > 0L && ms > recentCutoff } }
                 else                 -> _allMovies
             }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogMovieId } else base
@@ -205,7 +219,7 @@ fun MoviesScreen(
                 MovieSortOrder.A_Z             -> filtered.sortedBy { it.name.lowercase() }
                 MovieSortOrder.Z_A             -> filtered.sortedByDescending { it.name.lowercase() }
                 MovieSortOrder.RATING          -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
-                MovieSortOrder.RECENTLY_ADDED  -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
+                MovieSortOrder.NEWEST_RELEASE  -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
                 MovieSortOrder.OLDEST_RELEASE  -> filtered.sortedBy { parseReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
                 MovieSortOrder.AGE_RATING      -> filtered.sortedBy { movieCertOrder(it.certification) }
             }
