@@ -155,6 +155,7 @@ class AddPlaylistViewModel @Inject constructor(
     val channelImportedCount: StateFlow<Int> = repository.channelImportedCount
     val isLoadingEPG: StateFlow<Boolean>     = repository.isLoadingEPG
     val epgProgramCount: StateFlow<Int>      = repository.epgProgramCount
+    val epgFetchError: StateFlow<String?>    = repository.epgFetchError
     val isLoadingVOD: StateFlow<Boolean>     = repository.isLoadingVOD
     val vodLoadedCount: StateFlow<Int>       = repository.vodLoadedCount
     val isLoadingSeries: StateFlow<Boolean>  = repository.isLoadingSeries
@@ -1165,6 +1166,7 @@ private fun PlaylistImportProgressScreen(
     val channelCount  by viewModel.channelImportedCount.collectAsState()
     val isLoadingEPG  by viewModel.isLoadingEPG.collectAsState()
     val epgCount      by viewModel.epgProgramCount.collectAsState()
+    val epgError      by viewModel.epgFetchError.collectAsState()
     val isLoadingVOD by viewModel.isLoadingVOD.collectAsState()
     val vodCount     by viewModel.vodLoadedCount.collectAsState()
     val isLoadingSeries by viewModel.isLoadingSeries.collectAsState()
@@ -1250,6 +1252,14 @@ private fun PlaylistImportProgressScreen(
                             count = epgCount,
                             unit = "programmes"
                         )
+                        if (!isLoadingEPG && epgCount == 0 && epgError != null) {
+                            Text(
+                                text = "EPG failed: $epgError",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(start = 32.dp, top = 2.dp, bottom = 4.dp)
+                            )
+                        }
                     }
                     if (isXtream || isJellyfin || isPlex) {
                         ImportProgressRow(

@@ -84,6 +84,9 @@ class PlaylistRepository @Inject constructor(
     private val _epgProgramCount = MutableStateFlow(0)
     val epgProgramCount: StateFlow<Int> = _epgProgramCount.asStateFlow()
 
+    private val _epgFetchError = MutableStateFlow<String?>(null)
+    val epgFetchError: StateFlow<String?> = _epgFetchError.asStateFlow()
+
     private val _isLoadingVOD = MutableStateFlow(false)
     val isLoadingVOD: StateFlow<Boolean> = _isLoadingVOD.asStateFlow()
 
@@ -397,12 +400,14 @@ class PlaylistRepository @Inject constructor(
                     // 1. EPG
                     _isLoadingEPG.value = true
                     _epgProgramCount.value = 0
+                    _epgFetchError.value = null
                     try {
                         delay(5_000L)
                         fetchAndStoreEPG(host, username, password)
                         android.util.Log.d("PlaylistRepository", "EPG fetch completed")
                     } catch (e: Exception) {
                         android.util.Log.e("PlaylistRepository", "EPG fetch failed", e)
+                        _epgFetchError.value = e.message ?: "Unknown error"
                     } finally {
                         _isLoadingEPG.value = false
                     }
@@ -1375,7 +1380,7 @@ class PlaylistRepository @Inject constructor(
                 parser.setInput(inputStream, "UTF-8")
 
                 val windowStart = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)  // 7 days back
-                val windowEnd   = System.currentTimeMillis() + (2 * 24 * 60 * 60 * 1000L)   // 2 days ahead
+                val windowEnd   = System.currentTimeMillis() + (7 * 24 * 60 * 60 * 1000L)   // 7 days ahead
 
                 val programs = mutableListOf<ProgramEntity>()
                 var eventType = parser.eventType
@@ -1446,6 +1451,7 @@ class PlaylistRepository @Inject constructor(
 
             } catch (e: Exception) {
                 android.util.Log.e("EPG_DEBUG", "=== EPG FETCH FAILED ===", e)
+                throw e
             }
         }
 
@@ -1499,6 +1505,33 @@ class PlaylistRepository @Inject constructor(
                 format.timeZone = java.util.TimeZone.getTimeZone("UTC")
                 format.parse(xmltvTime.trim().take(14))?.time ?: 0L
             } catch (e2: Exception) { 0L }
+        }
+    }
+
+    suspend fun refreshAllEpg() {
+        val playlists = getAllPlaylists().first()
+        val xtreamPlaylists = playlists.filter {
+            it.type == "XTREAM" &&
+            !it.xtreamHost.isNullOrEmpty() &&
+            !it.xtreamUsername.isNullOrEmpty() &&
+            !it.xtreamPassword.isNullOrEmpty()
+        }
+        if (xtreamPlaylists.isEmpty()) {
+            _epgFetchError.value = "No Xtream playlists found"
+            return
+        }
+        _isLoadingEPG.value = true
+        _epgProgramCount.value = 0
+        _epgFetchError.value = null
+        try {
+            xtreamPlaylists.forEach { playlist ->
+                fetchAndStoreEPG(playlist.xtreamHost!!, playlist.xtreamUsername!!, playlist.xtreamPassword!!)
+            }
+        } catch (e: Exception) {
+            _epgFetchError.value = e.message ?: "Refresh failed"
+            android.util.Log.e("EPG_DEBUG", "refreshAllEpg failed", e)
+        } finally {
+            _isLoadingEPG.value = false
         }
     }
 
@@ -1680,7 +1713,17 @@ class PlaylistRepository @Inject constructor(
                 database.channelDao().insertAll(channels)
                 database.channelGroupDao().pruneStaleMembers()
                 database.programDao().deleteAllPrograms()
-                fetchAndStoreEPG(host, username, password)
+                _isLoadingEPG.value = true
+                _epgProgramCount.value = 0
+                _epgFetchError.value = null
+                try {
+                    fetchAndStoreEPG(host, username, password)
+                } catch (e: Exception) {
+                    _epgFetchError.value = e.message ?: "Unknown error"
+                    android.util.Log.e("PlaylistRepository", "EPG fetch failed in refreshChannelsAndEPG", e)
+                } finally {
+                    _isLoadingEPG.value = false
+                }
 
             } catch (e: Exception) {
                 android.util.Log.e("PlaylistRepository", "refreshChannelsAndEPG failed", e)

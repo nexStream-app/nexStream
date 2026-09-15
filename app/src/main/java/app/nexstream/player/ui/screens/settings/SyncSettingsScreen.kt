@@ -26,6 +26,7 @@ import app.nexstream.player.data.local.dao.WatchlistDao
 import app.nexstream.player.data.local.entity.ProfileEntity
 import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
+import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.sync.ProfileSyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
@@ -66,6 +67,8 @@ data class SyncSettingsUiState(
     val syncAppearance: Boolean = true,
     val syncPlayerSettings: Boolean = true,
     val activeProfileId: String = "",
+    val isRefreshingEpg: Boolean = false,
+    val epgRefreshResult: String? = null,
 )
 
 @HiltViewModel
@@ -75,6 +78,7 @@ class SyncSettingsViewModel @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileDao: ProfileDao,
     private val watchlistDao: WatchlistDao,
+    private val playlistRepository: PlaylistRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SyncSettingsUiState())
@@ -161,6 +165,22 @@ class SyncSettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isSyncing = false, syncedCount = profiles.size) }
         }
     }
+
+    fun refreshEpg() {
+        if (_uiState.value.isRefreshingEpg) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingEpg = true, epgRefreshResult = null) }
+            try {
+                playlistRepository.refreshAllEpg()
+                val count = playlistRepository.epgProgramCount.value
+                _uiState.update { it.copy(epgRefreshResult = if (count > 0) "Loaded $count programmes" else (playlistRepository.epgFetchError.value ?: "No programmes found — check EPG source")) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(epgRefreshResult = "Failed: ${e.message}") }
+            } finally {
+                _uiState.update { it.copy(isRefreshingEpg = false) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -181,6 +201,8 @@ fun SyncSettingsScreen(
     val scope     = rememberCoroutineScope()
     var isCheckingUpdate  by remember { mutableStateOf(false) }
     var updateCheckResult by remember { mutableStateOf<String?>(null) }
+    val isRefreshingEpg = uiState.isRefreshingEpg
+    val epgRefreshResult = uiState.epgRefreshResult
 
     val strProfileCountOne   = stringResource(R.string.sync_profile_count_one)
     val strProfileCountOther = stringResource(R.string.sync_profile_count_other)
@@ -230,6 +252,18 @@ fun SyncSettingsScreen(
                             }
                         }
                     }
+                )
+            }
+
+            // ── TV Guide (EPG) ────────────────────────────────────────────────
+            SettingsSectionContainer(title = "TV Guide", icon = Icons.Default.CalendarToday, uiStyle = uiStyle) {
+                SettingsActionItem(
+                    label       = if (isRefreshingEpg) "Refreshing…" else "Refresh TV Guide",
+                    description = epgRefreshResult ?: "Re-download programme schedule from your playlist provider",
+                    value       = "",
+                    uiStyle     = uiStyle,
+                    showDivider = false,
+                    onClick     = { viewModel.refreshEpg() }
                 )
             }
 
