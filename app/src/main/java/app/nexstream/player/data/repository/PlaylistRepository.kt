@@ -197,12 +197,6 @@ class PlaylistRepository @Inject constructor(
         return database.movieDao().getMoviesByPlaylist(playlistId)
     }
 
-    private interface XmltvService {
-        @GET
-        @Streaming
-        suspend fun getXMLTV(@Url url: String): ResponseBody
-    }
-
     suspend fun addM3UPlaylist(name: String, url: String): Result<String> {
         return try {
             val playlistId = UUID.randomUUID().toString()
@@ -1362,18 +1356,23 @@ class PlaylistRepository @Inject constructor(
                 android.util.Log.d("EPG_DEBUG", "=== EPG FETCH START ===")
                 val xmltvUrl = "$host/xmltv.php?username=$username&password=$password"
 
-                val retrofit = Retrofit.Builder()
-                    .baseUrl(host)
-                    .client(
-                        OkHttpClient.Builder()
-                            .readTimeout(60, TimeUnit.SECONDS)
-                            .connectTimeout(30, TimeUnit.SECONDS)
-                            .build()
-                    )
+                // Non-browser User-Agent bypasses Cloudflare email-obfuscation which
+                // injects HTML into the XMLTV stream when it detects email-style channel IDs
+                val client = OkHttpClient.Builder()
+                    .readTimeout(120, TimeUnit.SECONDS)
+                    .connectTimeout(30, TimeUnit.SECONDS)
                     .build()
-
-                val response = retrofit.create(XmltvService::class.java).getXMLTV(xmltvUrl)
-                val inputStream = response.byteStream()
+                val request = okhttp3.Request.Builder()
+                    .url(xmltvUrl)
+                    .header("User-Agent", "NexStream/1.0 XMLTV-Client")
+                    .header("Accept", "application/xml, text/xml, */*")
+                    .build()
+                val httpResponse = client.newCall(request).execute()
+                if (!httpResponse.isSuccessful) {
+                    throw Exception("HTTP ${httpResponse.code} ${httpResponse.message}")
+                }
+                val inputStream = httpResponse.body?.byteStream()
+                    ?: throw Exception("Empty response body")
 
                 val factory = XmlPullParserFactory.newInstance()
                 val parser = factory.newPullParser()
@@ -1447,6 +1446,7 @@ class PlaylistRepository @Inject constructor(
                 }
                 _epgProgramCount.value = programCount
                 inputStream.close()
+                httpResponse.close()
                 android.util.Log.d("EPG_DEBUG", "=== EPG FETCH COMPLETE — $programCount programs ===")
 
             } catch (e: Exception) {
