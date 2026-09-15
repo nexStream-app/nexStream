@@ -4,8 +4,10 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
-import java.net.URL
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +32,21 @@ class TrialManager @Inject constructor(
     private val licenceManager: LicenceManager
 ) {
     private val prefs = context.getSharedPreferences("nexstream_trial", Context.MODE_PRIVATE)
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    private fun httpGet(url: String): String {
+        val response = httpClient.newCall(
+            Request.Builder().url(url)
+                .header("User-Agent", "NexStream LicenceCheck")
+                .build()
+        ).execute()
+        val body = response.body?.string() ?: ""
+        response.close()
+        return body
+    }
 
     private fun saveTrialExpiry(expiresAt: String) =
         prefs.edit().putString("trial_expires_at", expiresAt).apply()
@@ -49,8 +66,7 @@ class TrialManager @Inject constructor(
         withContext(Dispatchers.IO) {
             return@withContext try {
                 val json = JSONObject(
-                    URL("https://nexstream.uk/api/check_licence.php?device_id=$deviceId")
-                        .readText()
+                    httpGet("https://nexstream.uk/api/check_licence.php?device_id=$deviceId")
                 )
                 val found = json.optBoolean("found", false)
                 android.util.Log.i("TrialManager", "checkAndActivateAssignedLicence: found=$found")
@@ -157,7 +173,7 @@ class TrialManager @Inject constructor(
         withContext(Dispatchers.IO) {
             return@withContext try {
                 val json = JSONObject(
-                    URL("https://nexstream.uk/api/check_licence.php?device_id=$deviceId").readText()
+                    httpGet("https://nexstream.uk/api/check_licence.php?device_id=$deviceId")
                 )
                 if (!json.optBoolean("found", false)) return@withContext AssignedLicenceCheck.None
 

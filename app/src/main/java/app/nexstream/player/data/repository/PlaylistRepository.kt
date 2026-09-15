@@ -1371,36 +1371,21 @@ class PlaylistRepository @Inject constructor(
                 }
                 val responseBody = httpResponse.body ?: throw Exception("Empty response body")
 
-                // Cloudflare email-obfuscation replaces email-like channel IDs (e.g. BBC1@provider.com)
-                // with <a href="/cdn-cgi/l/email-protection" data-cfemail="ENCODED">...</a> HTML,
-                // corrupting the XML. A background thread reads the response line-by-line, decodes
-                // any CF-obfuscated addresses back to plain text, and writes into a pipe that feeds
-                // the XML parser — no bulk memory allocation regardless of file size.
+                // Synchronous CF email-obfuscation decode. Cloudflare replaces email-like
+                // channel IDs (e.g. BBC1@provider.com) with <a data-cfemail="ENCODED">...</a>
+                // when the origin returns text/html Content-Type. XOR-decoded inline via a
+                // custom InputStream wrapper — no background thread, no pipe deadlocks.
                 val cfPattern = Regex(
                     """<a[^>]*?data-cfemail=['"]([0-9a-f]+)['"][^>]*?>.*?</a>""",
                     RegexOption.IGNORE_CASE
                 )
-                val pipeIn  = java.io.PipedInputStream(65536)
-                val pipeOut = java.io.PipedOutputStream(pipeIn)
-                Thread {
-                    try {
-                        responseBody.charStream().buffered().use { reader ->
-                            pipeOut.writer(Charsets.UTF_8).buffered().use { writer ->
-                                reader.forEachLine { line ->
-                                    writer.write(cfPattern.replace(line) { mr ->
-                                        decodeCfEmail(mr.groupValues[1])
-                                    })
-                                    writer.newLine()
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {
-                    } finally {
-                        pipeOut.close()
-                        httpResponse.close()
-                    }
-                }.apply { isDaemon = true; start() }
-                val inputStream: java.io.InputStream = pipeIn
+                val inputStream = cfDecodeStream(responseBody.byteStream(), cfPattern)
+
+                // Diagnostic: log DB epgChannelIds so we can compare with XMLTV channel attrs
+                val sampleDbIds = database.channelDao().getAllChannels().first()
+                    .mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotEmpty() } }
+                    .take(10)
+                android.util.Log.d("EPG_DEBUG", "DB epgChannelIds (first 10): $sampleDbIds")
 
                 val factory = XmlPullParserFactory.newInstance()
                 val parser = factory.newPullParser()
@@ -1427,6 +1412,9 @@ class PlaylistRepository @Inject constructor(
                                 currentStop    = parser.getAttributeValue(null, "stop")    ?: ""
                                 currentTitle   = ""
                                 currentDesc    = ""
+                                if (programCount < 5) {
+                                    android.util.Log.d("EPG_DEBUG", "XMLTV channel attr: '$currentChannel'")
+                                }
                             }
                             "title" -> currentTitle = parser.nextText()
                             "desc"  -> currentDesc  = parser.nextText()
@@ -1473,7 +1461,8 @@ class PlaylistRepository @Inject constructor(
                     programs.clear()
                 }
                 _epgProgramCount.value = programCount
-                inputStream.close() // signals the pipe thread to finish and close httpResponse
+                inputStream.close()
+                httpResponse.close()
                 android.util.Log.d("EPG_DEBUG", "=== EPG FETCH COMPLETE — $programCount programs ===")
 
             } catch (e: Exception) {
@@ -1527,6 +1516,43 @@ class PlaylistRepository @Inject constructor(
             val key = bytes[0]
             bytes.drop(1).map { (it xor key).toChar() }.joinToString("")
         } catch (_: Exception) { "" }
+
+    private fun cfDecodeStream(source: java.io.InputStream, cfPattern: Regex): java.io.InputStream {
+        val reader = source.bufferedReader(Charsets.UTF_8)
+        var lineBuffer = ByteArray(0)
+        var linePos = 0
+        var eof = false
+        return object : java.io.InputStream() {
+            private fun nextLine() {
+                val line = reader.readLine() ?: run { eof = true; return }
+                val decoded = if (line.contains("data-cfemail", ignoreCase = true)) {
+                    cfPattern.replace(line) { mr -> decodeCfEmail(mr.groupValues[1]) }
+                } else line
+                lineBuffer = (decoded + "\n").toByteArray(Charsets.UTF_8)
+                linePos = 0
+            }
+            override fun read(): Int {
+                while (linePos >= lineBuffer.size) { if (eof) return -1; nextLine() }
+                return lineBuffer[linePos++].toInt() and 0xFF
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                var written = 0
+                while (written < len) {
+                    while (linePos >= lineBuffer.size) {
+                        if (eof) return if (written == 0) -1 else written
+                        nextLine()
+                    }
+                    val available = lineBuffer.size - linePos
+                    val toRead = minOf(available, len - written)
+                    lineBuffer.copyInto(b, off + written, linePos, linePos + toRead)
+                    linePos += toRead
+                    written += toRead
+                }
+                return written
+            }
+            override fun close() { reader.close() }
+        }
+    }
 
     private fun parseXmltvTime(xmltvTime: String): Long {
         return try {
