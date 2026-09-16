@@ -23,18 +23,14 @@ $replay   = isset($_GET['replay'])   && $_GET['replay']  === '1';
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
-// Scrape if forced or no events exist yet for today
+// Check if events exist (cron handles scraping — no inline scrape to avoid IONOS timeout)
+$hasEvents = false;
 if ($date === date('Y-m-d')) {
     try {
         $check = $db->prepare("SELECT COUNT(*) FROM sports_listings WHERE event_date = ?");
         $check->execute([$date]);
         $hasEvents = (int)$check->fetchColumn() > 0;
     } catch (PDOException $e) { $hasEvents = false; }
-
-    if ($force || !$hasEvents) {
-        require_once dirname(__DIR__) . '/cron/scrape_sports.php';
-        runSportsScrape(false);
-    }
 }
 
 $where  = ['event_date = ?'];
@@ -99,6 +95,7 @@ echo json_encode([
     'success'              => true,
     'date'                 => $date,
     'events'               => $events,
+    'has_events'           => $hasEvents,
     'available_categories' => $availableCategories,
     'attribution'          => 'Source: Daily Sports Guide (dailysportsguide.co.uk)',
 ]);

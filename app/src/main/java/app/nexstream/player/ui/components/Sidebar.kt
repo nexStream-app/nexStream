@@ -220,7 +220,7 @@ fun Sidebar(
                 sidebarRefocusTick = sidebarRefocusTick,
                 showLabels         = true,
                 onNavigate         = { route ->
-                    val effectiveRoute = if (route == AppRoute.Settings) AppRoute.SettingsAbout else route
+                    val effectiveRoute = if (route == AppRoute.Settings) AppRoute.SettingsPlaylists else route
                     if (effectiveRoute.hasCategoryPanel) {
                         onPanelExpandedChange(true, effectiveRoute)
                         onNavigate(effectiveRoute)
@@ -1376,18 +1376,18 @@ private fun SettingsPanel(
 
     val entries = remember(showSyncSettings) {
         buildList {
-            add(SettingsEntry("About",          AppRoute.SettingsAbout,          aboutFR))
-            add(SettingsEntry("Account",        AppRoute.SettingsAccount,        accountFR))
-            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,     appearanceFR))
-            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups,  channelGroupsFR))
-            add(SettingsEntry("Language",       AppRoute.SettingsLanguage,       languageFR))
-            add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
-            add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
-            add(SettingsEntry("Network",        AppRoute.SettingsProxy,          networkFR))
-            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))
             add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,      playlistsFR))
+            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,     appearanceFR))
+            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))
+            add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
+            add(SettingsEntry("Account",        AppRoute.SettingsAccount,        accountFR))
             add(SettingsEntry("Profiles",       AppRoute.SettingsProfiles,       profilesFR))
             if (showSyncSettings) add(SettingsEntry("Sync and Update", AppRoute.SettingsSyncSettings, syncFR))
+            add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
+            add(SettingsEntry("Language",       AppRoute.SettingsLanguage,       languageFR))
+            add(SettingsEntry("Network",        AppRoute.SettingsProxy,          networkFR))
+            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups,  channelGroupsFR))
+            add(SettingsEntry("About",          AppRoute.SettingsAbout,          aboutFR))
         }
     }
 

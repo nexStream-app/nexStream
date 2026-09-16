@@ -2048,7 +2048,10 @@ private fun MainContentArea(
                 }
             )
 
-            AppRoute.Settings           -> app.nexstream.player.ui.screens.settings.SettingsMenuScreen(onNavigate = onNavigateToRoute)
+            AppRoute.Settings           -> app.nexstream.player.ui.screens.settings.SettingsMenuScreen(
+                onNavigate = onNavigateToRoute,
+                playlistsFocusRequester = contentFR,
+            )
             AppRoute.SettingsPlaylists  -> SettingsScreen(
                 onNavigateToAddPlaylist = onNavigateToAddPlaylist,
                 firstItemFocusRequester = contentFR,

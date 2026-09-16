@@ -100,6 +100,7 @@ fun ModernHomeContent(
     onSetSportReminder: (channelId: String, channelName: String, streamUrl: String, title: String, startMs: Long) -> Unit = { _, _, _, _, _ -> },
     onCancelSportReminder: (channelId: String, startMs: Long) -> Unit = { _, _ -> },
     sportsEditTick: Int = 0,
+    onRefreshSports: () -> Unit = {},
 ) {
     val background    = LocalNsBackground.current
     val accent        = LocalNsAccent.current
@@ -185,6 +186,30 @@ fun ModernHomeContent(
                 ) {
                     CircularProgressIndicator(color = accent, strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
                     Text("Fetching Today's Live Sport…", style = MaterialTheme.typography.bodySmall, color = textSecondary)
+                }
+            }
+        }
+
+        // Empty state when cron hasn't populated events yet
+        if (!isLoadingSports && sportsEvents.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "No sports events found for today",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textSecondary
+                    )
+                    androidx.compose.material3.TextButton(onClick = onRefreshSports) {
+                        Text("Refresh", style = MaterialTheme.typography.labelMedium, color = accent)
+                    }
                 }
             }
         }

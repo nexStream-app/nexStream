@@ -80,5 +80,6 @@ fun ModernHomeScreen(
             reminderViewModel.cancelReminder(channelId, startMs)
         },
         sportsEditTick           = sportsEditTick,
+        onRefreshSports          = { homePageViewModel.refreshSports() },
     )
 }
