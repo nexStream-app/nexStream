@@ -973,6 +973,14 @@ private fun ProgramActionBar(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
+                        EpgDialogPill(
+                            icon       = Icons.Default.ArrowBack,
+                            label      = "Back",
+                            isSelected = false,
+                            accent     = accent,
+                            background = background,
+                            onClick    = { showGroupPicker = false },
+                        )
                         channelGroups.forEachIndexed { idx, group ->
                             EpgDialogPill(
                                 icon       = Icons.Default.Folder,
@@ -1037,12 +1045,11 @@ private fun EpgInfoPlayerStrip(
         }
     }
 
-    // Space above + below strip; single Row so mini player spans full height; no horizontal padding
-    // on Row so HorizontalDivider inside left Column reaches the left edge of the screen.
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(sTheme.panelBackground)
+            .padding(vertical = 6.dp)
     ) {
         Row(
             modifier = Modifier

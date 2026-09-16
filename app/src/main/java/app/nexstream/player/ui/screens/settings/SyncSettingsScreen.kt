@@ -16,6 +16,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.nexstream.player.R
@@ -233,7 +234,7 @@ fun SyncSettingsScreen(
             SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
                 SettingsActionItem(
                     label          = "Check for Update",
-                    description    = if (isCheckingUpdate) "Downloading…" else (updateCheckResult ?: "Check for a newer version of NexStream"),
+                    description    = if (isCheckingUpdate) "Downloading…" else (updateCheckResult ?: "Check for a newer version of nexStream"),
                     value          = "",
                     uiStyle        = uiStyle,
                     focusRequester = firstFR,
@@ -311,35 +312,18 @@ fun SyncSettingsScreen(
                     )
 
                     // ── Manual sync button ────────────────────────────────────
-                    Spacer(Modifier.height(4.dp))
-                    var syncFocused by remember { mutableStateOf(false) }
-                    val strSyncing = stringResource(R.string.sync_syncing)
-                    val strSyncNow = stringResource(R.string.sync_now)
-                    Button(
-                        onClick  = { if (!uiState.isSyncing) viewModel.manualSync() },
-                        enabled  = !uiState.isSyncing,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .focusRequester(syncBtnFR)
-                            .onFocusChanged { syncFocused = it.isFocused }
-                            .onKeyEvent { e ->
-                                if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionCenter)) {
-                                    if (!uiState.isSyncing) viewModel.manualSync()
-                                    true
-                                } else false
-                            },
-                    ) {
-                        if (uiState.isSyncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                            Spacer(Modifier.width(8.dp))
-                            Text(strSyncing)
-                        } else {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(strSyncNow)
-                        }
-                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+                    SettingsActionItem(
+                        label          = if (uiState.isSyncing) stringResource(R.string.sync_syncing) else stringResource(R.string.sync_now),
+                        description    = stringResource(R.string.sync_cloud_desc),
+                        uiStyle        = uiStyle,
+                        focusRequester = syncBtnFR,
+                        showDivider    = false,
+                        onClick        = { if (!uiState.isSyncing) viewModel.manualSync() }
+                    )
 
                     uiState.syncedCount?.let { count ->
                         val msg = if (count == 1) strProfileCountOne
@@ -470,18 +454,29 @@ fun SyncSettingsScreen(
                     )
                 }
             }
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
 
 @Composable
 private fun ProfileStatRow(stat: ProfileSyncStat) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stat.profileEmoji, style = MaterialTheme.typography.bodyMedium)
-            Text(stat.profileName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(stat.profileEmoji, style = MaterialTheme.typography.bodySmall)
+        Text(
+            stat.profileName,
+            style    = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color    = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatChip(label = stringResource(R.string.sync_stat_movies),  count = stat.movies)
             StatChip(label = stringResource(R.string.sync_stat_series),  count = stat.series)
             StatChip(label = stringResource(R.string.sync_stat_live_tv), count = stat.liveTV)
