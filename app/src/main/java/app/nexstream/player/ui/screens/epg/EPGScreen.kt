@@ -53,6 +53,7 @@ import app.nexstream.player.data.local.dao.ChannelGroupDao
 import app.nexstream.player.data.local.dao.TmdbPosterDao
 import app.nexstream.player.data.local.entity.ChannelEntity
 import app.nexstream.player.data.local.entity.ChannelGroupEntity
+import app.nexstream.player.data.local.entity.ChannelGroupMemberEntity
 import app.nexstream.player.data.local.entity.ProgramEntity
 import app.nexstream.player.data.local.entity.TmdbPosterEntity
 import app.nexstream.player.data.profile.ProfileManager
@@ -204,6 +205,7 @@ private fun EPGContent(
     val isLoadingPrograms  by viewModel.isLoadingPrograms.collectAsState()
     val allChannels        by mainViewModel.allChannels.collectAsState()
     val reminderIds        by reminderViewModel.reminderIds.collectAsState()
+    val channelGroups      by viewModel.channelGroups.collectAsState()
     val context = LocalContext.current
     val isTV = context.packageManager.hasSystemFeature("android.software.leanback")
 
@@ -676,6 +678,12 @@ private fun EPGContent(
                     }
                     dialogProgram = null; dialogChannel = null
                 },
+                channelGroups = channelGroups,
+                onAddToGroup = { groupId ->
+                    viewModel.addChannelToGroup(_dc, groupId)
+                    bannerMessage = "${_dc.name} added to group"
+                    dialogProgram = null; dialogChannel = null
+                },
                 modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f)
             )
         }
@@ -826,6 +834,8 @@ private fun ProgramActionBar(
     onRecord: (() -> Unit)?,
     onStopRecording: (() -> Unit)?,
     onRemind: (() -> Unit)? = null,
+    channelGroups: List<ChannelGroupEntity> = emptyList(),
+    onAddToGroup: ((groupId: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val accent = LocalNsAccent.current
@@ -836,6 +846,9 @@ private fun ProgramActionBar(
     val isFuture = program.startTime > now
     val isPast = !isNow && !isFuture
     val hasCatchUp = channel.tvArchive != 0
+
+    var showGroupPicker  by remember { mutableStateOf(false) }
+    var groupPickerIndex by remember { mutableIntStateOf(0) }
 
     data class Action(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val onClick: () -> Unit)
     val actions = buildList {
@@ -860,6 +873,9 @@ private fun ProgramActionBar(
                 onClick = onRemind
             ))
         }
+        if (onAddToGroup != null && channelGroups.isNotEmpty()) {
+            add(Action(Icons.Default.PlaylistAdd, "Add to Group") { showGroupPicker = true })
+        }
     }
 
     // Default to Watch (index 1, after My List)
@@ -880,14 +896,26 @@ private fun ProgramActionBar(
             .focusable()
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (e.key) {
-                    Key.DirectionLeft  -> { selectedIndex = (selectedIndex - 1 + actions.size) % actions.size; true }
-                    Key.DirectionRight -> { selectedIndex = (selectedIndex + 1) % actions.size; true }
-                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                        actions.getOrNull(selectedIndex)?.onClick?.invoke(); true
+                if (showGroupPicker) {
+                    when (e.key) {
+                        Key.DirectionLeft  -> { groupPickerIndex = (groupPickerIndex - 1 + channelGroups.size) % channelGroups.size; true }
+                        Key.DirectionRight -> { groupPickerIndex = (groupPickerIndex + 1) % channelGroups.size; true }
+                        Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                            channelGroups.getOrNull(groupPickerIndex)?.let { onAddToGroup?.invoke(it.id) }; true
+                        }
+                        Key.Back -> { showGroupPicker = false; true }
+                        else -> false
                     }
-                    Key.Back -> { onDismiss(); true }
-                    else -> false
+                } else {
+                    when (e.key) {
+                        Key.DirectionLeft  -> { selectedIndex = (selectedIndex - 1 + actions.size) % actions.size; true }
+                        Key.DirectionRight -> { selectedIndex = (selectedIndex + 1) % actions.size; true }
+                        Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                            actions.getOrNull(selectedIndex)?.onClick?.invoke(); true
+                        }
+                        Key.Back -> { onDismiss(); true }
+                        else -> false
+                    }
                 }
             }
             .padding(horizontal = 20.dp, vertical = 12.dp)
@@ -934,19 +962,44 @@ private fun ProgramActionBar(
                     Text(channel.name, fontSize = 12.sp, color = Color.White.copy(alpha = 0.65f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                actions.forEachIndexed { idx, action ->
-                    EpgDialogPill(
-                        icon       = action.icon,
-                        label      = action.label,
-                        isSelected = selectedIndex == idx,
-                        accent     = accent,
-                        background = background,
-                        onClick    = action.onClick,
+            if (showGroupPicker) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text      = "Add '${channel.name}' to group",
+                        fontSize  = 11.sp,
+                        color     = Color.White.copy(alpha = 0.55f),
                     )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment     = Alignment.CenterVertically
+                    ) {
+                        channelGroups.forEachIndexed { idx, group ->
+                            EpgDialogPill(
+                                icon       = Icons.Default.Folder,
+                                label      = group.name,
+                                isSelected = groupPickerIndex == idx,
+                                accent     = accent,
+                                background = background,
+                                onClick    = { onAddToGroup?.invoke(group.id) },
+                            )
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    actions.forEachIndexed { idx, action ->
+                        EpgDialogPill(
+                            icon       = action.icon,
+                            label      = action.label,
+                            isSelected = selectedIndex == idx,
+                            accent     = accent,
+                            background = background,
+                            onClick    = action.onClick,
+                        )
+                    }
                 }
             }
         }
@@ -1476,6 +1529,22 @@ class EPGViewModel @Inject constructor(
 
     suspend fun getGroupChannelIds(groupId: String): List<String> =
         channelGroupDao.getChannelIdsForGroup(groupId)
+
+    fun addChannelToGroup(channel: ChannelEntity, groupId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = channelGroupDao.getMembersForGroup(groupId)
+            val nextSort = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            channelGroupDao.upsertMembers(listOf(
+                ChannelGroupMemberEntity(
+                    groupId     = groupId,
+                    channelId   = channel.id,
+                    channelName = channel.name,
+                    logoUrl     = channel.logoUrl,
+                    sortOrder   = nextSort
+                )
+            ))
+        }
+    }
 
     private val httpClient = OkHttpClient()
 

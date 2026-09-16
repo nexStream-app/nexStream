@@ -188,17 +188,14 @@ fun SettingsToggle(
                 else
                     MaterialTheme.colorScheme.onSurface
             )
-            // MODERN: always show description; CLASSIC: only on focus
-            if (uiStyle == UiStyle.MODERN || isFocused) {
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isFocused && uiStyle == UiStyle.MODERN)
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isFocused && uiStyle == UiStyle.MODERN)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Switch(
             checked = checked,
@@ -279,16 +276,14 @@ fun SettingsActionItem(
                 else
                     MaterialTheme.colorScheme.onSurface
             )
-            if (uiStyle == UiStyle.MODERN || isFocused) {
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isFocused && uiStyle == UiStyle.MODERN)
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isFocused && uiStyle == UiStyle.MODERN)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         if (value.isNotEmpty()) {
             Text(

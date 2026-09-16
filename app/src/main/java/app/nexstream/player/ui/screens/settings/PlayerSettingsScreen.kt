@@ -542,9 +542,7 @@ private fun SettingsActionRow(
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = sTheme.categoryText)
-            if (isFocused) {
-                Text(description, style = MaterialTheme.typography.bodySmall, color = sTheme.categoryText.copy(alpha = 0.7f))
-            }
+            Text(description, style = MaterialTheme.typography.bodySmall, color = sTheme.categoryText.copy(alpha = 0.7f))
         }
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Icon(Icons.Default.ChevronRight, null, tint = sTheme.categoryText.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
@@ -597,10 +595,7 @@ private fun SettingsToggleRow(
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = sTheme.categoryText)
-            if (isFocused) {
-                Text(description, style = MaterialTheme.typography.bodySmall,
-                    color = sTheme.categoryText.copy(alpha = 0.7f))
-            }
+            Text(description, style = MaterialTheme.typography.bodySmall, color = sTheme.categoryText.copy(alpha = 0.7f))
         }
         Switch(checked = checked, onCheckedChange = { onToggle() })
     }
