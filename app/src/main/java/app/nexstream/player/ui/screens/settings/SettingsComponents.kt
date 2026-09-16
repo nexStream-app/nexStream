@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getUiStyleFlow
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.launch
 
 // ── Style helper ──────────────────────────────────────────────────────────────
@@ -139,13 +141,15 @@ fun SettingsToggle(
     onToggle: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val bvr   = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
+    val bvr        = remember { BringIntoViewRequester() }
+    val scope      = rememberCoroutineScope()
+    var nodeHeight by remember { mutableStateOf(0) }
 
     val rowModifier = when (uiStyle) {
         UiStyle.MODERN -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
+            .onSizeChanged { nodeHeight = it.height }
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isFocused) MaterialTheme.colorScheme.primaryContainer
@@ -154,7 +158,9 @@ fun SettingsToggle(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 isFocused = state.isFocused
-                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+                if (state.isFocused) scope.launch {
+                    bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
+                }
             }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
@@ -168,6 +174,7 @@ fun SettingsToggle(
         UiStyle.CLASSIC -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
+            .onSizeChanged { nodeHeight = it.height }
             .clip(RoundedCornerShape(8.dp))
             .then(
                 if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
@@ -176,7 +183,9 @@ fun SettingsToggle(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 isFocused = state.isFocused
-                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+                if (state.isFocused) scope.launch {
+                    bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
+                }
             }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
@@ -238,13 +247,15 @@ fun SettingsActionItem(
     showDivider: Boolean = true,
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val bvr   = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
+    val bvr        = remember { BringIntoViewRequester() }
+    val scope      = rememberCoroutineScope()
+    var nodeHeight by remember { mutableStateOf(0) }
 
     val rowModifier = when (uiStyle) {
         UiStyle.MODERN -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
+            .onSizeChanged { nodeHeight = it.height }
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isFocused) MaterialTheme.colorScheme.primaryContainer
@@ -253,7 +264,9 @@ fun SettingsActionItem(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 isFocused = state.isFocused
-                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+                if (state.isFocused) scope.launch {
+                    bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
+                }
             }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
@@ -267,6 +280,7 @@ fun SettingsActionItem(
         UiStyle.CLASSIC -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
+            .onSizeChanged { nodeHeight = it.height }
             .clip(RoundedCornerShape(8.dp))
             .then(
                 if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
@@ -275,7 +289,9 @@ fun SettingsActionItem(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 isFocused = state.isFocused
-                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+                if (state.isFocused) scope.launch {
+                    bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
+                }
             }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&

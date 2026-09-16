@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -100,6 +99,7 @@ fun ModernHomeContent(
     reminderIds: Set<String> = emptySet(),
     onSetSportReminder: (channelId: String, channelName: String, streamUrl: String, title: String, startMs: Long) -> Unit = { _, _, _, _, _ -> },
     onCancelSportReminder: (channelId: String, startMs: Long) -> Unit = { _, _ -> },
+    sportsEditTick: Int = 0,
 ) {
     val background    = LocalNsBackground.current
     val accent        = LocalNsAccent.current
@@ -113,6 +113,9 @@ fun ModernHomeContent(
     var bannerMessage by remember { mutableStateOf<String?>(null) }
     var lastClickedCardFR by remember { mutableStateOf<FocusRequester?>(null) }
     var showSportsEdit by remember { mutableStateOf(false) }
+    LaunchedEffect(sportsEditTick) {
+        if (sportsEditTick > 0) showSportsEdit = true
+    }
     LaunchedEffect(homeRestoreTick) {
         if (homeRestoreTick > 0) {
             kotlinx.coroutines.delay(100)
@@ -153,39 +156,6 @@ fun ModernHomeContent(
                 style = MaterialTheme.typography.titleMedium,
                 color = sTheme.categoryText.copy(alpha = 0.75f)
             )
-            if (allSportsCategories.isNotEmpty()) {
-                var editBtnFocused by remember { mutableStateOf(false) }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (editBtnFocused) accent.copy(alpha = 0.15f) else Color.Transparent)
-                        .border(
-                            width = if (editBtnFocused) 1.5.dp else 0.dp,
-                            color = if (editBtnFocused) accent else Color.Transparent,
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .onFocusChanged { editBtnFocused = it.isFocused }
-                        .onKeyEvent { e ->
-                            if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
-                            when (e.key) {
-                                Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { showSportsEdit = true; true }
-                                else -> false
-                            }
-                        }
-                        .clickable { showSportsEdit = true }
-                        .focusable()
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = accent)
-                        Text("Edit", fontSize = 12.sp, color = accent)
-                    }
-                }
-            }
         }
         HorizontalDivider(color = sTheme.divider)
 

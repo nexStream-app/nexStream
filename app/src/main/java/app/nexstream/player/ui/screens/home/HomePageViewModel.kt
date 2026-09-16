@@ -231,12 +231,10 @@ class HomePageViewModel @Inject constructor(
                     }
                 }
 
-                val withChannels = matched.filter { it.matchedChannels.isNotEmpty() }
-
                 // EPG enrichment: resolve accurate end times from the programme guide.
                 // Priority: EPG endTime > end_utc from API > startUtc + 120 min fallback.
                 val enriched = withContext(Dispatchers.IO) {
-                    withChannels.map { event ->
+                    matched.map { event ->
                         val startMs = parseUtcIso(event.startUtc) ?: return@map event
                         val epgIds  = event.matchedChannels.mapNotNull { it.epgChannelId }.distinct()
                         val epgEnd  = if (epgIds.isNotEmpty()) {
@@ -253,8 +251,9 @@ class HomePageViewModel @Inject constructor(
                     }
                 }
 
-                Log.i(TAG, "loadSports: done — ${matched.size} events, ${withChannels.size} have matched channels")
-                _debugStatus.value = "${matched.size} events fetched, ${withChannels.size} matched to your channels"
+                val matchedCount = enriched.count { it.matchedChannels.isNotEmpty() }
+                Log.i(TAG, "loadSports: done — ${matched.size} events, $matchedCount have matched channels")
+                _debugStatus.value = "${matched.size} events fetched, $matchedCount matched to your channels"
                 _sportsEvents.value = enriched
                 lastLoadedDay = todayString()
             } catch (e: Exception) {

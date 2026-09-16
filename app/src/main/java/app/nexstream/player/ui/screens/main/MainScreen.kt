@@ -192,6 +192,7 @@ fun MainScreen(
     var selectedDownloadsType   by rememberSaveable { mutableStateOf<String?>(null) }
     var showRecentClearConfirm  by remember { mutableStateOf(false) }
     var showMyListClearConfirm  by remember { mutableStateOf(false) }
+    var sportsEditTick          by remember { mutableStateOf(0) }
 
     val movieCategories  by movieViewModel.getCategories().collectAsState(initial = emptyList())
     val guideCategories  by epgViewModel.getCategories().collectAsState(initial = emptyList())
@@ -838,6 +839,8 @@ fun MainScreen(
                 onRecentChannelPlay = sharedOnRecentChannelPlay,
                 onRefreshSports = { homePageViewModel.refreshSports() },
                 isRefreshingSports = homePageViewModel.isLoadingSports.collectAsState().value,
+                sportsEditTick = sportsEditTick,
+                incrSportsEditTick = { sportsEditTick++ },
                 incrProfilesNavTick = { profilesNavTick++ },
             )
         } else {
@@ -1017,6 +1020,8 @@ fun MainScreen(
                 onZoneContent               = sharedOnZoneContent,
                 onNavigateToRoute           = sharedOnNavigateToRoute,
                 onEpgOnBack                 = epgOnBack,
+                sportsEditTick              = sportsEditTick,
+                incrSportsEditTick          = { sportsEditTick++ },
             )
         }
 
@@ -1374,6 +1379,8 @@ private fun ClassicMainLayout(
     onZoneContent: () -> Unit,
     onNavigateToRoute: (AppRoute) -> Unit,
     onEpgOnBack: () -> Unit,
+    sportsEditTick: Int = 0,
+    incrSportsEditTick: () -> Unit = {},
 ) {
     // Compose complex Sidebar callbacks from setters
     val onPanelExpandedChange: (Boolean, AppRoute?) -> Unit = { expanded, route ->
@@ -1534,6 +1541,7 @@ private fun ClassicMainLayout(
                 onMusicCategorySelected  = onMusicCategorySelected,
                 onRecentClearAll         = { setShowRecentClearConfirm(true) },
                 onMyListClearAll         = { if (selectedMyListType != "Reminders") setShowMyListClearConfirm(true) },
+                onSportsEdit             = { incrSportsEditTick() },
                 xtreamUsername     = xtreamUsername,
                 xtreamExpiry       = xtreamExpiry,
                 isLicensed         = isLicensed,
@@ -1656,6 +1664,7 @@ private fun ClassicMainLayout(
             onRecentChannelPlay    = onRecentChannelPlay,
             onRefreshSports        = { homePageViewModel.refreshSports() },
             isRefreshingSports     = homePageViewModel.isLoadingSports.collectAsState().value,
+            sportsEditTick         = sportsEditTick,
         )
     }
 }
@@ -1831,6 +1840,7 @@ private fun MainContentArea(
     onRecentChannelPlay: (url: String, name: String) -> Unit,
     onRefreshSports: () -> Unit,
     isRefreshingSports: Boolean,
+    sportsEditTick: Int = 0,
 ) {
     var showMultiScreen by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -2097,6 +2107,7 @@ private fun MainContentArea(
                 onGoToEpg               = { channelName ->
                     onGoToEpgForChannel(channelName)
                 },
+                sportsEditTick          = sportsEditTick,
             )
             AppRoute.Music -> MusicScreen(
                 selectedCategory = selectedMusicCategory,
@@ -2274,6 +2285,8 @@ private fun ModernMainLayout(
     onRecentChannelPlay: (String, String) -> Unit,
     onRefreshSports: () -> Unit,
     isRefreshingSports: Boolean,
+    sportsEditTick: Int = 0,
+    incrSportsEditTick: () -> Unit = {},
     incrProfilesNavTick: () -> Unit = {},
 ) {
     val onGoToMovie: (String) -> Unit = { name ->
@@ -2467,6 +2480,7 @@ private fun ModernMainLayout(
             onRecentChannelPlay          = onRecentChannelPlay,
             onRefreshSports              = onRefreshSports,
             isRefreshingSports           = isRefreshingSports,
+            sportsEditTick               = sportsEditTick,
         )
     }
 }

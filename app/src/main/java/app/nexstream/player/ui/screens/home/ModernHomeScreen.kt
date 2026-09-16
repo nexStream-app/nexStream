@@ -25,6 +25,7 @@ fun ModernHomeScreen(
     ) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onChannelPlay: (streamUrl: String, channelName: String) -> Unit = { _, _ -> },
     onGoToEpg: (channelName: String) -> Unit = {},
+    sportsEditTick: Int = 0,
     picksViewModel: PicksViewModel = hiltViewModel(),
     recentlyWatchedViewModel: RecentlyWatchedViewModel = hiltViewModel(),
     homePageViewModel: HomePageViewModel = hiltViewModel(),
@@ -78,5 +79,6 @@ fun ModernHomeScreen(
         onCancelSportReminder    = { channelId, startMs ->
             reminderViewModel.cancelReminder(channelId, startMs)
         },
+        sportsEditTick           = sportsEditTick,
     )
 }

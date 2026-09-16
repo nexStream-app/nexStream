@@ -117,6 +117,7 @@ fun Sidebar(
     onSportsCategorySelected: (String?) -> Unit = {},
     onRecentClearAll: () -> Unit = {},
     onMyListClearAll: () -> Unit = {},
+    onSportsEdit: () -> Unit = {},
     xtreamUsername: String? = null,
     xtreamExpiry: String? = null,
     isLicensed: Boolean = true,
@@ -322,6 +323,8 @@ fun Sidebar(
                                 else            -> {}
                             }
                         },
+                        showEditAction        = expandedRoute == AppRoute.Home && sportsCategories.isNotEmpty(),
+                        onEditAction          = { onSportsEdit() },
                         header                = when (expandedRoute) {
                             AppRoute.Home      -> stringResource(R.string.nav_sports_today)
                             AppRoute.Guide     -> stringResource(R.string.nav_guide)
@@ -771,6 +774,8 @@ private fun CategoryPanel(
     showRecentlyAdded: Boolean = false,
     showClearAll: Boolean = false,
     onClearAll: () -> Unit = {},
+    showEditAction: Boolean = false,
+    onEditAction: () -> Unit = {},
     header: String = "Categories",
     isAndroidTV: Boolean = false,
     onBackPressed: () -> Unit = {},
@@ -1012,6 +1017,68 @@ private fun CategoryPanel(
                         style = MaterialTheme.typography.labelMedium,
                         color = if (clearAllFocused) MaterialTheme.colorScheme.onErrorContainer
                                 else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+        if (showEditAction) {
+            HorizontalDivider(
+                color = sTheme.divider,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+            val editActionFR = remember { FocusRequester() }
+            var editActionFocused by remember { mutableStateOf(false) }
+            val editScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (editActionFocused) 1.04f else 1.0f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                    stiffness    = androidx.compose.animation.core.Spring.StiffnessHigh
+                ),
+                label = "editScale"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { scaleX = editScale; scaleY = editScale }
+                    .defaultMinSize(minHeight = 40.dp)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (editActionFocused) MaterialTheme.colorScheme.primaryContainer
+                        else androidx.compose.ui.graphics.Color.Transparent
+                    )
+                    .focusRequester(editActionFR)
+                    .onFocusChanged { editActionFocused = it.isFocused; if (it.isFocused) onPanelFocusChanged(true) }
+                    .onKeyEvent { ev ->
+                        if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (ev.key) {
+                            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { onEditAction(); true }
+                            Key.DirectionLeft  -> { onRequestRailFocus(); true }
+                            Key.DirectionRight -> { onRequestContentFocus(); true }
+                            else -> false
+                        }
+                    }
+                    .clickable { onEditAction() }
+                    .focusable()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = if (editActionFocused) MaterialTheme.colorScheme.onPrimaryContainer
+                               else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text  = "Edit Categories",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (editActionFocused) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.primary
                     )
                 }
             }
