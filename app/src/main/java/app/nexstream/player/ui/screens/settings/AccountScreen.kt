@@ -284,7 +284,7 @@ fun AccountScreen(
                         SettingsInfoRow(stringResource(R.string.account_server_timezone), info.timezone)
                     }
 
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(120.dp))
                 }
             }  // end when
         }      // end inner Column

@@ -234,18 +234,20 @@ fun SyncSettingsScreen(
             SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
                 SettingsActionItem(
                     label          = "Check for Update",
-                    description    = if (isCheckingUpdate) "Downloading…" else (updateCheckResult ?: "Check for a newer version of nexStream"),
+                    description    = updateCheckResult ?: "Check for a newer version of nexStream",
                     value          = "",
                     uiStyle        = uiStyle,
                     focusRequester = firstFR,
                     showDivider    = false,
                     onClick        = {
                         if (!isCheckingUpdate) {
+                            isCheckingUpdate = true
                             updateCheckResult = null
                             scope.launch {
-                                isCheckingUpdate = true
                                 updateCheckResult = try {
-                                    AutoUpdateManager.checkNow(context)
+                                    AutoUpdateManager.checkNow(context) { status ->
+                                        updateCheckResult = status
+                                    }
                                 } catch (_: Exception) {
                                     "Check failed — try again"
                                 }
@@ -454,7 +456,7 @@ fun SyncSettingsScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(120.dp))
         }
     }
 }

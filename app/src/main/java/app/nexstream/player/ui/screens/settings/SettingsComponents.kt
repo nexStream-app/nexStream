@@ -1,9 +1,12 @@
 package app.nexstream.player.ui.screens.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -23,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nexstream.player.ui.theme.UiStyle
 import app.nexstream.player.ui.theme.getUiStyleFlow
+import kotlinx.coroutines.launch
 
 // ── Style helper ──────────────────────────────────────────────────────────────
 
@@ -124,6 +128,7 @@ fun SettingsSectionContainer(
  * MODERN: description always visible; focus = primary bg fill.
  * CLASSIC: description only on focus; focus = 2dp primary border, transparent bg.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsToggle(
     label: String,
@@ -134,17 +139,23 @@ fun SettingsToggle(
     onToggle: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val bvr   = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
 
     val rowModifier = when (uiStyle) {
         UiStyle.MODERN -> Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bvr)
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isFocused) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+            }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
@@ -156,13 +167,17 @@ fun SettingsToggle(
 
         UiStyle.CLASSIC -> Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bvr)
             .clip(RoundedCornerShape(8.dp))
             .then(
                 if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+            }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
@@ -211,6 +226,7 @@ fun SettingsToggle(
  * MODERN: description always visible; focus = primary bg fill.
  * CLASSIC: description only on focus; focus = 2dp primary border.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsActionItem(
     label: String,
@@ -222,17 +238,23 @@ fun SettingsActionItem(
     showDivider: Boolean = true,
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val bvr   = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
 
     val rowModifier = when (uiStyle) {
         UiStyle.MODERN -> Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bvr)
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isFocused) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+            }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
@@ -244,13 +266,17 @@ fun SettingsActionItem(
 
         UiStyle.CLASSIC -> Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bvr)
             .clip(RoundedCornerShape(8.dp))
             .then(
                 if (isFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                if (state.isFocused) scope.launch { bvr.bringIntoView() }
+            }
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {

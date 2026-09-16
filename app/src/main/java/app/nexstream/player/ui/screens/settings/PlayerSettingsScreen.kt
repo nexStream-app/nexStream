@@ -331,6 +331,7 @@ fun PlayerSettingsScreen(
                 SettingsInfoRow(stringResource(R.string.player_formats_audio),     stringResource(R.string.player_formats_audio_value))
                 SettingsInfoRow(stringResource(R.string.player_formats_subtitles), stringResource(R.string.player_formats_subtitles_value))
             }
+            Spacer(Modifier.height(120.dp))
         }
     }
 
