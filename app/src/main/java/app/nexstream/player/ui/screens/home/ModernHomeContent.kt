@@ -634,16 +634,19 @@ private fun computeEventStartMs(timeUk: String): Long {
 
 private fun isLiveNow(event: MatchedSportEvent, currentUkMinutes: Int): Boolean {
     val now     = System.currentTimeMillis()
-    val startMs = parseUtcIsoMs(event.startUtc) ?: return false
+    val startMs = parseUtcIsoMs(event.startUtc)
+        ?: computeEventStartMs(event.timeUk).takeIf { it > 0L }
+        ?: return false
     val endMs   = event.endEpochMs ?: (startMs + 120 * 60_000L)
     return now in startMs..endMs
 }
 
 private fun isPastEvent(event: MatchedSportEvent, currentUkMinutes: Int): Boolean {
-    val now   = System.currentTimeMillis()
-    val endMs = event.endEpochMs
-        ?: (parseUtcIsoMs(event.startUtc)?.let { it + 120 * 60_000L })
+    val now     = System.currentTimeMillis()
+    val startMs = parseUtcIsoMs(event.startUtc)
+        ?: computeEventStartMs(event.timeUk).takeIf { it > 0L }
         ?: return false
+    val endMs   = event.endEpochMs ?: (startMs + 120 * 60_000L)
     return now > endMs
 }
 
