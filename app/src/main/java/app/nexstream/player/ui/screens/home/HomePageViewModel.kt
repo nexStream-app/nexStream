@@ -88,23 +88,16 @@ class HomePageViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val filteredSportsEvents: StateFlow<List<MatchedSportEvent>> = combine(
-        _sportsEvents, selectedSportCategory, sportsHiddenCategories, _currentUkMinutes
-    ) { events, category, hidden, currentUkMinutes ->
+        _sportsEvents, selectedSportCategory, sportsHiddenCategories
+    ) { events, category, hidden ->
         val now = System.currentTimeMillis()
         val filtered = events
             .filter { it.sportCategory !in hidden }
             .filter { ev ->
+                // Only hide events where we have a reliable confirmed end time AND it has passed.
+                // Events without end time data are shown for the full day (today's schedule).
                 val endMs = ev.endEpochMs
-                if (endMs != null) {
-                    now <= endMs
-                } else {
-                    // No UTC data — fall back to timeUk + 120 min window
-                    val parts = ev.timeUk.split(":")
-                    if (parts.size == 2) {
-                        val startMin = (parts[0].toIntOrNull() ?: 0) * 60 + (parts[1].toIntOrNull() ?: 0)
-                        currentUkMinutes <= startMin + 120
-                    } else true
-                }
+                endMs == null || now <= endMs
             }
             .sortedBy { ev -> parseUtcIso(ev.startUtc) ?: Long.MAX_VALUE }
         if (category == null) filtered else filtered.filter { it.sportCategory == category }

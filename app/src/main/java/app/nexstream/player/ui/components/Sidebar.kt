@@ -444,6 +444,21 @@ private fun MainMenu(
         val locked: Boolean = false,
     )
 
+    // Resolve rail label strings at composition time (not inside remember) so locale changes
+    // are reflected immediately after Activity.recreate() on language change.
+    val strSportsToday = stringResource(R.string.nav_sports_today)
+    val strRecent      = stringResource(R.string.nav_recent)
+    val strGuide       = stringResource(R.string.nav_guide)
+    val strMovies      = stringResource(R.string.nav_movies)
+    val strSeries      = stringResource(R.string.nav_series)
+    val strCatchUp     = stringResource(R.string.nav_catch_up)
+    val strPicks       = stringResource(R.string.nav_picks)
+    val strMusic       = stringResource(R.string.nav_music)
+    val strDevice      = stringResource(R.string.nav_device)
+    val strSearch      = stringResource(R.string.nav_search)
+    val strMyList      = stringResource(R.string.nav_my_list)
+    val strSettings    = stringResource(R.string.nav_settings)
+
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val storedOrder  by context.getRailOrderFlow().collectAsState(initial = null)
     val storedHidden by context.getRailHiddenFlow().collectAsState(initial = null)
@@ -451,25 +466,26 @@ private fun MainMenu(
         storedHidden?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     }
 
-    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders, isLicensed) {
+    val allMenuEntries = remember(isLoadingEPG, isLoadingVOD, isLoadingSeries, hasJellyfinPlaylist, hasDeviceFolders, isLicensed,
+        strSportsToday, strRecent, strGuide, strMovies, strSeries, strCatchUp, strPicks, strMusic, strDevice, strSearch, strMyList, strSettings) {
         val locked = !isLicensed
         buildMap {
-            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  context.getString(R.string.nav_sports_today), AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) },   locked = locked))
-            put("Recent",   MenuEntry(Icons.Default.History,       context.getString(R.string.nav_recent),       AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
-            put("Guide",    MenuEntry(Icons.Default.CalendarToday, context.getString(R.string.nav_guide),        AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
-            put("Movies",   MenuEntry(Icons.Default.Movie,         context.getString(R.string.nav_movies),       AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true, locked = locked))
-            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  context.getString(R.string.nav_series),       AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true, locked = locked))
-            put("CatchUp",  MenuEntry(Icons.Default.Replay,        context.getString(R.string.nav_catch_up),     AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
-            put("Picks",    MenuEntry(Icons.Default.Stars,         context.getString(R.string.nav_picks),        AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) },   locked = locked))
+            put("Home",     MenuEntry(Icons.Default.SportsSoccer,  strSportsToday, AppRoute.Home,     homeFocus,    hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Home) },   locked = locked))
+            put("Recent",   MenuEntry(Icons.Default.History,       strRecent,      AppRoute.Recent,   recentFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Recent) }))
+            put("Guide",    MenuEntry(Icons.Default.CalendarToday, strGuide,       AppRoute.Guide,    guideFocus,   isLoading = isLoadingEPG,    onReopenPanel = { onReopenPanel(AppRoute.Guide) },   hasSubPanel = true))
+            put("Movies",   MenuEntry(Icons.Default.Movie,         strMovies,      AppRoute.Movies,   moviesFocus,  isLoading = isLoadingVOD,    onReopenPanel = { onReopenPanel(AppRoute.Movies) },  hasSubPanel = true, locked = locked))
+            put("Series",   MenuEntry(Icons.Default.VideoLibrary,  strSeries,      AppRoute.Series,   seriesFocus,  isLoading = isLoadingSeries, onReopenPanel = { onReopenPanel(AppRoute.Series) },  hasSubPanel = true, locked = locked))
+            put("CatchUp",  MenuEntry(Icons.Default.Replay,        strCatchUp,     AppRoute.CatchUp,  catchupFocus, hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.CatchUp) }))
+            put("Picks",    MenuEntry(Icons.Default.Stars,         strPicks,       AppRoute.Picks,    picksFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Picks) },   locked = locked))
             if (hasJellyfinPlaylist) {
-                put("Music", MenuEntry(Icons.Default.MusicNote,    context.getString(R.string.nav_music),        AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
+                put("Music", MenuEntry(Icons.Default.MusicNote,    strMusic,       AppRoute.Music,    musicFocus,   hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Music) }))
             }
             if (hasDeviceFolders) {
-                put("Device", MenuEntry(Icons.Default.Folder,      context.getString(R.string.nav_device),       AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
+                put("Device", MenuEntry(Icons.Default.Folder,      strDevice,      AppRoute.Device,   deviceFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Device) }))
             }
-            put("Search",   MenuEntry(Icons.Default.Search,        context.getString(R.string.nav_search),       AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) },  locked = locked))
-            put("MyList",   MenuEntry(Icons.Default.Bookmark,      context.getString(R.string.nav_my_list),      AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
-            put("Settings", MenuEntry(Icons.Default.Settings,      context.getString(R.string.nav_settings),     AppRoute.Settings, settingsFocus))
+            put("Search",   MenuEntry(Icons.Default.Search,        strSearch,      AppRoute.Search,   searchFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.Search) },  locked = locked))
+            put("MyList",   MenuEntry(Icons.Default.Bookmark,      strMyList,      AppRoute.MyList,   mylistFocus,  hasSubPanel = true, onReopenPanel = { onReopenPanel(AppRoute.MyList) }))
+            put("Settings", MenuEntry(Icons.Default.Settings,      strSettings,    AppRoute.Settings, settingsFocus))
         }
     }
 
@@ -894,7 +910,7 @@ private fun CategoryPanel(
             if (showFavourites) {
                 item(key = "__favourites__") {
                     PanelItem(
-                        text                  = "Favourites",
+                        text                  = stringResource(R.string.panel_favourites),
                         isSelected            = selectedCategory == "__favourites__",
                         focusRequester        = favouritesFR,
                         onRequestContentFocus = onRequestContentFocus,
@@ -906,7 +922,7 @@ private fun CategoryPanel(
                 if (showRecentlyAdded) {
                     item(key = "__recent__") {
                         PanelItem(
-                            text                  = "Recently Added",
+                            text                  = stringResource(R.string.panel_recently_added),
                             isSelected            = selectedCategory == "__recent__",
                             focusRequester        = recentlyAddedFR,
                             onRequestContentFocus = onRequestContentFocus,
@@ -934,7 +950,7 @@ private fun CategoryPanel(
             }
             item(key = "__all__") {
                 PanelItem(
-                    text                  = "All",
+                    text                  = stringResource(R.string.panel_all),
                     isSelected            = selectedCategory == null,
                     focusRequester        = allFR,
                     onRequestContentFocus = onRequestContentFocus,
@@ -1013,7 +1029,7 @@ private fun CategoryPanel(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text  = "Clear All",
+                        text  = stringResource(R.string.panel_clear_all),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (clearAllFocused) MaterialTheme.colorScheme.onErrorContainer
                                 else MaterialTheme.colorScheme.error
@@ -1075,7 +1091,7 @@ private fun CategoryPanel(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text  = "Edit Categories",
+                        text  = stringResource(R.string.panel_edit_categories),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (editActionFocused) MaterialTheme.colorScheme.onPrimaryContainer
                                 else MaterialTheme.colorScheme.primary
@@ -1089,7 +1105,7 @@ private fun CategoryPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text  = "Double-click to search",
+                    text  = stringResource(R.string.panel_double_click_search),
                     style = MaterialTheme.typography.labelSmall,
                     color = sTheme.categoryText.copy(alpha = 0.35f),
                     maxLines = 1
@@ -1297,7 +1313,7 @@ private fun ProfileInfo(
             Column(modifier = Modifier.weight(1f)) {
                 Text(activeProfileName, style = MaterialTheme.typography.bodySmall,
                     color = sTheme.accountBarText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Switch profile", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(R.string.profile_switch), style = MaterialTheme.typography.labelSmall,
                     color = sTheme.accountBarTextSecondary, maxLines = 1)
             }
             Icon(Icons.Default.SwapHoriz, null, Modifier.size(16.dp), tint = sTheme.accountBarTextSecondary)
@@ -1526,9 +1542,11 @@ private fun CatchUpDatePanel(
     }
 
     val favouritesFR = remember { FocusRequester() }
+    val strCatchUpFavourites = stringResource(R.string.panel_favourites)
+    val strCatchUpAll = stringResource(R.string.panel_all)
     val allEntries: List<Pair<String, FocusRequester>> = buildList {
-        add(Pair("Favourites", favouritesFR))
-        add(Pair("All", allFR))
+        add(Pair(strCatchUpFavourites, favouritesFR))
+        add(Pair(strCatchUpAll, allFR))
         availableDates.forEachIndexed { i, ms ->
             add(Pair(app.nexstream.player.ui.screens.catchup.catchUpDateLabel(ms, today), dateFRs[i]))
         }

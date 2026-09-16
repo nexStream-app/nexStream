@@ -50,6 +50,15 @@
     <string name="nav_device">Cihaz</string>
     <string name="common_categories">Kategoriler</string>
 
+    <!-- Panel / sidebar UI labels -->
+    <string name="panel_all">Tümü</string>
+    <string name="panel_favourites">Favoriler</string>
+    <string name="panel_recently_added">Son eklenenler</string>
+    <string name="panel_clear_all">Tümünü temizle</string>
+    <string name="panel_edit_categories">Kategorileri düzenle</string>
+    <string name="panel_double_click_search">Aramak için çift tıklayın</string>
+    <string name="profile_switch">Profil değiştir</string>
+
     <!-- Settings menu -->
     <string name="settings_menu_playlists_title">Oynatma Listeleri</string>
     <string name="settings_menu_playlists_subtitle">IPTV oynatma listelerinizi ekleyin, kaldırın veya yenileyin</string>

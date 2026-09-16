@@ -43,6 +43,14 @@
     <string name="nav_downloads">Nedladdningar</string>
     <string name="nav_device">Enhet</string>
     <string name="common_categories">Kategorier</string>
+    <!-- Panel / sidebar UI labels -->
+    <string name="panel_all">Alla</string>
+    <string name="panel_favourites">Favoriter</string>
+    <string name="panel_recently_added">Nyligen tillagda</string>
+    <string name="panel_clear_all">Rensa alla</string>
+    <string name="panel_edit_categories">Redigera kategorier</string>
+    <string name="panel_double_click_search">Dubbelklicka för att söka</string>
+    <string name="profile_switch">Byt profil</string>
     <string name="settings_menu_playlists_title">Spellistor</string>
     <string name="settings_menu_playlists_subtitle">Lägg till, ta bort eller uppdatera dina IPTV-spellistor</string>
     <string name="settings_menu_appearance_title">Utseende</string>

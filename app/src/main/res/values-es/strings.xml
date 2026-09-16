@@ -50,6 +50,15 @@
     <string name="nav_device">Dispositivo</string>
     <string name="common_categories">Categorías</string>
 
+    <!-- Panel / sidebar UI labels -->
+    <string name="panel_all">Todos</string>
+    <string name="panel_favourites">Favoritos</string>
+    <string name="panel_recently_added">Añadido recientemente</string>
+    <string name="panel_clear_all">Borrar todo</string>
+    <string name="panel_edit_categories">Editar categorías</string>
+    <string name="panel_double_click_search">Doble clic para buscar</string>
+    <string name="profile_switch">Cambiar perfil</string>
+
     <!-- Settings menu -->
     <string name="settings_menu_playlists_title">Listas de reproducción</string>
     <string name="settings_menu_playlists_subtitle">Añade, elimina o actualiza tus listas IPTV</string>
