@@ -1268,17 +1268,8 @@ fun PlayerScreen(
                             subtitleView?.visibility = android.view.View.GONE
                         }
                     },
-                    update = { pv ->
-                        pv.resizeMode = when (resizeMode) {
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            else -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                        }
-                    },
-                    modifier = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
-                        Modifier.align(Alignment.Center).aspectRatio(videoAspectRatio).clickable { showControls = !showControls }
-                    } else {
-                        Modifier.fillMaxSize().clickable { showControls = !showControls }
-                    }
+                    update = { pv -> pv.resizeMode = resizeMode },
+                    modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
                 )
             }
 
