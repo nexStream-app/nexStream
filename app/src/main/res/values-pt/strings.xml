@@ -70,6 +70,7 @@
     <string name="settings_menu_navigation_subtitle">Defina o ecrã inicial e reordene os itens do painel</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Grupos de canais</string>
     <string name="settings_menu_about_title">Acerca de</string>
     <string name="settings_menu_about_subtitle">Informações do dispositivo, IDs e diagnósticos</string>
 

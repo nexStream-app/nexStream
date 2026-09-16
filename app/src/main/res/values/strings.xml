@@ -70,6 +70,7 @@
     <string name="settings_menu_navigation_subtitle">Set start screen and reorder rail items</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Channel Groups</string>
     <string name="settings_menu_about_title">About</string>
     <string name="settings_menu_about_subtitle">Device info, IDs and diagnostics</string>
 

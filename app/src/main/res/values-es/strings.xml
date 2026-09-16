@@ -70,6 +70,7 @@
     <string name="settings_menu_navigation_subtitle">Establece la pantalla de inicio y reordena los elementos del panel</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Grupos de canales</string>
     <string name="settings_menu_about_title">Acerca de</string>
     <string name="settings_menu_about_subtitle">Información del dispositivo, IDs y diagnósticos</string>
 

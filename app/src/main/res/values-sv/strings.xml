@@ -62,6 +62,7 @@
     <string name="settings_menu_navigation_subtitle">Ange startskärm och ordna om menyn</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Kanalgrupper</string>
     <string name="settings_menu_about_title">Om</string>
     <string name="settings_menu_about_subtitle">Enhetsinformation, ID:n och diagnostik</string>
     <string name="playlists_title">Spellistor</string>

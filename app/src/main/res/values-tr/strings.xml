@@ -70,6 +70,7 @@
     <string name="settings_menu_navigation_subtitle">Başlangıç ekranını ayarlayın ve çubuk öğelerini yeniden sıralayın</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Kanal Grupları</string>
     <string name="settings_menu_about_title">Hakkında</string>
     <string name="settings_menu_about_subtitle">Cihaz bilgileri, kimlikler ve tanılamalar</string>
 

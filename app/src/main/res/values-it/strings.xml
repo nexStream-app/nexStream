@@ -62,6 +62,7 @@
     <string name="settings_menu_navigation_subtitle">Imposta la schermata iniziale e riordina il menu</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Gruppi di canali</string>
     <string name="settings_menu_about_title">Informazioni</string>
     <string name="settings_menu_about_subtitle">Info dispositivo, ID e diagnostica</string>
     <string name="playlists_title">Playlist</string>

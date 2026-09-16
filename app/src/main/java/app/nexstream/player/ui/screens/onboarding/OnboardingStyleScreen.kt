@@ -1,5 +1,6 @@
 package app.nexstream.player.ui.screens.onboarding
 
+import android.app.Activity
 import android.content.Context
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -11,7 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -33,33 +34,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nexstream.player.ui.theme.ThemeMode
-import app.nexstream.player.ui.theme.getFontScaleFlow
-import app.nexstream.player.ui.theme.getFontWeightFlow
-import app.nexstream.player.ui.theme.getThemeModeFlow
-import app.nexstream.player.ui.theme.saveThemeMode
 import app.nexstream.player.ui.theme.LocalNsAccent
 import app.nexstream.player.ui.theme.LocalNsBackground
 import app.nexstream.player.ui.theme.LocalNsSurface
 import app.nexstream.player.ui.theme.LocalNsTextPrimary
 import app.nexstream.player.ui.theme.LocalNsTextSecondary
-import app.nexstream.player.ui.theme.UiStyle
-import app.nexstream.player.ui.theme.getUiStyleFlow
+import app.nexstream.player.ui.theme.saveAppLanguage
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
-import app.nexstream.player.ui.theme.saveFontScale
-import app.nexstream.player.ui.theme.saveFontWeight
 import app.nexstream.player.ui.theme.saveOnboardingDone
-import app.nexstream.player.ui.theme.saveUiStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Focus indices
-private const val FOCUS_THEME         = 0  // Light/Dark toggle
-private const val FOCUS_INTERFACE     = 1  // Modern/Classic toggle
-private const val FOCUS_TEXT_SIZE     = 2
-private const val FOCUS_TEXT_WEIGHT   = 3
-private const val FOCUS_CLOUD_SYNC    = 4
-private const val FOCUS_GETSTARTED    = 5
+private val LANGUAGES = listOf(
+    Triple("",   "🌐", "System default"),
+    Triple("en", "🇬🇧", "English"),
+    Triple("fr", "🇫🇷", "Français"),
+    Triple("de", "🇩🇪", "Deutsch"),
+    Triple("nl", "🇳🇱", "Nederlands"),
+    Triple("sv", "🇸🇪", "Svenska"),
+    Triple("it", "🇮🇹", "Italiano"),
+    Triple("tr", "🇹🇷", "Türkçe"),
+    Triple("pl", "🇵🇱", "Polski"),
+    Triple("es", "🇪🇸", "Español"),
+    Triple("pt", "🇵🇹", "Português"),
+)
+
+private val CLOUD_SYNC_IDX  = LANGUAGES.size       // 11
+private val GET_STARTED_IDX = LANGUAGES.size + 1   // 12
 
 @Composable
 fun OnboardingStyleScreen(onComplete: () -> Unit) {
@@ -72,39 +73,18 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     val textPrimary   = LocalNsTextPrimary.current
     val textSecondary = LocalNsTextSecondary.current
 
-    val currentThemeMode  by context.getThemeModeFlow().collectAsState(initial = ThemeMode.DARK)
-    val currentUiStyle    by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
-    val currentFontScale  by context.getFontScaleFlow().collectAsState(initial = null)
-    val currentFontWeight by context.getFontWeightFlow().collectAsState(initial = null)
-
-    var selectedMode       by remember { mutableStateOf(ThemeMode.DARK) }
-    var selectedStyle      by remember { mutableStateOf(UiStyle.CLASSIC) }
-    var selectedFontScale  by remember { mutableStateOf(1.0f) }
-    var selectedFontWeight by remember { mutableStateOf("normal") }
-    var selectedCloudSync  by remember { mutableStateOf(true) }
-
-    LaunchedEffect(currentThemeMode)  { selectedMode = currentThemeMode }
-    LaunchedEffect(currentUiStyle)    { selectedStyle = currentUiStyle }
-    LaunchedEffect(currentFontScale)  { currentFontScale?.let { selectedFontScale = it } }
-    LaunchedEffect(currentFontWeight) { currentFontWeight?.let { selectedFontWeight = it } }
-
-    // Check if annual/lifetime licence (available by onboarding time)
     val showCloudSync = remember {
         val prefs = context.getSharedPreferences("nexstream_licence", Context.MODE_PRIVATE)
         val type  = prefs.getString("licence_type", null)?.lowercase()
         type == "annual" || type == "lifetime"
     }
 
-    val fontSizeOptions = remember {
-        listOf(0.85f to "Small", 1.0f to "Normal", 1.15f to "Large", 1.3f to "Extra Large")
-    }
-    val fontWeightOptions = remember {
-        listOf("normal" to "Normal", "semibold" to "Semi Bold", "bold" to "Bold")
-    }
+    var selectedLangIdx  by remember { mutableStateOf(0) }
+    var selectedCloudSync by remember { mutableStateOf(true) }
+    var focusedIndex     by remember { mutableStateOf(0) }
 
-    var focusedIndex by remember { mutableStateOf(FOCUS_THEME) }
-    val outerFocus   = remember { FocusRequester() }
-    val scrollState  = rememberScrollState()
+    val outerFocus  = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         delay(120)
@@ -114,101 +94,41 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     LaunchedEffect(focusedIndex) {
         if (scrollState.maxValue == 0) return@LaunchedEffect
         val fraction = when {
-            focusedIndex <= FOCUS_INTERFACE   -> 0f
-            focusedIndex == FOCUS_TEXT_SIZE   -> 0.35f
-            focusedIndex == FOCUS_TEXT_WEIGHT -> 0.55f
-            focusedIndex == FOCUS_CLOUD_SYNC  -> 0.78f
-            else                              -> 1.0f
+            focusedIndex <= 2                    -> 0f
+            focusedIndex < LANGUAGES.lastIndex   -> focusedIndex.toFloat() / LANGUAGES.size
+            focusedIndex >= CLOUD_SYNC_IDX       -> 1f
+            else                                 -> 1f
         }
         scrollState.animateScrollTo((scrollState.maxValue * fraction).toInt())
     }
 
-    fun nextAfterTextWeight() = when {
-        showCloudSync -> FOCUS_CLOUD_SYNC
-        else          -> FOCUS_GETSTARTED
-    }
-    fun prevBeforeGetStarted() = when {
-        showCloudSync -> FOCUS_CLOUD_SYNC
-        else          -> FOCUS_TEXT_WEIGHT
-    }
+    fun effectiveGetStarted() = if (showCloudSync) GET_STARTED_IDX else CLOUD_SYNC_IDX
 
     fun handleKey(key: Key): Boolean {
         when (key) {
-            // ── Left/Right ────────────────────────────────────────────────
-            Key.DirectionRight -> when (focusedIndex) {
-                FOCUS_THEME     -> selectedMode  = ThemeMode.LIGHT
-                FOCUS_INTERFACE -> selectedStyle = UiStyle.MODERN
-                FOCUS_TEXT_SIZE -> {
-                    val idx = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
-                    val next = (idx + 1).coerceAtMost(fontSizeOptions.lastIndex)
-                    selectedFontScale = fontSizeOptions[next].first
-                }
-                FOCUS_TEXT_WEIGHT -> {
-                    val idx = fontWeightOptions.indexOfFirst { it.first == selectedFontWeight }
-                    val next = (idx + 1).coerceAtMost(fontWeightOptions.lastIndex)
-                    selectedFontWeight = fontWeightOptions[next].first
-                }
-                FOCUS_CLOUD_SYNC -> selectedCloudSync = true
+            Key.DirectionDown -> when {
+                focusedIndex < LANGUAGES.lastIndex      -> focusedIndex++
+                focusedIndex == LANGUAGES.lastIndex     -> focusedIndex = if (showCloudSync) CLOUD_SYNC_IDX else effectiveGetStarted()
+                focusedIndex == CLOUD_SYNC_IDX && showCloudSync -> focusedIndex = GET_STARTED_IDX
                 else -> return false
             }
-            Key.DirectionLeft -> when (focusedIndex) {
-                FOCUS_THEME     -> selectedMode  = ThemeMode.DARK
-                FOCUS_INTERFACE -> selectedStyle = UiStyle.CLASSIC
-                FOCUS_TEXT_SIZE -> {
-                    val idx = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
-                    val prev = (idx - 1).coerceAtLeast(0)
-                    selectedFontScale = fontSizeOptions[prev].first
-                }
-                FOCUS_TEXT_WEIGHT -> {
-                    val idx = fontWeightOptions.indexOfFirst { it.first == selectedFontWeight }
-                    val prev = (idx - 1).coerceAtLeast(0)
-                    selectedFontWeight = fontWeightOptions[prev].first
-                }
-                FOCUS_CLOUD_SYNC -> selectedCloudSync = false
+            Key.DirectionUp -> when {
+                focusedIndex in 1..LANGUAGES.lastIndex  -> focusedIndex--
+                focusedIndex == CLOUD_SYNC_IDX          -> focusedIndex = LANGUAGES.lastIndex
+                focusedIndex == effectiveGetStarted()   -> focusedIndex = if (showCloudSync) CLOUD_SYNC_IDX else LANGUAGES.lastIndex
                 else -> return false
             }
-            // ── Down ──────────────────────────────────────────────────────
-            Key.DirectionDown -> when (focusedIndex) {
-                FOCUS_THEME       -> focusedIndex = FOCUS_INTERFACE
-                FOCUS_INTERFACE   -> focusedIndex = FOCUS_TEXT_SIZE
-                FOCUS_TEXT_SIZE   -> focusedIndex = FOCUS_TEXT_WEIGHT
-                FOCUS_TEXT_WEIGHT -> focusedIndex = nextAfterTextWeight()
-                FOCUS_CLOUD_SYNC  -> focusedIndex = FOCUS_GETSTARTED
-                else -> return false
-            }
-            // ── Up ────────────────────────────────────────────────────────
-            Key.DirectionUp -> when (focusedIndex) {
-                FOCUS_INTERFACE   -> focusedIndex = FOCUS_THEME
-                FOCUS_TEXT_SIZE   -> focusedIndex = FOCUS_INTERFACE
-                FOCUS_TEXT_WEIGHT -> focusedIndex = FOCUS_TEXT_SIZE
-                FOCUS_CLOUD_SYNC  -> focusedIndex = FOCUS_TEXT_WEIGHT
-                FOCUS_GETSTARTED  -> focusedIndex = prevBeforeGetStarted()
-                else -> return false
-            }
-            // ── Enter/OK ──────────────────────────────────────────────────
-            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> when (focusedIndex) {
-                FOCUS_THEME     -> selectedMode  = if (selectedMode == ThemeMode.LIGHT) ThemeMode.DARK else ThemeMode.LIGHT
-                FOCUS_INTERFACE -> selectedStyle = if (selectedStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN
-                FOCUS_TEXT_SIZE -> {
-                    val idx  = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
-                    val next = (idx + 1) % fontSizeOptions.size
-                    selectedFontScale = fontSizeOptions[next].first
-                }
-                FOCUS_TEXT_WEIGHT -> {
-                    val idx  = fontWeightOptions.indexOfFirst { it.first == selectedFontWeight }
-                    val next = (idx + 1) % fontWeightOptions.size
-                    selectedFontWeight = fontWeightOptions[next].first
-                }
-                FOCUS_CLOUD_SYNC -> selectedCloudSync = !selectedCloudSync
-                FOCUS_GETSTARTED -> scope.launch {
-                    context.saveThemeMode(selectedMode)
-                    context.saveUiStyle(selectedStyle)
-                    context.saveFontScale(selectedFontScale)
-                    context.saveFontWeight(selectedFontWeight)
-                    context.saveCloudSyncEnabled(selectedCloudSync)
+            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> when {
+                focusedIndex < LANGUAGES.size -> selectedLangIdx = focusedIndex
+                focusedIndex == CLOUD_SYNC_IDX && showCloudSync -> selectedCloudSync = !selectedCloudSync
+                focusedIndex == effectiveGetStarted() -> scope.launch {
+                    val (code, _, _) = LANGUAGES[selectedLangIdx]
+                    context.saveAppLanguage(code)
+                    if (showCloudSync) context.saveCloudSyncEnabled(selectedCloudSync)
                     context.saveOnboardingDone(true)
-                    onComplete()
+                    (context as? Activity)?.recreate() ?: onComplete()
                 }
+                else -> return false
             }
             else -> return false
         }
@@ -230,10 +150,10 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 780.dp)
+                .widthIn(max = 600.dp)
                 .fillMaxHeight()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 24.dp, vertical = 6.dp),
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -250,114 +170,110 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     textAlign  = TextAlign.Center,
                 )
                 Text(
-                    text      = "Choose how you'd like the app to look and feel",
+                    text      = "Select your language to get started",
                     fontSize  = 12.sp,
                     color     = textSecondary,
                     textAlign = TextAlign.Center,
                 )
             }
 
-            // ── Appearance ────────────────────────────────────────────────────
-            OnboardingSectionColumn(title = "Appearance", accent = accent) {
-                OnboardingToggleRow(
-                    title         = "Light Mode",
-                    description   = "Use a bright, light theme. Disable for dark mode.",
-                    checked       = selectedMode == ThemeMode.LIGHT,
-                    focused       = focusedIndex == FOCUS_THEME,
-                    accent        = accent,
-                    surface       = surface,
-                    textPrimary   = textPrimary,
-                    textSecondary = textSecondary,
-                    onToggle      = { focusedIndex = FOCUS_THEME; selectedMode = if (selectedMode == ThemeMode.LIGHT) ThemeMode.DARK else ThemeMode.LIGHT },
-                )
-            }
+            Spacer(Modifier.height(8.dp))
 
-            // ── Interface ─────────────────────────────────────────────────────
-            OnboardingSectionColumn(title = "Interface", accent = accent) {
-                OnboardingToggleRow(
-                    title         = "Modern Layout",
-                    description   = "Cinematic layouts with full-bleed artwork. Disable for the classic grid.",
-                    checked       = selectedStyle == UiStyle.MODERN,
-                    focused       = focusedIndex == FOCUS_INTERFACE,
-                    accent        = accent,
-                    surface       = surface,
-                    textPrimary   = textPrimary,
-                    textSecondary = textSecondary,
-                    onToggle      = { focusedIndex = FOCUS_INTERFACE; selectedStyle = if (selectedStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN },
-                )
-            }
-
-            // ── Text ──────────────────────────────────────────────────────────
-            OnboardingSectionColumn(title = "Text", accent = accent) {
-                OnboardingOptionRow(
-                    label   = "Text Size",
-                    options = fontSizeOptions.map { it.second },
-                    selectedIdx = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }.coerceAtLeast(0),
-                    focused = focusedIndex == FOCUS_TEXT_SIZE,
-                    accent  = accent,
-                    surface = surface,
-                    textPrimary = textPrimary,
-                    textSecondary = textSecondary,
-                    onClick = {
-                        focusedIndex = FOCUS_TEXT_SIZE
-                        val idx  = fontSizeOptions.indexOfFirst { it.first == selectedFontScale }
-                        val next = (idx + 1) % fontSizeOptions.size
-                        selectedFontScale = fontSizeOptions[next].first
-                    },
-                )
-                Spacer(Modifier.height(8.dp))
-                OnboardingOptionRow(
-                    label   = "Text Weight",
-                    options = fontWeightOptions.map { it.second },
-                    selectedIdx = fontWeightOptions.indexOfFirst { it.first == selectedFontWeight }.coerceAtLeast(0),
-                    focused = focusedIndex == FOCUS_TEXT_WEIGHT,
-                    accent  = accent,
-                    surface = surface,
-                    textPrimary = textPrimary,
-                    textSecondary = textSecondary,
-                    onClick = {
-                        focusedIndex = FOCUS_TEXT_WEIGHT
-                        val idx  = fontWeightOptions.indexOfFirst { it.first == selectedFontWeight }
-                        val next = (idx + 1) % fontWeightOptions.size
-                        selectedFontWeight = fontWeightOptions[next].first
-                    },
-                )
-            }
-
-            // ── Features (annual/lifetime only) ───────────────────────────────
-            if (showCloudSync) {
-                OnboardingSectionColumn(title = "Features", accent = accent) {
-                    OnboardingToggleRow(
-                        title         = "Cloud Sync",
-                        description   = "Turn cloud sync on for cross-device sync and customisation sync. Keep off for on device only.",
-                        checked       = selectedCloudSync,
-                        focused       = focusedIndex == FOCUS_CLOUD_SYNC,
-                        accent        = accent,
-                        surface       = surface,
-                        textPrimary   = textPrimary,
-                        textSecondary = textSecondary,
-                        onToggle      = { focusedIndex = FOCUS_CLOUD_SYNC; selectedCloudSync = !selectedCloudSync },
-                    )
+            // ── Language list ─────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                LANGUAGES.forEachIndexed { idx, (_, flag, name) ->
+                    val isFocused  = focusedIndex == idx
+                    val isSelected = selectedLangIdx == idx
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(when {
+                                isFocused  -> accent.copy(alpha = 0.18f)
+                                isSelected -> accent.copy(alpha = 0.08f)
+                                else       -> Color.Transparent
+                            })
+                            .border(
+                                width = 1.5.dp,
+                                color = if (isFocused) accent else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                            .clickable { focusedIndex = idx; selectedLangIdx = idx }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(text = flag, fontSize = 18.sp)
+                        Text(
+                            text       = name,
+                            fontSize   = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color      = if (isFocused) textPrimary else textPrimary.copy(alpha = 0.85f),
+                            modifier   = Modifier.weight(1f),
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
                 }
             }
 
+            Spacer(Modifier.height(4.dp))
+
+            // ── Appearance note ───────────────────────────────────────────────
+            Text(
+                text      = "Appearance — theme, layout and text size — can be changed at any time in Settings → Appearance",
+                fontSize  = 11.sp,
+                color     = textSecondary.copy(alpha = 0.55f),
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp,
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Cloud Sync (annual/lifetime only) ─────────────────────────────
+            if (showCloudSync) {
+                OnboardingToggleRow(
+                    title         = "Cloud Sync",
+                    description   = "Sync your watch list and settings across devices.",
+                    checked       = selectedCloudSync,
+                    focused       = focusedIndex == CLOUD_SYNC_IDX,
+                    accent        = accent,
+                    surface       = surface,
+                    textPrimary   = textPrimary,
+                    textSecondary = textSecondary,
+                    onToggle      = { focusedIndex = CLOUD_SYNC_IDX; selectedCloudSync = !selectedCloudSync },
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+
             // ── Get Started button ────────────────────────────────────────────
-            val btnFocused = focusedIndex == FOCUS_GETSTARTED
+            val btnFocused = focusedIndex == effectiveGetStarted()
             val btnScale by animateFloatAsState(if (btnFocused) 1.05f else 1.0f, label = "btnScale")
             Box(
                 modifier = Modifier
                     .graphicsLayer { scaleX = btnScale; scaleY = btnScale }
                     .clip(RoundedCornerShape(50.dp))
                     .clickable {
-                        focusedIndex = FOCUS_GETSTARTED
+                        focusedIndex = effectiveGetStarted()
                         scope.launch {
-                            context.saveThemeMode(selectedMode)
-                            context.saveUiStyle(selectedStyle)
-                            context.saveFontScale(selectedFontScale)
-                            context.saveFontWeight(selectedFontWeight)
-                            context.saveCloudSyncEnabled(selectedCloudSync)
-                                    context.saveOnboardingDone(true)
-                            onComplete()
+                            val (code, _, _) = LANGUAGES[selectedLangIdx]
+                            context.saveAppLanguage(code)
+                            if (showCloudSync) context.saveCloudSyncEnabled(selectedCloudSync)
+                            context.saveOnboardingDone(true)
+                            (context as? Activity)?.recreate() ?: onComplete()
                         }
                     }
                     .background(if (btnFocused) accent else surface)
@@ -376,130 +292,9 @@ fun OnboardingStyleScreen(onComplete: () -> Unit) {
                     color      = if (btnFocused) bg else textPrimary,
                 )
             }
-
-            // ── Hint ──────────────────────────────────────────────────────────
-            Text(
-                text      = "You can change these at any time in Settings → Appearance",
-                fontSize  = 11.sp,
-                color     = textSecondary.copy(alpha = 0.55f),
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Section wrappers
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun OnboardingSectionColumn(
-    title:   String,
-    accent:  Color,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier            = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        SectionLabel(title, accent)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.04f))
-                .padding(16.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun SectionLabel(title: String, accent: Color) {
-    Text(
-        text          = title.uppercase(),
-        fontSize      = 11.sp,
-        fontWeight    = FontWeight.Medium,
-        color         = accent,
-        letterSpacing = 1.5.sp,
-    )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Horizontal option-selector row (text size / text weight)
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun OnboardingOptionRow(
-    label:        String,
-    options:      List<String>,
-    selectedIdx:  Int,
-    focused:      Boolean,
-    accent:       Color,
-    surface:      Color,
-    textPrimary:  Color,
-    textSecondary: Color,
-    onClick:      () -> Unit = {},
-) {
-    Row(
-        modifier            = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .background(if (focused) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .border(
-                width = 1.5.dp,
-                color = if (focused) accent else accent.copy(alpha = 0.18f),
-                shape = RoundedCornerShape(10.dp),
-            )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment   = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        // Label + chips stay left-aligned together; arrows go to far right
-        Row(
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text       = label,
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color      = if (focused) textPrimary else textPrimary.copy(alpha = 0.75f),
-                modifier   = Modifier.width(100.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                options.forEachIndexed { idx, opt ->
-                    val isSelected = idx == selectedIdx
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) accent else accent.copy(alpha = 0.10f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Text(
-                            text       = opt,
-                            fontSize   = 11.sp,
-                            color      = if (isSelected) Color.White else textSecondary,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        }
-        if (focused) {
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("◀", fontSize = 10.sp, color = accent.copy(alpha = 0.7f))
-                Text("▶", fontSize = 10.sp, color = accent.copy(alpha = 0.7f))
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Toggle row (cloud sync / AI subtitles)
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun OnboardingToggleRow(
@@ -536,9 +331,9 @@ private fun OnboardingToggleRow(
                 color      = if (focused) textPrimary else textPrimary.copy(alpha = 0.75f),
             )
             Text(
-                text      = description,
-                fontSize  = 11.sp,
-                color     = textSecondary.copy(alpha = 0.75f),
+                text       = description,
+                fontSize   = 11.sp,
+                color      = textSecondary.copy(alpha = 0.75f),
                 lineHeight = 15.sp,
             )
         }
@@ -555,4 +350,3 @@ private fun OnboardingToggleRow(
         )
     }
 }
-

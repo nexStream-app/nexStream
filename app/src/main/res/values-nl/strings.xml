@@ -62,6 +62,7 @@
     <string name="settings_menu_navigation_subtitle">Startscherm instellen en menuvolgorde aanpassen</string>
     <string name="settings_menu_network_title">Network</string>
     <string name="settings_menu_network_subtitle">Stream proxy and routing</string>
+    <string name="settings_menu_channel_groups_title">Kanaalgroepen</string>
     <string name="settings_menu_about_title">Over</string>
     <string name="settings_menu_about_subtitle">Apparaatinfo, ID\'s en diagnostiek</string>
     <string name="playlists_title">Afspeellijsten</string>

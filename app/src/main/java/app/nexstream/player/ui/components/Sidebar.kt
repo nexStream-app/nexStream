@@ -1360,34 +1360,48 @@ private fun SettingsPanel(
 
     data class SettingsEntry(val label: String, val route: AppRoute, val fr: FocusRequester)
 
-    val playlistsFR   = remember { FocusRequester() }
-    val appearanceFR    = remember { FocusRequester() }
-    val playerFR        = remember { FocusRequester() }
-    val syncFR          = remember { FocusRequester() }
-    val licenceFR       = remember { FocusRequester() }
-    val accountFR       = remember { FocusRequester() }
-    val profilesFR      = remember { FocusRequester() }
-    val navigationFR    = remember { FocusRequester() }
-    val aboutFR         = remember { FocusRequester() }
-    val channelGroupsFR = remember { FocusRequester() }
-    val languageFR      = remember { FocusRequester() }
+    val playlistsFR      = remember { FocusRequester() }
+    val appearanceFR     = remember { FocusRequester() }
+    val playerFR         = remember { FocusRequester() }
+    val syncFR           = remember { FocusRequester() }
+    val licenceFR        = remember { FocusRequester() }
+    val accountFR        = remember { FocusRequester() }
+    val profilesFR       = remember { FocusRequester() }
+    val navigationFR     = remember { FocusRequester() }
+    val aboutFR          = remember { FocusRequester() }
+    val channelGroupsFR  = remember { FocusRequester() }
+    val languageFR       = remember { FocusRequester() }
+    val networkFR        = remember { FocusRequester() }
 
-    val networkFR = remember { FocusRequester() }
+    val strPlaylists      = stringResource(R.string.settings_menu_playlists_title)
+    val strAppearance     = stringResource(R.string.settings_menu_appearance_title)
+    val strPlayer         = stringResource(R.string.settings_menu_player_title)
+    val strLicence        = stringResource(R.string.settings_menu_licence_title)
+    val strAccount        = stringResource(R.string.settings_menu_account_title)
+    val strProfiles       = stringResource(R.string.settings_menu_profiles_title)
+    val strSync           = stringResource(R.string.settings_menu_sync_title)
+    val strNavigation     = stringResource(R.string.settings_menu_navigation_title)
+    val strLanguage       = stringResource(R.string.settings_menu_language_title)
+    val strNetwork        = stringResource(R.string.settings_menu_network_title)
+    val strChannelGroups  = stringResource(R.string.settings_menu_channel_groups_title)
+    val strAbout          = stringResource(R.string.settings_menu_about_title)
 
-    val entries = remember(showSyncSettings) {
+    val entries = remember(showSyncSettings, strPlaylists, strAppearance, strPlayer, strLicence,
+                           strAccount, strProfiles, strSync, strNavigation, strLanguage,
+                           strNetwork, strChannelGroups, strAbout) {
         buildList {
-            add(SettingsEntry("Playlists",      AppRoute.SettingsPlaylists,      playlistsFR))
-            add(SettingsEntry("Appearance",     AppRoute.SettingsAppearance,     appearanceFR))
-            add(SettingsEntry("Player",         AppRoute.SettingsPlayer,         playerFR))
-            add(SettingsEntry("Licence",        AppRoute.SettingsLicence,        licenceFR))
-            add(SettingsEntry("Account",        AppRoute.SettingsAccount,        accountFR))
-            add(SettingsEntry("Profiles",       AppRoute.SettingsProfiles,       profilesFR))
-            if (showSyncSettings) add(SettingsEntry("Sync and Update", AppRoute.SettingsSyncSettings, syncFR))
-            add(SettingsEntry("Navigation",     AppRoute.SettingsNavigation,     navigationFR))
-            add(SettingsEntry("Language",       AppRoute.SettingsLanguage,       languageFR))
-            add(SettingsEntry("Network",        AppRoute.SettingsProxy,          networkFR))
-            add(SettingsEntry("Channel Groups", AppRoute.SettingsChannelGroups,  channelGroupsFR))
-            add(SettingsEntry("About",          AppRoute.SettingsAbout,          aboutFR))
+            add(SettingsEntry(strPlaylists,     AppRoute.SettingsPlaylists,     playlistsFR))
+            add(SettingsEntry(strAppearance,    AppRoute.SettingsAppearance,    appearanceFR))
+            add(SettingsEntry(strPlayer,        AppRoute.SettingsPlayer,        playerFR))
+            add(SettingsEntry(strLicence,       AppRoute.SettingsLicence,       licenceFR))
+            add(SettingsEntry(strAccount,       AppRoute.SettingsAccount,       accountFR))
+            add(SettingsEntry(strProfiles,      AppRoute.SettingsProfiles,      profilesFR))
+            if (showSyncSettings) add(SettingsEntry(strSync, AppRoute.SettingsSyncSettings, syncFR))
+            add(SettingsEntry(strNavigation,    AppRoute.SettingsNavigation,    navigationFR))
+            add(SettingsEntry(strLanguage,      AppRoute.SettingsLanguage,      languageFR))
+            add(SettingsEntry(strNetwork,       AppRoute.SettingsProxy,         networkFR))
+            add(SettingsEntry(strChannelGroups, AppRoute.SettingsChannelGroups, channelGroupsFR))
+            add(SettingsEntry(strAbout,         AppRoute.SettingsAbout,         aboutFR))
         }
     }
 

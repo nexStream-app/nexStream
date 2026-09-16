@@ -23,7 +23,8 @@ $replay   = isset($_GET['replay'])   && $_GET['replay']  === '1';
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) $date = date('Y-m-d');
 
-// Check if events exist (cron handles scraping — no inline scrape to avoid IONOS timeout)
+// Check if events exist; if none, trigger a fast inline scrape (100ms/request ~15s total).
+// The cron runs every 20 min and is the primary source; this is a fallback for first-of-day.
 $hasEvents = false;
 if ($date === date('Y-m-d')) {
     try {
@@ -31,6 +32,12 @@ if ($date === date('Y-m-d')) {
         $check->execute([$date]);
         $hasEvents = (int)$check->fetchColumn() > 0;
     } catch (PDOException $e) { $hasEvents = false; }
+
+    if ($force || !$hasEvents) {
+        require_once dirname(__DIR__) . '/cron/scrape_sports.php';
+        runSportsScrape(false); // uses 100ms/request in web context (set inside the function)
+        $hasEvents = true;
+    }
 }
 
 $where  = ['event_date = ?'];
