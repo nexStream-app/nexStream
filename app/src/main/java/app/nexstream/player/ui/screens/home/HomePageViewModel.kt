@@ -92,6 +92,7 @@ class HomePageViewModel @Inject constructor(
     ) { events, category, hidden, currentUkMinutes ->
         val now = System.currentTimeMillis()
         val filtered = events
+            .filter { it.matchedChannels.isNotEmpty() }
             .filter { it.sportCategory !in hidden }
             .filter { ev ->
                 val endMs = ev.endEpochMs

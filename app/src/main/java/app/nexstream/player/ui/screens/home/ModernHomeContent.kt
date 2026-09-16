@@ -701,11 +701,20 @@ private fun SportEventCard(
             val startMs = parseUtcIsoMs(event.startUtc) ?: computeEventStartMs(event.timeUk)
             val endMs   = event.endEpochMs ?: (startMs + 120 * 60_000L)
             val elapsed = if (endMs > startMs) ((System.currentTimeMillis() - startMs).toFloat() / (endMs - startMs).toFloat()).coerceIn(0f, 1f) else 0f
+            // Track
             Box(
                 modifier = Modifier
-                    .height(3.dp)
-                    .fillMaxWidth(elapsed.coerceAtLeast(0.02f))
-                    .background(accent)
+                    .height(4.dp)
+                    .fillMaxWidth()
+                    .background(textSecondary.copy(alpha = 0.2f))
+                    .align(Alignment.BottomStart)
+            )
+            // Fill
+            Box(
+                modifier = Modifier
+                    .height(4.dp)
+                    .fillMaxWidth(elapsed.coerceAtLeast(0.03f))
+                    .background(Color.Red.copy(alpha = 0.75f))
                     .align(Alignment.BottomStart)
             )
         }
@@ -748,9 +757,19 @@ private fun SportEventCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
-                Text(event.timeUk, fontSize = 11.sp, color = textSecondary)
+                if (live) {
+                    val startMs2 = parseUtcIsoMs(event.startUtc) ?: computeEventStartMs(event.timeUk)
+                    val endMs2   = event.endEpochMs ?: (startMs2 + 120 * 60_000L)
+                    val remainingMin = ((endMs2 - System.currentTimeMillis()) / 60_000L).toInt().coerceAtLeast(0)
+                    Text(
+                        text     = if (remainingMin > 0) "${event.timeUk} · ${remainingMin}m left" else event.timeUk,
+                        fontSize = 11.sp,
+                        color    = Color.Red.copy(alpha = 0.85f)
+                    )
+                } else {
+                    Text(event.timeUk, fontSize = 11.sp, color = textSecondary)
+                }
                 if (hasMatch) Text("▶ WATCH", fontSize = 10.sp, color = accent, fontWeight = FontWeight.Medium)
-                else Text("Not in playlist", fontSize = 10.sp, color = textSecondary.copy(alpha = 0.5f))
             }
             // Channel name
             if (firstMatch != null) {
