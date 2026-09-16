@@ -237,9 +237,7 @@ class HomePageViewModel @Inject constructor(
                                 toMs       = startMs + 45 * 60_000L,
                             )?.endTime
                         } else null
-                        val resolvedEnd = epgEnd
-                            ?: parseUtcIso(event.endUtc)
-                            ?: (startMs + 120 * 60_000L)
+                        val resolvedEnd = epgEnd ?: parseUtcIso(event.endUtc)
                         event.copy(endEpochMs = resolvedEnd)
                     }
                 }
