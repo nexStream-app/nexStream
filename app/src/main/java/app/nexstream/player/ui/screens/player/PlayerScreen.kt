@@ -1301,6 +1301,32 @@ fun PlayerScreen(
                         )
                     ))
 
+                    // Live clock — top-left corner
+                    run {
+                        var playerClockTime by remember { mutableStateOf("") }
+                        val playerClockFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+                        LaunchedEffect(Unit) {
+                            while (true) {
+                                playerClockTime = playerClockFmt.format(Date())
+                                delay(1000)
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.Black.copy(alpha = 0.55f)
+                        ) {
+                            Text(
+                                text     = playerClockTime,
+                                style    = MaterialTheme.typography.labelSmall,
+                                color    = Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
                     // Quality badge — top-right corner, always visible when controls are shown
                     if (videoQualityLabel != null && !isCasting) {
                         Surface(

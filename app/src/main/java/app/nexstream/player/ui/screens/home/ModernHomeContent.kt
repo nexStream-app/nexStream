@@ -73,6 +73,9 @@ import app.nexstream.player.ui.theme.LocalNsTextPrimary
 import app.nexstream.player.ui.theme.LocalNsTextSecondary
 import androidx.compose.material3.CircularProgressIndicator
 import app.nexstream.player.ui.components.NexStreamBanner
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -123,6 +126,15 @@ fun ModernHomeContent(
         }
     }
 
+    var sportsHeaderTime by remember { mutableStateOf("") }
+    val sportsTimeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            sportsHeaderTime = sportsTimeFormat.format(Date())
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(background)) {
         // Fixed header — exactly like SeriesScreen/MoviesScreen
@@ -135,6 +147,11 @@ fun ModernHomeContent(
                 text  = if (selectedSportCategory == null) "Today's Live Sport" else "Today's $selectedSportCategory",
                 style = MaterialTheme.typography.titleMedium,
                 color = sTheme.categoryText
+            )
+            Text(
+                text  = sportsHeaderTime,
+                style = MaterialTheme.typography.titleMedium,
+                color = sTheme.categoryText.copy(alpha = 0.75f)
             )
             if (allSportsCategories.isNotEmpty()) {
                 var editBtnFocused by remember { mutableStateOf(false) }
