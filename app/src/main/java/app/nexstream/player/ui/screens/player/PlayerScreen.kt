@@ -1254,7 +1254,10 @@ fun PlayerScreen(
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
-                            this.player = fp
+                            // Attach the raw underlying player for video surface setup.
+                            // ForwardingPlayer does not reliably forward setVideoSurfaceView
+                            // on all TV hardware; the Compose controls use fp directly.
+                            this.player = player
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
@@ -1265,7 +1268,7 @@ fun PlayerScreen(
                         }
                     },
                     update = { pv ->
-                        if (pv.player != fp) pv.player = fp
+                        if (pv.player != player) pv.player = player
                         pv.resizeMode = when (resizeMode) {
                             AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                             else -> resizeMode
