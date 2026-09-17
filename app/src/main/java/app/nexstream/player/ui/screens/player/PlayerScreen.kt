@@ -1251,15 +1251,10 @@ fun PlayerScreen(
                     }
                 }
             } else {
-                // FIT mode: Compose sizes the view to the video's aspect ratio (black bars in the
-                // parent Box). FILL/ZOOM: full-screen as before. This bypasses AspectRatioFrameLayout
-                // resizing, which doesn't reliably move the hardware video surface on Android TV.
                 AndroidView(
                     factory = { ctx ->
-                        (android.view.LayoutInflater.from(ctx).inflate(
-                            app.nexstream.player.R.layout.nexstream_player_view, null
-                        ) as PlayerView).apply {
-                            this.player = fp
+                        PlayerView(ctx).apply {
+                            useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
                             this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
@@ -1268,7 +1263,10 @@ fun PlayerScreen(
                             subtitleView?.visibility = android.view.View.GONE
                         }
                     },
-                    update = { pv -> pv.resizeMode = resizeMode },
+                    update = { pv ->
+                        if (pv.player != fp) pv.player = fp
+                        pv.resizeMode = resizeMode
+                    },
                     modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
                 )
             }
