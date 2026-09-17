@@ -142,15 +142,25 @@ class PicksViewModel @Inject constructor(
             }
             val wordIndex = cachedWordIndex ?: buildWordIndex(availableNames).also { cachedWordIndex = it }
 
-            // Process all seeds concurrently; publish groups as each result arrives
+            // Process all seeds concurrently; publish each item as soon as it passes the
+            // playlist check so posters appear one by one rather than all at once.
             val mutex = Mutex()
             val orderedResults = mutableListOf<Pair<Int, PickGroup>>()
             dedupedSeeds.mapIndexed { idx, seed ->
                 async(Dispatchers.IO) {
-                    val picks = fetchRecommendations(seed, wordIndex)
-                    if (picks.isNotEmpty()) {
+                    val mediaType = if (seed.type == RecentlyWatchedType.MOVIE) "movie" else "tv"
+                    val groupTitle = cleanTitle(seed.name)
+                    val tmdbId = try { searchTmdbId(seed.name, mediaType) } catch (_: Exception) { null }
+                        ?: return@async
+                    streamRecommendations(tmdbId, mediaType, seed.name, wordIndex) { item ->
                         mutex.withLock {
-                            orderedResults.add(idx to PickGroup(cleanTitle(seed.name), picks))
+                            val existingIdx = orderedResults.indexOfFirst { it.first == idx }
+                            if (existingIdx >= 0) {
+                                val (_, group) = orderedResults[existingIdx]
+                                orderedResults[existingIdx] = idx to group.copy(items = group.items + item)
+                            } else {
+                                orderedResults.add(idx to PickGroup(groupTitle, listOf(item)))
+                            }
                             _groups.value = orderedResults.sortedBy { it.first }.map { it.second }.distinctBy { it.seedTitle }
                         }
                     }
@@ -190,14 +200,37 @@ class PicksViewModel @Inject constructor(
         return shorter.all { it in longer }
     }
 
-    private suspend fun fetchRecommendations(seed: RecentlyWatchedEntity, wordIndex: Map<String, Set<String>>): List<PickItem> =
-        withContext(Dispatchers.IO) {
-            try {
-                val mediaType = if (seed.type == RecentlyWatchedType.MOVIE) "movie" else "tv"
-                val tmdbId = searchTmdbId(seed.name, mediaType) ?: return@withContext emptyList()
-                fetchRecommendationsForId(tmdbId, mediaType, seed.name, wordIndex)
-            } catch (_: Exception) { emptyList() }
-        }
+    private suspend fun streamRecommendations(
+        tmdbId: Int, mediaType: String, seedTitle: String,
+        wordIndex: Map<String, Set<String>>,
+        onItem: suspend (PickItem) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://api.themoviedb.org/3/$mediaType/$tmdbId/recommendations?language=en-US&page=1"
+            val response = httpClient.newCall(Request.Builder().url(url)
+                .addHeader("Authorization", "Bearer $tmdbToken").build()).execute()
+            val body = response.body?.string() ?: return@withContext
+            val results = JSONObject(body).optJSONArray("results") ?: return@withContext
+            var count = 0
+            for (i in 0 until results.length()) {
+                if (count >= 20) break
+                val item = results.getJSONObject(i)
+                val title = item.optString("title").ifEmpty { item.optString("name") }
+                if (title.isEmpty()) continue
+                if (wordIndex.isNotEmpty() && !isInPlaylist(normContent(title), wordIndex)) continue
+                val posterPath = item.optString("poster_path").takeIf { it.isNotEmpty() }
+                onItem(PickItem(
+                    tmdbId     = item.optInt("id"),
+                    title      = title,
+                    posterPath = posterPath,
+                    overview   = item.optString("overview"),
+                    mediaType  = mediaType,
+                    seedTitle  = seedTitle
+                ))
+                count++
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun cleanTitle(title: String): String {
         // Strip all pipe-separated prefixes (e.g. "4K | UK | Title" → "Title")
@@ -221,35 +254,6 @@ class PicksViewModel @Inject constructor(
             if (item.optString("media_type") == preferType) return item.optInt("id")
         }
         return null
-    }
-
-    private fun fetchRecommendationsForId(
-        tmdbId: Int, mediaType: String, seedTitle: String,
-        wordIndex: Map<String, Set<String>> = emptyMap()
-    ): List<PickItem> {
-        val url = "https://api.themoviedb.org/3/$mediaType/$tmdbId/recommendations?language=en-US&page=1"
-        val response = httpClient.newCall(Request.Builder().url(url)
-            .addHeader("Authorization", "Bearer $tmdbToken").build()).execute()
-        val body = response.body?.string() ?: return emptyList()
-        val results = JSONObject(body).optJSONArray("results") ?: return emptyList()
-        val items = mutableListOf<PickItem>()
-        for (i in 0 until results.length()) {
-            val item = results.getJSONObject(i)
-            val title = item.optString("title").ifEmpty { item.optString("name") }
-            if (title.isEmpty()) continue
-            if (wordIndex.isNotEmpty() && !isInPlaylist(normContent(title), wordIndex)) continue
-            val posterPath = item.optString("poster_path").takeIf { it.isNotEmpty() }
-            items.add(PickItem(
-                tmdbId    = item.optInt("id"),
-                title     = title,
-                posterPath = posterPath,
-                overview  = item.optString("overview"),
-                mediaType = mediaType,
-                seedTitle = seedTitle
-            ))
-            if (items.size >= 20) break
-        }
-        return items
     }
 
     // Uses word index for O(1) candidate lookup instead of O(n) full scan

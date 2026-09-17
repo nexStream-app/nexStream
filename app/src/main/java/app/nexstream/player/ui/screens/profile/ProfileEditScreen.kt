@@ -3,6 +3,7 @@ package app.nexstream.player.ui.screens.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -279,6 +280,7 @@ fun ProfileEditScreen(
                                             else MaterialTheme.colorScheme.surface,
                                     shape = RoundedCornerShape(8.dp)
                                 )
+                                .focusable()
                                 .onFocusChanged { isFocused = it.isFocused }
                                 .onKeyEvent { ev ->
                                     if (ev.type == KeyEventType.KeyDown && (
@@ -858,18 +860,11 @@ fun ProfileEditScreen(
                                         .padding(horizontal = 6.dp, vertical = 5.dp),
                                     verticalArrangement = Arrangement.spacedBy(1.dp)
                                 ) {
-                                    if (totalChannels > 0) {
+                                    if (groupBlocked || blockedCount > 0) {
                                         Text(
-                                            when {
-                                                groupBlocked     -> "All blocked"
-                                                blockedCount > 0 -> "$blockedCount of $totalChannels blocked"
-                                                else             -> "$totalChannels channels"
-                                            },
+                                            if (groupBlocked) "All blocked" else "$blockedCount blocked",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = if (groupBlocked || blockedCount > 0)
-                                                MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
-                                            else
-                                                Color.White.copy(alpha = 0.6f)
+                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
                                         )
                                     }
                                     Text(

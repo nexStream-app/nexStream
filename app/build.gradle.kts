@@ -149,5 +149,11 @@ dependencies {
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("androidx.mediarouter:mediarouter:1.7.0")
 
-    }
+}
+
+// Force generateBuildConfig to re-run whenever build_number.txt changes,
+// even when the Gradle build cache is enabled.
+tasks.withType<com.android.build.gradle.tasks.GenerateBuildConfig>().configureEach {
+    inputs.file(rootProject.file("build_number.txt"))
+}
 //
