@@ -442,7 +442,7 @@ fun PlayerScreen(
                         .build()
                 }
             }
-                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true)
             val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(
                 object : javax.net.ssl.X509TrustManager {
@@ -1253,7 +1253,10 @@ fun PlayerScreen(
             } else {
                 AndroidView(
                     factory = { ctx ->
-                        PlayerView(ctx).apply {
+                        (android.view.LayoutInflater.from(ctx).inflate(
+                            app.nexstream.player.R.layout.nexstream_player_view, null
+                        ) as PlayerView).apply {
+                            this.player = fp
                             useController = false
                             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
@@ -1265,9 +1268,16 @@ fun PlayerScreen(
                     },
                     update = { pv ->
                         if (pv.player != fp) pv.player = fp
-                        pv.resizeMode = resizeMode
+                        pv.resizeMode = when (resizeMode) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            else -> resizeMode
+                        }
                     },
-                    modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
+                    modifier = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                        Modifier.align(Alignment.Center).aspectRatio(videoAspectRatio).clickable { showControls = !showControls }
+                    } else {
+                        Modifier.fillMaxSize().clickable { showControls = !showControls }
+                    }
                 )
             }
 
