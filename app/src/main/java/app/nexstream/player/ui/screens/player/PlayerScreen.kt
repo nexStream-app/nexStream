@@ -1253,12 +1253,10 @@ fun PlayerScreen(
             } else {
                 AndroidView(
                     factory = { ctx ->
-                        (android.view.LayoutInflater.from(ctx).inflate(
-                            app.nexstream.player.R.layout.nexstream_player_view, null
-                        ) as PlayerView).apply {
+                        PlayerView(ctx).apply {
                             this.player = fp
                             useController = false
-                            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                             isFocusable = true; isFocusableInTouchMode = true; requestFocus()
                             this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
                             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
