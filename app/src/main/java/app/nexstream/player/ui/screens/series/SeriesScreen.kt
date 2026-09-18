@@ -156,10 +156,9 @@ fun SeriesScreen(
     LaunchedEffect(System.identityHashCode(_allSeriesList), System.identityHashCode(watchlistIds), needsFavoritesFilter, needsRecentFilter, debouncedQuery, maxAgeRating, allowNr, openDialogSeriesId, silentFilterQuery, sortOrder) {
         isSorting = true
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
             val base = when {
                 needsFavoritesFilter -> _allSeriesList.filter { it.id in watchlistIds }
-                needsRecentFilter    -> _allSeriesList.filter { parseSeriesReleaseDateEpochMs(it.releaseDate).let { ms -> ms > 0L && ms > recentCutoff } }
+                needsRecentFilter    -> _allSeriesList.filter { it.hasNewEpisodes }
                 else                 -> _allSeriesList
             }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base

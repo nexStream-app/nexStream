@@ -397,7 +397,11 @@ class HomePageViewModel @Inject constructor(
     }
 
     private fun parseUtcIso(s: String?): Long? = try {
-        if (s == null) null else java.time.Instant.parse(s).toEpochMilli()
+        if (s == null) null else {
+            // DB stores "YYYY-MM-DD HH:MM:SS" (space-separated); Instant.parse needs ISO-8601 with T and Z.
+            val iso = s.trim().replace(' ', 'T').let { if (it.endsWith('Z')) it else "${it}Z" }
+            java.time.Instant.parse(iso).toEpochMilli()
+        }
     } catch (_: Exception) { null }
 
     private fun getCurrentUkMinutes(): Int {

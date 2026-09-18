@@ -67,11 +67,10 @@ fun ModernSeriesContent(
     }
     LaunchedEffect(seriesList, continueEpisodes) {
         val (popular, recent, newEps) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            val inProgress = continueEpisodes.mapNotNull { it.seriesId }.toSet()
             Triple(
                 seriesList.sortedByDescending { it.rating?.toDoubleOrNull() ?: 0.0 }.take(12),
                 seriesList.sortedByDescending { it.releaseDate?.takeIf { d -> d.isNotBlank() } ?: "0000-00-00" }.take(24),
-                seriesList.filter { it.id in inProgress }.take(16)
+                seriesList.filter { it.hasNewEpisodes }.take(16)
             )
         }
         popularSeries     = popular

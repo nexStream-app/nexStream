@@ -142,7 +142,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging:24.0.0")
 
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.3.1+2")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
     // Casting (Chromecast + DLNA/AirPlay discovery)

@@ -142,4 +142,9 @@ interface SeriesDao {
 
     @Query("SELECT id FROM series WHERE hasNewEpisodes = 1")
     fun getSeriesIdsWithNewEpisodes(): Flow<List<String>>
+
+    @Query("SELECT id, hasNewEpisodes FROM series WHERE playlistId = :playlistId")
+    suspend fun getExistingNewEpisodeFlags(playlistId: String): List<HasNewEpisodesRow>
+
+    data class HasNewEpisodesRow(val id: String, val hasNewEpisodes: Boolean)
 }

@@ -980,11 +980,13 @@ class PlaylistRepository @Inject constructor(
                     emptyList()
                 }
 
-                // Snapshot existing certifications and addedAt so INSERT OR REPLACE doesn't wipe them.
+                // Snapshot existing certifications, addedAt, and hasNewEpisodes so INSERT OR REPLACE doesn't wipe them.
                 val existingSeriesCerts = database.seriesDao().getExistingCertifications(playlistId)
                     .associate { it.id to it.certification }
                 val existingSeriesAddedAt = database.seriesDao().getSeriesAddedAtForPlaylist(playlistId)
                     .associate { it.id to it.addedAt }
+                val existingNewEpisodeFlags = database.seriesDao().getExistingNewEpisodeFlags(playlistId)
+                    .associate { it.id to it.hasNewEpisodes }
 
                 _seriesLoadedCount.value = 0
 
@@ -1014,7 +1016,8 @@ class PlaylistRepository @Inject constructor(
                             playlistId = playlistId,
                             certification = existingSeriesCerts[seriesId2],
                             originalLanguage = series.originalLanguage,
-                            addedAt = existingSeriesAddedAt[seriesId2] ?: seriesImportTime
+                            addedAt = existingSeriesAddedAt[seriesId2] ?: seriesImportTime,
+                            hasNewEpisodes = existingNewEpisodeFlags[seriesId2] ?: false
                         )
                     }
 
