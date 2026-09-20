@@ -982,6 +982,7 @@ fun PlayerScreen(
             if (isLiveTV || isCatchup) add("sleep")
             if (hasScrubbing) add("speed")
             if (showAspectRatioButton) add("aspect")
+            if (onOpenMultiScreen != null) add("multi_screen")
             add("stats")
         }
     }}
@@ -1082,8 +1083,9 @@ fun PlayerScreen(
                     }
                     scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
                 }
-                "stats"     -> showStats = !showStats
-                else        -> Unit
+                "stats"        -> showStats = !showStats
+                "multi_screen" -> onOpenMultiScreen?.invoke()
+                else           -> Unit
             }
             DpadZone.SLIDER -> { /* seek already applied on L/R */ }
         }
@@ -2034,6 +2036,34 @@ fun PlayerScreen(
                                                     modifier = Modifier.size(28.dp)
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+
+                                // Multi-screen (live TV only)
+                                if (onOpenMultiScreen != null) {
+                                    val multiScreenFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "multi_screen"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(controlBg)
+                                            .then(
+                                                if (multiScreenFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { onOpenMultiScreen.invoke() },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.GridView,
+                                                contentDescription = "Multi-view",
+                                                tint = controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
                                         }
                                     }
                                 }
