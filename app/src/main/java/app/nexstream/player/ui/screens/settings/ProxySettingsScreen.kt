@@ -47,6 +47,7 @@ fun ProxySettingsScreen(
     val proxyPass by context.getProxyPasswordFlow().collectAsState(initial = "")
 
     val firstFR = firstItemFocusRequester ?: remember { FocusRequester() }
+    val scrollState = rememberScrollState()
 
     // Edit dialog state
     var editField  by remember { mutableStateOf<String?>(null) }
@@ -67,12 +68,15 @@ fun ProxySettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
             // ── Proxy Mode ────────────────────────────────────────────────────
+            Box(modifier = Modifier.onFocusChanged { fs ->
+                if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+            }) {
             SettingsSectionContainer(title = "Stream Proxy", icon = Icons.Default.NetworkCheck, uiStyle = uiStyle) {
                 Text(
                     "Routes stream traffic through a proxy server so your router sees only the proxy address, not the IPTV server.",
@@ -103,6 +107,7 @@ fun ProxySettingsScreen(
                     onClick     = { scope.launch { context.saveProxyMode("CUSTOM") } }
                 )
             }
+            } // end Box (scroll-to-top on Stream Proxy focus)
 
             // ── Custom proxy fields (only when CUSTOM selected) ───────────────
             if (proxyMode == "CUSTOM") {

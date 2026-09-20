@@ -74,7 +74,8 @@ fun PlayerSettingsScreen(
 
     val availablePlayers = remember { ExternalPlayerManager.getAvailablePlayers(context) }
 
-    val frameRateFR = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+    val firstFR = firstItemFocusRequester ?: remember { FocusRequester() }
 
     var currentStorageLabel by remember { mutableStateOf(NexStreamDownloadManager.getDownloadsLabel(context)) }
     var showStoragePicker   by remember { mutableStateOf(false) }
@@ -180,11 +181,14 @@ fun PlayerSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Frame Rate + Buffering ────────────────────────────────────────
+            Box(modifier = Modifier.onFocusChanged { fs ->
+                if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+            }) {
             SettingsSectionContainer(
                 title = stringResource(R.string.player_section_playback),
                 icon = Icons.Default.PlayCircle,
@@ -195,7 +199,7 @@ fun PlayerSettingsScreen(
                     description = stringResource(R.string.player_auto_frame_rate_desc),
                     checked = autoFrameRate,
                     uiStyle = uiStyle,
-                    focusRequester = frameRateFR,
+                    focusRequester = firstFR,
                     onToggle = { scope.launch { context.saveAutoFrameRate(!autoFrameRate) } }
                 )
                 SettingsToggle(
@@ -206,6 +210,7 @@ fun PlayerSettingsScreen(
                     onToggle = { scope.launch { context.saveSmartBuffer(!smartBuffer) } }
                 )
             }
+            } // end Box (scroll-to-top on Playback focus)
 
             // ── External Players ──────────────────────────────────────────────
             SettingsSectionContainer(

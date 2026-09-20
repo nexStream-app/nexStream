@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import app.nexstream.player.R
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
+import kotlinx.coroutines.launch
 
 @Composable
 fun SportsSettingsScreen(
@@ -34,6 +35,8 @@ fun SportsSettingsScreen(
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
     val uiStyle = rememberUiStyle()
     val refreshFR = firstItemFocusRequester ?: remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiStyle != UiStyle.MODERN) {
@@ -54,7 +57,7 @@ fun SportsSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -98,7 +101,10 @@ fun SportsSettingsScreen(
                 modifier = Modifier
                     .height(40.dp)
                     .focusRequester(refreshFR)
-                    .onFocusChanged { isFocused = it.isFocused }
+                    .onFocusChanged { fs ->
+                        isFocused = fs.isFocused
+                        if (fs.isFocused) scope.launch { scrollState.animateScrollTo(0) }
+                    }
                     .onKeyEvent { e ->
                         if (e.type == KeyEventType.KeyDown &&
                             (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)

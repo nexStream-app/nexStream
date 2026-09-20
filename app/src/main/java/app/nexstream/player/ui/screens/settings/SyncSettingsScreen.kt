@@ -29,6 +29,8 @@ import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.sync.ProfileSyncManager
+import app.nexstream.player.data.sync.ProgressSyncManager
+import app.nexstream.player.data.sync.RecentlySyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
@@ -76,6 +78,8 @@ data class SyncSettingsUiState(
 class SyncSettingsViewModel @Inject constructor(
     private val profileSyncManager: ProfileSyncManager,
     private val watchlistSyncManager: WatchlistSyncManager,
+    private val recentlySyncManager: RecentlySyncManager,
+    private val progressSyncManager: ProgressSyncManager,
     private val profileManager: ProfileManager,
     private val profileDao: ProfileDao,
     private val watchlistDao: WatchlistDao,
@@ -161,7 +165,12 @@ class SyncSettingsViewModel @Inject constructor(
             profileSyncManager.pushProfiles()
             watchlistSyncManager.pushAllToServer()
             val profiles = profileDao.getAllProfilesOnce()
-            profiles.forEach { profile -> watchlistSyncManager.syncFromServer(profile.id) }
+            profiles.forEach { profile ->
+                watchlistSyncManager.syncFromServer(profile.id)
+                recentlySyncManager.syncFromServer(profile.id)
+                progressSyncManager.pullFromServer(profile.id)
+                progressSyncManager.pushAllToServer(profile.id)
+            }
             refreshStats()
             _uiState.update { it.copy(isSyncing = false, syncedCount = profiles.size) }
         }
@@ -197,9 +206,10 @@ fun SyncSettingsScreen(
 
     val uiState by viewModel.uiState.collectAsState()
 
-    val firstFR   = firstItemFocusRequester ?: remember { FocusRequester() }
-    val syncBtnFR = remember { FocusRequester() }
-    val scope     = rememberCoroutineScope()
+    val firstFR    = firstItemFocusRequester ?: remember { FocusRequester() }
+    val syncBtnFR  = remember { FocusRequester() }
+    val scope      = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
     var isCheckingUpdate  by remember { mutableStateOf(false) }
     var updateCheckResult by remember { mutableStateOf<String?>(null) }
     val isRefreshingEpg = uiState.isRefreshingEpg
@@ -226,11 +236,16 @@ fun SyncSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Updates ───────────────────────────────────────────────────────
+            // Wrap in Box so that when the first item gains focus we scroll back
+            // to 0, preventing the "Updates" section title from being cut off.
+            Box(modifier = Modifier.onFocusChanged { fs ->
+                if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+            }) {
             SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
                 SettingsActionItem(
                     label          = "Check for Update",
@@ -257,6 +272,7 @@ fun SyncSettingsScreen(
                     }
                 )
             }
+            } // end Box (scroll-to-top on Updates focus)
 
             // ── TV Guide (EPG) ────────────────────────────────────────────────
             SettingsSectionContainer(title = "TV Guide", icon = Icons.Default.CalendarToday, uiStyle = uiStyle) {

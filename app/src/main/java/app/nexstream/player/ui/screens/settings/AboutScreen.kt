@@ -35,6 +35,7 @@ import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class AboutViewModel @Inject constructor(
@@ -50,6 +51,7 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val nsTheme = LocalNexStreamTheme.current
     val sTheme = nsTheme.sidebar
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
@@ -100,7 +102,10 @@ fun AboutScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .focusRequester(firstFR)
-                        .onFocusChanged { copyFocused = it.isFocused },
+                        .onFocusChanged { fs ->
+                            copyFocused = fs.isFocused
+                            if (fs.isFocused) scope.launch { scrollState.animateScrollTo(0) }
+                        },
                     border = BorderStroke(
                         width = if (copyFocused) 2.dp else 1.dp,
                         color = if (copyFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline

@@ -136,6 +136,9 @@ fun NavigationSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Start-on picker ──────────────────────────────────────────────
+            Box(modifier = Modifier.onFocusChanged { fs ->
+                if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+            }) {
             SettingsSectionContainer(
                 title = stringResource(R.string.nav_settings_start_screen_section),
                 icon = Icons.Default.Home,
@@ -259,6 +262,7 @@ fun NavigationSettingsScreen(
                     }
                 }
             }
+            } // end Box (scroll-to-top on Start Screen focus)
 
             // ── Rail order ───────────────────────────────────────────────────
             SettingsSectionContainer(
