@@ -676,7 +676,10 @@ private fun isPastEvent(event: MatchedSportEvent, currentUkMinutes: Int): Boolea
 }
 
 private fun parseUtcIsoMs(s: String?): Long? = try {
-    if (s == null) null else java.time.Instant.parse(s).toEpochMilli()
+    if (s == null) null else {
+        val iso = s.trim().replace(' ', 'T').let { if (it.endsWith('Z')) it else "${it}Z" }
+        java.time.Instant.parse(iso).toEpochMilli()
+    }
 } catch (_: Exception) { null }
 
 // ─────────────────────────────────────────────────────────────────────────────
