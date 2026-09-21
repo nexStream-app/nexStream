@@ -187,16 +187,21 @@ class AddPlaylistViewModel @Inject constructor(
         // HTTP polling fallback — fires every 4 s in case FCM is unavailable
         viewModelScope.launch {
             delay(2000)
-            // On fresh install look back 30 minutes only — enough for the QR/web setup flow
-            // (~15 min QR window + ~5 min to submit) without auto-importing stale credentials
-            // from a previous install that could hijack the UI before the user can enter new ones.
             val hasPlaylists = repository.getAllPlaylists().first().isNotEmpty()
-            val firstSince   = if (hasPlaylists) screenOpenedAt else (screenOpenedAt - 30L * 60 * 1000L)
-            val firstEvent   = repository.pollForPendingPlaylist(deviceId, firstSince)
-            if (firstEvent != null && _pollState.value == MacPollState.Polling) {
-                handlePlaylistEvent(firstEvent); return@launch
+
+            if (!hasPlaylists) {
+                // Fresh install: look back 30 min to recover a playlist submitted before reinstall.
+                // The backend reinstall-fallback only fires for polls with a since > 5 min old,
+                // so this wide-window poll is the only path that triggers it.
+                val firstEvent = repository.pollForPendingPlaylist(deviceId, screenOpenedAt - 30L * 60 * 1000L)
+                if (firstEvent != null && _pollState.value == MacPollState.Polling) {
+                    handlePlaylistEvent(firstEvent); return@launch
+                }
+                delay(2000)
             }
-            delay(2000)
+
+            // Standard loop: polls from the moment the screen opened so only picks up
+            // entries submitted after the user navigated here.
             while (_pollState.value == MacPollState.Polling) {
                 val event = repository.pollForPendingPlaylist(deviceId, screenOpenedAt)
                 if (event != null && _pollState.value == MacPollState.Polling) {
