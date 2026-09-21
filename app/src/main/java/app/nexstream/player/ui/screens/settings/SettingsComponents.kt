@@ -4,6 +4,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -262,6 +265,7 @@ fun SettingsActionItem(
                 else Color.Transparent
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusable()
             .onFocusChanged { state ->
                 isFocused = state.isFocused
                 if (state.isFocused) scope.launch {
@@ -274,7 +278,7 @@ fun SettingsActionItem(
                     onClick(); true
                 } else false
             }
-            .clickable { onClick() }
+            .pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) }
             .padding(horizontal = 16.dp, vertical = 12.dp)
 
         UiStyle.CLASSIC -> Modifier
@@ -287,6 +291,7 @@ fun SettingsActionItem(
                 else Modifier
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusable()
             .onFocusChanged { state ->
                 isFocused = state.isFocused
                 if (state.isFocused) scope.launch {
@@ -299,7 +304,7 @@ fun SettingsActionItem(
                     onClick(); true
                 } else false
             }
-            .clickable { onClick() }
+            .pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) }
             .padding(horizontal = 16.dp, vertical = 10.dp)
     }
 
