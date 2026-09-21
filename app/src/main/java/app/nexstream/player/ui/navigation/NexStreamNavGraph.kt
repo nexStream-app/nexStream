@@ -74,9 +74,7 @@ fun NexStreamNavGraph(
                 onBack = {
                     if (navController.previousBackStackEntry != null) {
                         navController.popBackStack()
-                    } else if (isFirstRun || onboardingDone != true) {
-                        // isFirstRun: always show onboarding on first-ever playlist add,
-                        // even if onboardingDone was left as true from a previous install.
+                    } else if (onboardingDone != true) {
                         navController.navigate(Screen.Onboarding.route) {
                             popUpTo(Screen.AddPlaylist.route) { inclusive = true }
                         }
