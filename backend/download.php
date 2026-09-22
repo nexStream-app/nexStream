@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/db.php';
 
 $apk_url = 'nexStream.apk';
-$version = '1.0.4 (Build 0317)';
+$version = '1.0.4 (Build 0318)';
 
 // Count each download.php page load as an APK download
 try {
