@@ -36,8 +36,11 @@ fun LoadingScreen(
     // navigating, so the profile picker always shows profiles from all devices.
     // profilesReady falls through after 3 s to handle offline / sync-disabled cases.
     LaunchedEffect(loadState, profilesReady) {
-        if (!loadState.loaded || !profilesReady) return@LaunchedEffect
-        onLoadingComplete(loadState.playlists.isNotEmpty())
+        if (!loadState.loaded) return@LaunchedEffect
+        // Skip profile-sync wait when there are no playlists — nothing to profile-filter
+        if (loadState.playlists.isEmpty() || profilesReady) {
+            onLoadingComplete(loadState.playlists.isNotEmpty())
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
