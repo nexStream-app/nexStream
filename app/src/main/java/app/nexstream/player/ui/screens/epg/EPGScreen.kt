@@ -1049,7 +1049,7 @@ private fun EpgInfoPlayerStrip(
         modifier = Modifier
             .fillMaxWidth()
             .background(sTheme.panelBackground)
-            .padding(vertical = 6.dp)
+            .padding(bottom = 6.dp)
     ) {
         Row(
             modifier = Modifier
