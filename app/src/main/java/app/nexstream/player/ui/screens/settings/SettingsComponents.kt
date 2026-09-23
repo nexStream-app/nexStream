@@ -265,13 +265,13 @@ fun SettingsActionItem(
                 else Color.Transparent
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable()
             .onFocusChanged { state ->
                 isFocused = state.isFocused
                 if (state.isFocused) scope.launch {
                     bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
                 }
             }
+            .focusable()
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
@@ -291,13 +291,13 @@ fun SettingsActionItem(
                 else Modifier
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .focusable()
             .onFocusChanged { state ->
                 isFocused = state.isFocused
                 if (state.isFocused) scope.launch {
                     bvr.bringIntoView(Rect(0f, 0f, 10000f, nodeHeight + 80f))
                 }
             }
+            .focusable()
             .onKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown &&
                     (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
