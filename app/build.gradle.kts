@@ -28,7 +28,7 @@ android {
         applicationId = "app.nexstream.player"
         minSdk = 21
         targetSdk = 35
-        versionCode = 17
+        versionCode = buildNumber.toIntOrNull() ?: 17
         versionName = "1.0.4"
         buildConfigField("String", "BUILD_NUMBER", "\"$buildNumber\"")
         buildConfigField("int",    "BUILD_NUMBER_INT", (buildNumber.toIntOrNull() ?: 1).toString())

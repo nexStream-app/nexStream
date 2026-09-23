@@ -108,6 +108,12 @@ object AutoUpdateManager {
 
     private fun installApk(context: Context, apk: File) {
         val uri = FileProvider.getUriForFile(context, AUTHORITY, apk)
+        // Move the app to background first so the installer dialog isn't hidden behind it
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(homeIntent)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
