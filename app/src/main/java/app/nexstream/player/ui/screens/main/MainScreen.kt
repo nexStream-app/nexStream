@@ -2141,7 +2141,7 @@ private fun MainContentArea(
                     onPlayNextEpisode     = onPlayNextEpisode,
                     onPreviousChannel     = onPreviousChannel,
                     onNextChannel         = onNextChannel,
-                    onOpenMultiScreen     = { showMultiScreen = true },
+                    onOpenMultiScreen     = if (currentMovieId == null && currentEpisodeId == null) ({ showMultiScreen = true }) else null,
                     onBack                = { onPlayerBack(currentRoute) }
                 )
             }

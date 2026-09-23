@@ -369,13 +369,14 @@ fun PlayerScreen(
         } else {
             DefaultLoadControl.Builder()
                 .setAllocator(allocator)
-                .setTargetBufferBytes(if (constrained) 8 * 1024 * 1024 else DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
+                .setTargetBufferBytes(if (constrained) 16 * 1024 * 1024 else DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
                 .setBufferDurationsMs(
-                    10_000,  // minBuffer — increased from 5s; absorbs brief network hiccups on live TV
-                    30_000,  // maxBuffer
-                    1_500,   // bufferForPlayback
+                    15_000,  // minBuffer
+                    60_000,  // maxBuffer
+                    2_500,   // bufferForPlayback
                     5_000    // bufferAfterRebuffer
                 )
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
         }
     }
