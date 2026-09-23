@@ -53,6 +53,7 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -346,9 +347,16 @@ fun PlayerScreen(
     }
 
     // ── LoadControl builder ───────────────────────────────────────────────────
-    fun buildLoadControl(): DefaultLoadControl =
-        if (smartBuffer && (isCatchup || isVod)) {
+    fun buildLoadControl(): DefaultLoadControl {
+        // Devices with ≤128 MB heap (e.g. Allwinner box) OOM on the default 64 KB chunk size.
+        // Use 16 KB chunks so each allocation fits in the small free-heap gaps, and cap total
+        // buffered bytes so ExoPlayer can't grow unchecked on constrained hardware.
+        val constrained = Runtime.getRuntime().maxMemory() < 192L * 1024 * 1024
+        val allocator   = DefaultAllocator(true, if (constrained) 16 * 1024 else 64 * 1024)
+        return if (smartBuffer && (isCatchup || isVod)) {
             DefaultLoadControl.Builder()
+                .setAllocator(allocator)
+                .setTargetBufferBytes(if (constrained) 16 * 1024 * 1024 else DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
                 .setBufferDurationsMs(
                     30_000,  // minBuffer
                     60_000,  // maxBuffer — reduced from 120s; 2 min was causing memory pressure on low-RAM Fire Sticks
@@ -360,6 +368,8 @@ fun PlayerScreen(
                 .build()
         } else {
             DefaultLoadControl.Builder()
+                .setAllocator(allocator)
+                .setTargetBufferBytes(if (constrained) 8 * 1024 * 1024 else DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
                 .setBufferDurationsMs(
                     10_000,  // minBuffer — increased from 5s; absorbs brief network hiccups on live TV
                     30_000,  // maxBuffer
@@ -368,6 +378,7 @@ fun PlayerScreen(
                 )
                 .build()
         }
+    }
 
     // ── Android TV: build ExoPlayer directly ──────────────────────────────────
     if (isAndroidTV) {
