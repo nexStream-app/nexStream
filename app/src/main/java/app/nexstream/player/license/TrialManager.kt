@@ -4,6 +4,7 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -33,9 +34,14 @@ class TrialManager @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("nexstream_trial", Context.MODE_PRIVATE)
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
         .build()
+
+    // Cache the result for 60s — prevents a double network round-trip if the Activity
+    // recreates mid-check (e.g. on night-mode switch) and LaunchedEffect(Unit) reruns.
+    @Volatile private var lastCheckResult: AppAccessState? = null
+    @Volatile private var lastCheckTime:   Long            = 0L
 
     private fun httpGet(url: String): String {
         val response = httpClient.newCall(
@@ -107,7 +113,15 @@ class TrialManager @Inject constructor(
 
         if (licencePreferences.hasLicence()) {
             android.util.Log.i("TrialManager", "checkAccessState: licence key present → LICENSED")
-            return@withContext AppAccessState.LICENSED
+            return@withContext AppAccessState.LICENSED.also { cache(it) }
+        }
+
+        // Return cached result if less than 60 s old — avoids a duplicate round-trip when
+        // the Activity recreates mid-check and LaunchedEffect(Unit) fires again.
+        val cached = lastCheckResult
+        if (cached != null && System.currentTimeMillis() - lastCheckTime < 60_000L) {
+            android.util.Log.i("TrialManager", "checkAccessState: returning cached=$cached")
+            return@withContext cached
         }
 
         // Check if a licence has been assigned to this device on the server
@@ -115,12 +129,16 @@ class TrialManager @Inject constructor(
         val activated = checkAndActivateAssignedLicence(deviceId)
         if (activated) {
             android.util.Log.i("TrialManager", "checkAccessState: server assigned licence activated → LICENSED")
-            return@withContext AppAccessState.LICENSED
+            return@withContext AppAccessState.LICENSED.also { cache(it) }
         }
 
         android.util.Log.i("TrialManager", "checkAccessState: no assigned licence, calling trial API")
         return@withContext try {
-            val response = api.checkTrial(TrialRequest(deviceId))
+            val response = withTimeoutOrNull(8_000L) { api.checkTrial(TrialRequest(deviceId)) }
+            if (response == null) {
+                android.util.Log.i("TrialManager", "checkAccessState: trial API timeout → fallbackToLocal")
+                return@withContext fallbackToLocal().also { cache(it) }
+            }
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body?.success == true) {
@@ -128,19 +146,24 @@ class TrialManager @Inject constructor(
                     body.sync_key?.let { licencePreferences.saveTrialSyncKey(it) }
                     val result = if (body.is_expired == true) AppAccessState.TRIAL_EXPIRED else AppAccessState.TRIAL_ACTIVE
                     android.util.Log.i("TrialManager", "checkAccessState: trial API → $result (expired=${body.is_expired} expires=${body.expires_at})")
-                    result
+                    result.also { cache(it) }
                 } else {
                     android.util.Log.i("TrialManager", "checkAccessState: trial API body.success=false → fallbackToLocal")
-                    fallbackToLocal()
+                    fallbackToLocal().also { cache(it) }
                 }
             } else {
                 android.util.Log.i("TrialManager", "checkAccessState: trial API HTTP ${response.code()} → fallbackToLocal")
-                fallbackToLocal()
+                fallbackToLocal().also { cache(it) }
             }
         } catch (e: Exception) {
             android.util.Log.i("TrialManager", "checkAccessState: trial API exception: ${e.message} → fallbackToLocal")
-            fallbackToLocal()
+            fallbackToLocal().also { cache(it) }
         }
+    }
+
+    private fun cache(state: AppAccessState) {
+        lastCheckResult = state
+        lastCheckTime   = System.currentTimeMillis()
     }
 
     fun getLocalAccessState(): AppAccessState = fallbackToLocal()

@@ -905,12 +905,19 @@ private fun QrButton(deviceId: String, onShowQr: () -> Unit) {
 private fun QrDialog(deviceId: String, onDismiss: () -> Unit, onPlaylistDetected: () -> Unit) {
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var expired  by remember { mutableStateOf(false) }
-    var error    by remember { mutableStateOf<String?>(null) } // ADD THIS
+    var error    by remember { mutableStateOf<String?>(null) }
+    var retryKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(deviceId) {
+    LaunchedEffect(deviceId, retryKey) {
+        error    = null
+        qrBitmap = null
+        expired  = false
         try {
             val json = JSONObject(withContext(Dispatchers.IO) {
-                URL("https://nexstream.uk/api/generate_token.php?device_id=$deviceId").readText()
+                val conn = URL("https://nexstream.uk/api/generate_token.php?device_id=$deviceId").openConnection()
+                conn.connectTimeout = 8_000
+                conn.readTimeout    = 8_000
+                conn.getInputStream().bufferedReader().readText()
             })
             val token = json.optString("token")
             if (token.isNotEmpty()) {
@@ -919,10 +926,10 @@ private fun QrDialog(deviceId: String, onDismiss: () -> Unit, onPlaylistDetected
                 delay(15 * 60 * 1000L)
                 expired = true
             } else {
-                error = "No token returned" // ADD THIS
+                error = json.optString("error", "No token returned")
             }
         } catch (e: Exception) {
-            error = e.message ?: "Failed to generate QR" // ADD THIS
+            error = e.message ?: "Failed to generate QR"
         }
     }
 
@@ -948,8 +955,8 @@ private fun QrDialog(deviceId: String, onDismiss: () -> Unit, onPlaylistDetected
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.labelSmall)
-                        OutlinedButton( // Retry button
-                            onClick = { error = null },
+                        OutlinedButton(
+                            onClick = { retryKey++ },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Retry") }
                     }
