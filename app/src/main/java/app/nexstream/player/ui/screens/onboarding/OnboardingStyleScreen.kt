@@ -39,11 +39,15 @@ import app.nexstream.player.ui.theme.LocalNsBackground
 import app.nexstream.player.ui.theme.LocalNsSurface
 import app.nexstream.player.ui.theme.LocalNsTextPrimary
 import app.nexstream.player.ui.theme.LocalNsTextSecondary
+import app.nexstream.player.ui.theme.getOnboardingDoneFlow
 import app.nexstream.player.ui.theme.saveAppLanguage
 import app.nexstream.player.ui.theme.saveCloudSyncEnabled
 import app.nexstream.player.ui.theme.saveOnboardingDone
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val LANGUAGES = listOf(
     Triple("",   "🌐", "System default"),
@@ -66,6 +70,15 @@ private val GET_STARTED_IDX = LANGUAGES.size + 1   // 12
 fun OnboardingStyleScreen(onComplete: () -> Unit) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
+
+    // Guard against landing back here after Activity.recreate() restores nav state:
+    // if onboarding is already done, skip straight to Main without showing UI.
+    var shouldShow by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val done = withContext(Dispatchers.IO) { context.getOnboardingDoneFlow().first() }
+        if (done) onComplete() else shouldShow = true
+    }
+    if (!shouldShow) return
 
     val accent        = LocalNsAccent.current
     val bg            = LocalNsBackground.current
