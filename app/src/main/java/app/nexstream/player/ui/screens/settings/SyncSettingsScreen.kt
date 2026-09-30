@@ -34,8 +34,7 @@ import app.nexstream.player.data.sync.RecentlySyncManager
 import app.nexstream.player.data.sync.WatchlistSyncManager
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import app.nexstream.player.ui.theme.UiStyle
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import app.nexstream.player.ui.components.FolderBrowserDialog
 import app.nexstream.player.ui.theme.applySyncedPlayerPrefs
 import app.nexstream.player.ui.theme.applySyncedThemePrefs
 import app.nexstream.player.ui.theme.collectSyncablePlayerPrefs
@@ -381,86 +380,23 @@ fun SyncSettingsScreen(
 
             // ── Backup & Restore ──────────────────────────────────────────────
             var backupStatus by remember { mutableStateOf<String?>(null) }
-
-            val exportLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.CreateDocument("application/json")
-            ) { uri ->
-                uri ?: return@rememberLauncherForActivityResult
-                scope.launch {
-                    try {
-                        val playerPrefs = withContext(Dispatchers.IO) { context.collectSyncablePlayerPrefs() }
-                        val themePrefs  = withContext(Dispatchers.IO) { context.collectSyncableThemePrefs() }
-                        val json = JSONObject().apply {
-                            put("version", 1)
-                            playerPrefs.forEach { (k, v) ->
-                                when (v) {
-                                    is Boolean -> put(k, v)
-                                    is Float   -> put(k, v.toDouble())
-                                    is Int     -> put(k, v)
-                                    is String  -> put(k, v)
-                                    else       -> put(k, v.toString())
-                                }
-                            }
-                            themePrefs.forEach { (k, v) ->
-                                when (v) {
-                                    is Boolean -> put(k, v)
-                                    is Float   -> put(k, v.toDouble())
-                                    is Int     -> put(k, v)
-                                    is String  -> put(k, v)
-                                    else       -> put(k, v.toString())
-                                }
-                            }
-                        }
-                        withContext(Dispatchers.IO) {
-                            context.contentResolver.openOutputStream(uri)?.use { out ->
-                                out.write(json.toString(2).toByteArray())
-                            }
-                        }
-                        backupStatus = strExportSuccess
-                    } catch (e: Exception) {
-                        backupStatus = String.format(strExportFailed, e.message)
-                    }
-                }
-            }
-
-            val importLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.OpenDocument()
-            ) { uri ->
-                uri ?: return@rememberLauncherForActivityResult
-                scope.launch {
-                    try {
-                        val jsonStr = withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                        } ?: return@launch
-                        val obj = JSONObject(jsonStr)
-                        val settingsMap = mutableMapOf<String, Any?>()
-                        for (key in obj.keys()) { settingsMap[key] = obj.get(key) }
-                        withContext(Dispatchers.IO) {
-                            context.applySyncedPlayerPrefs(settingsMap)
-                            context.applySyncedThemePrefs(settingsMap)
-                        }
-                        backupStatus = strRestoreSuccess
-                    } catch (e: Exception) {
-                        backupStatus = String.format(strImportFailed, e.message)
-                    }
-                }
-            }
+            var showExportFolderBrowser by remember { mutableStateOf(false) }
+            var showImportFileBrowser   by remember { mutableStateOf(false) }
 
             SettingsSectionContainer(title = stringResource(R.string.sync_section_backup), icon = Icons.Default.SaveAlt, uiStyle = uiStyle) {
-                val java8Date = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
                 SettingsActionItem(
                     label       = stringResource(R.string.sync_export_label),
                     description = stringResource(R.string.sync_export_desc),
                     value       = "",
                     uiStyle     = uiStyle,
-                    onClick     = { exportLauncher.launch("nexstream_backup_$java8Date.json") }
+                    onClick     = { showExportFolderBrowser = true }
                 )
                 SettingsActionItem(
                     label       = stringResource(R.string.sync_import_label),
                     description = stringResource(R.string.sync_import_desc),
                     value       = "",
                     uiStyle     = uiStyle,
-                    onClick     = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    onClick     = { showImportFileBrowser = true },
                     showDivider = false
                 )
                 backupStatus?.let { status ->
@@ -473,6 +409,79 @@ fun SyncSettingsScreen(
                 }
             }
             Spacer(Modifier.height(120.dp))
+
+            // ── Export folder browser ─────────────────────────────────────────
+            if (showExportFolderBrowser) {
+                FolderBrowserDialog(
+                    onDismiss = { showExportFolderBrowser = false },
+                    onFolderSelected = { folderPath, _ ->
+                        showExportFolderBrowser = false
+                        scope.launch {
+                            try {
+                                val playerPrefs = withContext(Dispatchers.IO) { context.collectSyncablePlayerPrefs() }
+                                val themePrefs  = withContext(Dispatchers.IO) { context.collectSyncableThemePrefs() }
+                                val json = JSONObject().apply {
+                                    put("version", 1)
+                                    playerPrefs.forEach { (k, v) ->
+                                        when (v) {
+                                            is Boolean -> put(k, v)
+                                            is Float   -> put(k, v.toDouble())
+                                            is Int     -> put(k, v)
+                                            is String  -> put(k, v)
+                                            else       -> put(k, v.toString())
+                                        }
+                                    }
+                                    themePrefs.forEach { (k, v) ->
+                                        when (v) {
+                                            is Boolean -> put(k, v)
+                                            is Float   -> put(k, v.toDouble())
+                                            is Int     -> put(k, v)
+                                            is String  -> put(k, v)
+                                            else       -> put(k, v.toString())
+                                        }
+                                    }
+                                }
+                                val java8Date = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+                                withContext(Dispatchers.IO) {
+                                    java.io.File(folderPath, "nexstream_backup_$java8Date.json")
+                                        .writeText(json.toString(2))
+                                }
+                                backupStatus = strExportSuccess
+                            } catch (e: Exception) {
+                                backupStatus = String.format(strExportFailed, e.message)
+                            }
+                        }
+                    }
+                )
+            }
+
+            // ── Import file browser ───────────────────────────────────────────
+            if (showImportFileBrowser) {
+                FolderBrowserDialog(
+                    onDismiss = { showImportFileBrowser = false },
+                    onFileSelected = { filePath ->
+                        showImportFileBrowser = false
+                        scope.launch {
+                            try {
+                                val jsonStr = withContext(Dispatchers.IO) {
+                                    java.io.File(filePath).readText()
+                                }
+                                val obj = JSONObject(jsonStr)
+                                val settingsMap = mutableMapOf<String, Any?>()
+                                for (key in obj.keys()) { settingsMap[key] = obj.get(key) }
+                                withContext(Dispatchers.IO) {
+                                    context.applySyncedPlayerPrefs(settingsMap)
+                                    context.applySyncedThemePrefs(settingsMap)
+                                }
+                                backupStatus = strRestoreSuccess
+                            } catch (e: Exception) {
+                                backupStatus = String.format(strImportFailed, e.message)
+                            }
+                        }
+                    },
+                    fileExtension = ".json"
+                )
+            }
         }
     }
 }

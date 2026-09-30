@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,6 +49,7 @@ fun SettingsMenuScreen(
     val uiState by viewModel.uiState.collectAsState()
     val uiStyle = rememberUiStyle()
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     // Resolve string resources in composable scope so they update on locale change
     val strPlaylists       = stringResource(R.string.settings_menu_playlists_title)
@@ -167,10 +169,14 @@ fun SettingsMenuScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(if (uiStyle == UiStyle.MODERN) 12.dp else 0.dp)
         ) {
-            if (uiStyle == UiStyle.CLASSIC) {
-                ClassicSettingsMenuList(items = items, onNavigate = onNavigate)
-            } else {
-                ModernSettingsMenuCards(items = items, onNavigate = onNavigate)
+            Box(modifier = Modifier.onFocusChanged { fs ->
+                if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+            }) {
+                if (uiStyle == UiStyle.CLASSIC) {
+                    ClassicSettingsMenuList(items = items, onNavigate = onNavigate)
+                } else {
+                    ModernSettingsMenuCards(items = items, onNavigate = onNavigate)
+                }
             }
             Spacer(modifier = Modifier.height(120.dp))
         }

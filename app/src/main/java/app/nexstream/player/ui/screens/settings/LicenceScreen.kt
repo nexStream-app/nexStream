@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -35,6 +36,8 @@ fun LicenceScreen(
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
 
     val uiStyle = rememberUiStyle()
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     Column(modifier = Modifier.fillMaxSize()) {
         if (uiStyle != UiStyle.MODERN) {
             Box(
@@ -47,12 +50,13 @@ fun LicenceScreen(
         }
 
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             LicenceContent(
                 uiState          = uiState,
                 firstItemFocusRequester = firstItemFocusRequester,
+                onScrollToTop    = { scope.launch { scrollState.animateScrollTo(0) } },
                 onActivate       = { viewModel.activate(it) },
                 onDeactivate     = { viewModel.deactivate() },
                 onCheckAssigned  = { viewModel.checkAssignedLicence() }
@@ -66,6 +70,7 @@ fun LicenceScreen(
 fun LicenceContent(
     uiState: LicenceUiState,
     firstItemFocusRequester: FocusRequester? = null,
+    onScrollToTop: () -> Unit = {},
     onActivate: (String) -> Unit,
     onDeactivate: () -> Unit,
     onCheckAssigned: () -> Unit = {}
@@ -101,9 +106,11 @@ fun LicenceContent(
                 uiState.errorMessage?.let {
                     SettingsInfoRow("", it, valueColor = MaterialTheme.colorScheme.error)
                 }
+                Box(modifier = Modifier.onFocusChanged { fs -> if (fs.hasFocus) onScrollToTop() }) {
                 OutlinedButton(
                     onClick  = onCheckAssigned,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        .then(if (firstItemFocusRequester != null) Modifier.focusRequester(firstItemFocusRequester) else Modifier),
                     enabled  = !uiState.isLoading
                 ) {
                     if (uiState.isLoading) {
@@ -115,6 +122,7 @@ fun LicenceContent(
                     }
                     Text(stringResource(R.string.licence_check_assigned))
                 }
+                } // end Box (scroll-to-top on Check Assigned focus)
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = { raw ->
@@ -180,7 +188,8 @@ fun LicenceContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .onFocusChanged { deactivateFocused = it.isFocused }
+                        .then(if (firstItemFocusRequester != null) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
+                        .onFocusChanged { fs -> deactivateFocused = fs.isFocused; if (fs.isFocused) onScrollToTop() }
                         .onKeyEvent { e ->
                             if (e.type == KeyEventType.KeyDown &&
                                 (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)

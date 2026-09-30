@@ -165,10 +165,11 @@ fun AccountScreen(
         HorizontalDivider(color = sTheme.divider)
         } // end if uiStyle != MODERN
 
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

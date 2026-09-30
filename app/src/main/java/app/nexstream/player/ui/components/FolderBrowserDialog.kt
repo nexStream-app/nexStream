@@ -1,6 +1,8 @@
 package app.nexstream.player.ui.components
 
+import android.os.Build
 import android.os.Environment
+import android.os.storage.StorageManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,29 +32,75 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.io.File
 
+/**
+ * TV-native folder/file browser.
+ * Folder mode (default): pass onFolderSelected, leave onFileSelected null.
+ * File mode: pass onFileSelected (and optionally fileExtension e.g. ".json").
+ */
 @Composable
 fun FolderBrowserDialog(
     onDismiss: () -> Unit,
-    onFolderSelected: (path: String, label: String) -> Unit
+    onFolderSelected: ((path: String, label: String) -> Unit)? = null,
+    onFileSelected: ((path: String) -> Unit)? = null,
+    fileExtension: String? = null
 ) {
     val context = LocalContext.current
+    val isFileMode = onFileSelected != null
 
     val roots: List<Pair<File, String>> = remember(context) {
         val list = mutableListOf<Pair<File, String>>()
+        val addedPaths = mutableSetOf<String>()
+
+        fun addIfNew(file: File, label: String) {
+            val canon = try { file.canonicalPath } catch (_: Exception) { file.absolutePath }
+            if (file.exists() && canon !in addedPaths) {
+                list.add(file to label)
+                addedPaths.add(canon)
+            }
+        }
+
         val primary = Environment.getExternalStorageDirectory()
-        if (primary.exists()) list.add(primary to "Internal Storage")
+        addIfNew(primary, "Internal Storage")
+
+        // App-scoped external dirs (covers SD cards on most devices)
         try {
             context.getExternalFilesDirs(null).forEachIndexed { idx, dir ->
                 if (idx > 0 && dir != null) {
-                    // Walk up 4 levels to find the volume root
                     var root = dir
                     repeat(4) { root = root.parentFile ?: root }
-                    if (root.exists() && root.absolutePath != primary.absolutePath) {
-                        list.add(root to (root.name.ifBlank { "External Storage" }))
-                    }
+                    addIfNew(root, root.name.ifBlank { "External Storage" })
                 }
             }
         } catch (_: Exception) {}
+
+        // StorageManager volumes (API 30+) — provides proper volume labels
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val sm = context.getSystemService(StorageManager::class.java)
+                sm?.storageVolumes?.forEach { vol ->
+                    if (!vol.isPrimary) {
+                        val dir = vol.directory
+                        if (dir != null) addIfNew(dir, vol.getDescription(context))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Direct /storage/ scan — catches USB drives on Allwinner boxes and Fire TV
+        try {
+            val skipNames = setOf("emulated", "self")
+            File("/storage").listFiles()?.forEach { vol ->
+                if (vol.isDirectory && vol.name !in skipNames && vol.canRead()) {
+                    val label = when {
+                        vol.name.matches(Regex("[0-9A-F]{4}-[0-9A-F]{4}")) -> "SD Card (${vol.name})"
+                        vol.name.startsWith("usb") || vol.name.startsWith("sda") -> "USB (${vol.name})"
+                        else -> vol.name.replaceFirstChar { it.uppercase() }
+                    }
+                    addIfNew(vol, label)
+                }
+            }
+        } catch (_: Exception) {}
+
         list
     }
 
@@ -60,15 +108,23 @@ fun FolderBrowserDialog(
     var selectedIndex by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
 
-    val entries: List<Pair<File, String>> = remember(currentDir) {
+    val entries: List<Pair<File, String>> = remember(currentDir, isFileMode, fileExtension) {
         if (currentDir == null) {
             roots
         } else {
-            currentDir!!.listFiles()
-                ?.filter { it.isDirectory && !it.name.startsWith(".") && it.canRead() }
-                ?.sortedBy { it.name.lowercase() }
-                ?.map { it to it.name }
-                ?: emptyList()
+            val allFiles = currentDir!!.listFiles() ?: emptyArray()
+            val dirs = allFiles
+                .filter { it.isDirectory && !it.name.startsWith(".") && it.canRead() }
+                .sortedBy { it.name.lowercase() }
+                .map { it to it.name }
+            val files = if (isFileMode) {
+                allFiles
+                    .filter { it.isFile && !it.name.startsWith(".") &&
+                        (fileExtension == null || it.name.endsWith(fileExtension, ignoreCase = true)) }
+                    .sortedBy { it.name.lowercase() }
+                    .map { it to it.name }
+            } else emptyList()
+            dirs + files
         }
     }
 
@@ -95,6 +151,10 @@ fun FolderBrowserDialog(
 
     fun navigateInto(file: File) {
         if (file.isDirectory) currentDir = file
+        else if (isFileMode) {
+            onFileSelected?.invoke(file.absolutePath)
+            onDismiss()
+        }
     }
 
     Dialog(
@@ -163,7 +223,7 @@ fun FolderBrowserDialog(
                     )
                     Text(
                         text = when {
-                            currentDir == null -> "Select Storage"
+                            currentDir == null -> if (isFileMode) "Select File" else "Select Storage"
                             roots.any { it.first.absolutePath == currentDir!!.absolutePath } ->
                                 roots.first { it.first.absolutePath == currentDir!!.absolutePath }.second
                             else -> currentDir!!.name
@@ -204,7 +264,7 @@ fun FolderBrowserDialog(
                     HorizontalDivider()
                 }
 
-                // ── Directory list ────────────────────────────────────────────
+                // ── List ──────────────────────────────────────────────────────
                 if (entries.isEmpty()) {
                     Box(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -220,7 +280,8 @@ fun FolderBrowserDialog(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                             )
                             Text(
-                                "No subfolders here",
+                                if (isFileMode) "No ${fileExtension ?: ""} files found"
+                                else "No subfolders here",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp
                             )
@@ -234,6 +295,7 @@ fun FolderBrowserDialog(
                     ) {
                         itemsIndexed(entries) { idx, (file, name) ->
                             val isSelected = idx == selectedIndex
+                            val isFile = file.isFile
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -252,10 +314,15 @@ fun FolderBrowserDialog(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(
-                                    if (currentDir == null) Icons.Default.Storage else Icons.Default.Folder,
+                                    when {
+                                        isFile -> Icons.Default.Description
+                                        currentDir == null -> Icons.Default.Storage
+                                        else -> Icons.Default.Folder
+                                    },
                                     null,
                                     modifier = Modifier.size(18.dp),
                                     tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                           else if (isFile) MaterialTheme.colorScheme.tertiary
                                            else MaterialTheme.colorScheme.primary
                                 )
                                 Text(
@@ -267,12 +334,14 @@ fun FolderBrowserDialog(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Icon(
-                                    Icons.Default.ChevronRight, null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = (if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                                            else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.5f)
-                                )
+                                if (!isFile) {
+                                    Icon(
+                                        Icons.Default.ChevronRight, null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = (if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                                else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.5f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -287,16 +356,29 @@ fun FolderBrowserDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
-                    if (currentDir != null) {
+                    if (!isFileMode && currentDir != null) {
                         Button(onClick = {
                             val dir = currentDir!!
                             val label = roots.firstOrNull { it.first.absolutePath == dir.absolutePath }?.second
                                 ?: dir.name.ifBlank { "External Storage" }
-                            onFolderSelected(dir.absolutePath, label)
+                            onFolderSelected?.invoke(dir.absolutePath, label)
                         }) {
                             Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Select This Folder")
+                        }
+                    }
+                    if (isFileMode) {
+                        val selectedFile = entries.getOrNull(selectedIndex)?.first
+                        if (selectedFile != null && selectedFile.isFile) {
+                            Button(onClick = {
+                                onFileSelected?.invoke(selectedFile.absolutePath)
+                                onDismiss()
+                            }) {
+                                Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Select This File")
+                            }
                         }
                     }
                 }
