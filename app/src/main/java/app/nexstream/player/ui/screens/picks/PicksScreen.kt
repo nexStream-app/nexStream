@@ -107,29 +107,43 @@ class PicksViewModel @Inject constructor(
         repository.getRecentlyWatched()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val watchlistItems: StateFlow<List<WatchlistEntity>> =
+        repository.getWatchlistForActiveProfile()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Cached once per ViewModel lifetime — playlist rarely changes mid-session
     private var cachedAvailableNames: Set<String>? = null
     // Word index: significant word → set of normalized titles containing that word
     private var cachedWordIndex: Map<String, Set<String>>? = null
     // Track which seeds were last fetched — skip re-fetch if seeds and results haven't changed
-    private var lastLoadedSeedIds: List<String> = emptyList()
+    private var lastLoadedSeedKeys: List<String> = emptyList()
 
     init {
         viewModelScope.launch { repository.pruneStaleAndBlockedRecentItems() }
     }
 
-    fun loadPicks(seeds: List<RecentlyWatchedEntity>) {
-        if (seeds.isEmpty()) return
-        val dedupedSeeds = seeds
+    private data class PickSeed(val title: String, val mediaType: String)
+
+    fun loadPicks(recent: List<RecentlyWatchedEntity>, watchlist: List<WatchlistEntity> = emptyList()) {
+        val recentSeeds = recent
             .filter { it.type == RecentlyWatchedType.MOVIE || it.type == RecentlyWatchedType.EPISODE }
-            .distinctBy { it.name.lowercase().trim() }
-            .take(6)
+            .map { PickSeed(it.name, if (it.type == RecentlyWatchedType.MOVIE) "movie" else "tv") }
+            .distinctBy { it.title.lowercase().trim() }
+            .take(5)
+        val watchlistSeeds = watchlist
+            .filter { it.type == WatchlistType.MOVIE || it.type == WatchlistType.SERIES }
+            .map { PickSeed(it.name, if (it.type == WatchlistType.MOVIE) "movie" else "tv") }
+            .distinctBy { it.title.lowercase().trim() }
+            .take(5)
+        val dedupedSeeds = (recentSeeds + watchlistSeeds)
+            .distinctBy { it.title.lowercase().trim() }
+            .take(8)
         if (dedupedSeeds.isEmpty()) return
 
-        // Skip re-fetch if seeds haven't changed and we already have results
-        val seedIds = dedupedSeeds.map { it.id }
-        if (seedIds == lastLoadedSeedIds && _groups.value.isNotEmpty()) return
-        lastLoadedSeedIds = seedIds
+        // Skip re-fetch if effective seeds haven't changed and we already have results
+        val seedKeys = dedupedSeeds.map { it.title.lowercase().trim() }
+        if (seedKeys == lastLoadedSeedKeys && _groups.value.isNotEmpty()) return
+        lastLoadedSeedKeys = seedKeys
 
         viewModelScope.launch {
             _loading.value = true
@@ -142,17 +156,16 @@ class PicksViewModel @Inject constructor(
             }
             val wordIndex = cachedWordIndex ?: buildWordIndex(availableNames).also { cachedWordIndex = it }
 
-            // Process all seeds concurrently; publish each item as soon as it passes the
-            // playlist check so posters appear one by one rather than all at once.
+            // Process all seeds concurrently; publish each group as items arrive so posters
+            // appear one by one rather than waiting for all seeds to complete.
             val mutex = Mutex()
             val orderedResults = mutableListOf<Pair<Int, PickGroup>>()
             dedupedSeeds.mapIndexed { idx, seed ->
                 async(Dispatchers.IO) {
-                    val mediaType = if (seed.type == RecentlyWatchedType.MOVIE) "movie" else "tv"
-                    val groupTitle = cleanTitle(seed.name)
-                    val tmdbId = try { searchTmdbId(seed.name, mediaType) } catch (_: Exception) { null }
+                    val groupTitle = cleanTitle(seed.title)
+                    val tmdbId = try { searchTmdbId(seed.title, seed.mediaType) } catch (_: Exception) { null }
                         ?: return@async
-                    streamRecommendations(tmdbId, mediaType, seed.name, wordIndex) { item ->
+                    streamRecommendations(tmdbId, seed.mediaType, seed.title, wordIndex) { item ->
                         mutex.withLock {
                             val existingIdx = orderedResults.indexOfFirst { it.first == idx }
                             if (existingIdx >= 0) {
@@ -335,6 +348,7 @@ fun PicksScreen(
     val groups   by viewModel.groups.collectAsState()
     val loading  by viewModel.loading.collectAsState()
     val recent   by viewModel.recentlyWatched.collectAsState()
+    val watchlist by viewModel.watchlistItems.collectAsState()
     val headerHeight = (56 * nsTheme.typography.scale.coerceIn(0.85f, 1.5f)).dp
     var dialogPick by remember { mutableStateOf<PickItem?>(null) }
 
@@ -388,11 +402,9 @@ fun PicksScreen(
         }
     }
 
-    // Load picks on first load and whenever new items appear in recently watched
-    LaunchedEffect(recent.map { it.id }) {
-        if (recent.isNotEmpty() && !loading) {
-            viewModel.loadPicks(recent)
-        }
+    // Load picks on first load and whenever recently watched or watchlist changes
+    LaunchedEffect(recent.map { it.id } + watchlist.map { it.id }) {
+        viewModel.loadPicks(recent, watchlist)
     }
 
     // Visible groups: all or filtered by selectedSeed

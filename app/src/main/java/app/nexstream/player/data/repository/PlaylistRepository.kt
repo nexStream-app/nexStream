@@ -1936,6 +1936,12 @@ class PlaylistRepository @Inject constructor(
             database.recentlyWatchedDao().getRecentlyWatched(profile?.id ?: "default")
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getWatchlistForActiveProfile(): Flow<List<WatchlistEntity>> =
+        profileManager.activeProfile.flatMapLatest { profile ->
+            database.watchlistDao().getItemsByProfileId(profile?.id ?: "default")
+        }
+
     suspend fun recordRecentlyWatchedChannel(channel: ChannelEntity) {
         withContext(Dispatchers.IO) {
             val entity = RecentlyWatchedEntity(
@@ -2179,7 +2185,7 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun fetchCertificationsForMovies(playlistId: String) = withContext(Dispatchers.IO) {
         val movies = database.movieDao().getMovieGridItems(playlistId).first()
-            .filter { it.certification == null }
+            .filter { it.certification == null || it.releaseDate == null }
         android.util.Log.d("TMDB", "Certifications to fetch for ${movies.size} movies")
         if (movies.isEmpty()) return@withContext
         val certUpdates = mutableListOf<Pair<String, String>>()
@@ -2272,7 +2278,7 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun fetchCertificationsForSeries(playlistId: String) = withContext(Dispatchers.IO) {
         val seriesList = database.seriesDao().getSeriesGridItems(playlistId).first()
-            .filter { it.certification == null }
+            .filter { it.certification == null || it.releaseDate == null }
         android.util.Log.d("TMDB", "Series certs to fetch: ${seriesList.size}")
         if (seriesList.isEmpty()) return@withContext
         val certUpdates = mutableListOf<Pair<String, String>>()
