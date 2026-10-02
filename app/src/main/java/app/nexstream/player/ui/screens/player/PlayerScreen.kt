@@ -74,12 +74,6 @@ import app.nexstream.player.ui.theme.AspectRatioType
 import app.nexstream.player.ui.theme.getAspectRatioFlow
 import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
-import app.nexstream.player.ui.theme.getProxyModeFlow
-import app.nexstream.player.ui.theme.getProxyHostFlow
-import app.nexstream.player.ui.theme.getProxyPortFlow
-import app.nexstream.player.ui.theme.getProxyTypeFlow
-import app.nexstream.player.ui.theme.getProxyUsernameFlow
-import app.nexstream.player.ui.theme.getProxyPasswordFlow
 import app.nexstream.player.ui.theme.saveAspectRatio
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
 import kotlinx.coroutines.delay
@@ -145,12 +139,6 @@ fun PlayerScreen(
     // ── Player prefs ──────────────────────────────────────────────────────────
     val autoFrameRate    by context.getAutoFrameRateFlow().collectAsState(initial = true)
     val smartBuffer      by context.getSmartBufferFlow().collectAsState(initial = true)
-    val proxyMode by context.getProxyModeFlow().collectAsState(initial = "OFF")
-    val proxyHost by context.getProxyHostFlow().collectAsState(initial = "")
-    val proxyPort by context.getProxyPortFlow().collectAsState(initial = 8080)
-    val proxyType by context.getProxyTypeFlow().collectAsState(initial = "HTTP")
-    val proxyUser by context.getProxyUsernameFlow().collectAsState(initial = "")
-    val proxyPass by context.getProxyPasswordFlow().collectAsState(initial = "")
     val licenceKey = remember {
         context.getSharedPreferences("nexstream_licence", android.content.Context.MODE_PRIVATE)
             .getString("licence_key", null)
@@ -383,7 +371,7 @@ fun PlayerScreen(
 
     // ── Android TV: build ExoPlayer directly ──────────────────────────────────
     if (isAndroidTV) {
-        DisposableEffect(channelUrl, smartBuffer, proxyMode, proxyHost, proxyPort, proxyType) {
+        DisposableEffect(channelUrl, smartBuffer) {
             val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
                 override fun buildAudioSink(
                     context: android.content.Context,
@@ -466,45 +454,12 @@ fun PlayerScreen(
             val sslContext = javax.net.ssl.SSLContext.getInstance("TLS").also {
                 it.init(null, trustAllCerts, java.security.SecureRandom())
             }
-            val streamProxy: java.net.Proxy = when (proxyMode) {
-                "BUILTIN" -> java.net.Proxy(
-                    java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress.createUnresolved("proxy.nexstream.uk", 3129)
-                )
-                "CUSTOM"  -> if (proxyHost.isNotBlank()) java.net.Proxy(
-                    if (proxyType == "SOCKS5") java.net.Proxy.Type.SOCKS else java.net.Proxy.Type.HTTP,
-                    java.net.InetSocketAddress.createUnresolved(proxyHost, proxyPort)
-                ) else java.net.Proxy.NO_PROXY
-                else      -> java.net.Proxy.NO_PROXY
-            }
             val trustAllOkHttp = okhttp3.OkHttpClient.Builder()
                 .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
                 .hostnameVerifier { _, _ -> true }
                 .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                .proxy(streamProxy)
-                .apply {
-                    val needsAuth = proxyMode == "BUILTIN" || (proxyMode == "CUSTOM" && proxyUser.isNotBlank())
-                    if (needsAuth) {
-                        val capturedMode     = proxyMode
-                        val capturedKey      = licenceKey
-                        val capturedUser     = proxyUser
-                        val capturedPass     = proxyPass
-                        val capturedDeviceId = deviceId
-                        proxyAuthenticator(object : okhttp3.Authenticator {
-                            override fun authenticate(route: okhttp3.Route?, response: okhttp3.Response): okhttp3.Request? {
-                                val creds = when (capturedMode) {
-                                    "BUILTIN" -> capturedKey?.let { okhttp3.Credentials.basic(it, capturedDeviceId) }
-                                    "CUSTOM"  -> okhttp3.Credentials.basic(capturedUser, capturedPass)
-                                    else      -> null
-                                } ?: return null
-                                return response.request.newBuilder()
-                                    .header("Proxy-Authorization", creds)
-                                    .build()
-                            }
-                        })
-                    }
-                }
+                .proxy(java.net.Proxy.NO_PROXY)
                 .build()
             val httpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustAllOkHttp)
             val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpDataSourceFactory)

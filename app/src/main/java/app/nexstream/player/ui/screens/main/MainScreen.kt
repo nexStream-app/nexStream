@@ -329,7 +329,6 @@ fun MainScreen(
         "Profiles"   to AppRoute.SettingsProfiles,
         "Navigation" to AppRoute.SettingsNavigation,
         "Language"   to AppRoute.SettingsLanguage,
-        "Network"    to AppRoute.SettingsProxy,
         "About"      to AppRoute.SettingsAbout,
     ) }
     val selectedSettingsLabel = remember(currentRoute) {
@@ -2086,7 +2085,6 @@ private fun MainContentArea(
             AppRoute.SettingsAccount    -> app.nexstream.player.ui.screens.settings.AccountScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsAbout      -> app.nexstream.player.ui.screens.settings.AboutScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsLanguage   -> app.nexstream.player.ui.screens.settings.LanguageSettingsScreen(firstItemFocusRequester = contentFR)
-            AppRoute.SettingsProxy      -> app.nexstream.player.ui.screens.settings.ProxySettingsScreen(firstItemFocusRequester = contentFR)
             AppRoute.SettingsNavigation -> app.nexstream.player.ui.screens.settings.NavigationSettingsScreen(
                 firstItemFocusRequester = contentFR,
                 hasJellyfinPlaylist = hasJellyfinPlaylist,

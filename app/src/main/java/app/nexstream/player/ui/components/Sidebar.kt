@@ -1387,8 +1387,6 @@ private fun SettingsPanel(
     val aboutFR          = remember { FocusRequester() }
     val channelGroupsFR  = remember { FocusRequester() }
     val languageFR       = remember { FocusRequester() }
-    val networkFR        = remember { FocusRequester() }
-
     val strPlaylists      = stringResource(R.string.settings_menu_playlists_title)
     val strAppearance     = stringResource(R.string.settings_menu_appearance_title)
     val strPlayer         = stringResource(R.string.settings_menu_player_title)
@@ -1398,13 +1396,12 @@ private fun SettingsPanel(
     val strSync           = stringResource(R.string.settings_menu_sync_title)
     val strNavigation     = stringResource(R.string.settings_menu_navigation_title)
     val strLanguage       = stringResource(R.string.settings_menu_language_title)
-    val strNetwork        = stringResource(R.string.settings_menu_network_title)
     val strChannelGroups  = stringResource(R.string.settings_menu_channel_groups_title)
     val strAbout          = stringResource(R.string.settings_menu_about_title)
 
     val entries = remember(showSyncSettings, strPlaylists, strAppearance, strPlayer, strLicence,
                            strAccount, strProfiles, strSync, strNavigation, strLanguage,
-                           strNetwork, strChannelGroups, strAbout) {
+                           strChannelGroups, strAbout) {
         buildList {
             add(SettingsEntry(strPlaylists,     AppRoute.SettingsPlaylists,     playlistsFR))
             add(SettingsEntry(strAppearance,    AppRoute.SettingsAppearance,    appearanceFR))
@@ -1415,7 +1412,6 @@ private fun SettingsPanel(
             if (showSyncSettings) add(SettingsEntry(strSync, AppRoute.SettingsSyncSettings, syncFR))
             add(SettingsEntry(strNavigation,    AppRoute.SettingsNavigation,    navigationFR))
             add(SettingsEntry(strLanguage,      AppRoute.SettingsLanguage,      languageFR))
-            add(SettingsEntry(strNetwork,       AppRoute.SettingsProxy,         networkFR))
             add(SettingsEntry(strChannelGroups, AppRoute.SettingsChannelGroups, channelGroupsFR))
             add(SettingsEntry(strAbout,         AppRoute.SettingsAbout,         aboutFR))
         }

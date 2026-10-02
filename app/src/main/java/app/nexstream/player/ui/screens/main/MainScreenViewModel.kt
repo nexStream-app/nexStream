@@ -8,7 +8,6 @@ import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
 import app.nexstream.player.data.sync.ProgressSyncManager
-import app.nexstream.player.data.sync.ProxyHeartbeatManager
 import app.nexstream.player.license.LicencePreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,7 +26,6 @@ class MainScreenViewModel @Inject constructor(
     private val progressRepository: WatchProgressRepository,
     private val profileManager: ProfileManager,
     private val licencePreferences: LicencePreferences,
-    private val proxyHeartbeatManager: ProxyHeartbeatManager,
 ) : ViewModel() {
 
     val isReseller: Boolean = licencePreferences.isResellerAssigned()
@@ -82,12 +80,6 @@ class MainScreenViewModel @Inject constructor(
         }
         // Backfill certifications — delayed 2 min so startup I/O settles first on slow devices
         viewModelScope.launch { delay(120_000); runCatching { repository.fetchAllMissingCertifications() } }
-        proxyHeartbeatManager.start()
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        proxyHeartbeatManager.stop()
     }
 
     private suspend fun migrateExistingProgress(profileId: String) {

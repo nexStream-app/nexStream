@@ -1,14 +1,11 @@
 package app.nexstream.player.di
 
 import android.content.Context
-import app.nexstream.player.data.ProxySettingsCache
-import app.nexstream.player.data.remote.ProxyUsageApiService
 import app.nexstream.player.data.remote.RecentlyWatchedApiService
 import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.data.remote.ThemeApiService
 import app.nexstream.player.data.remote.WatchlistApiService
 import app.nexstream.player.license.LicenceApiService
-import app.nexstream.player.license.LicencePreferences
 import app.nexstream.player.license.TrialApiService
 import app.nexstream.player.subtitle.SubtitleApiService
 import coil.ImageLoader
@@ -21,16 +18,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Proxy
-import java.net.ProxySelector
-import java.net.SocketAddress
-import java.net.URI
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 import app.nexstream.player.data.remote.ProgressApiService
@@ -41,46 +31,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(
-        proxySettingsCache: ProxySettingsCache,
-        licencePreferences: LicencePreferences,
-    ): OkHttpClient {
-        val selector = object : ProxySelector() {
-            override fun select(uri: URI?): List<Proxy> = when (proxySettingsCache.mode) {
-                "BUILTIN" -> listOf(Proxy(Proxy.Type.HTTP,
-                    InetSocketAddress.createUnresolved("proxy.nexstream.uk", 3129)))
-                "CUSTOM"  -> if (proxySettingsCache.host.isNotBlank()) listOf(Proxy(
-                    if (proxySettingsCache.type == "SOCKS5") Proxy.Type.SOCKS else Proxy.Type.HTTP,
-                    InetSocketAddress.createUnresolved(proxySettingsCache.host, proxySettingsCache.port)
-                )) else listOf(Proxy.NO_PROXY)
-                else -> listOf(Proxy.NO_PROXY)
-            }
-            override fun connectFailed(uri: URI?, sa: SocketAddress?, ioe: IOException?) {}
-        }
-
-        val authenticator = okhttp3.Authenticator { _, response ->
-            if (response.code == 407) {
-                val creds = when (proxySettingsCache.mode) {
-                    "BUILTIN" -> {
-                        val key = licencePreferences.getLicenceKey()
-                            ?: licencePreferences.getTrialSyncKey()
-                        val deviceId = licencePreferences.getOrCreateStableDeviceId()
-                        key?.let { Credentials.basic(it, deviceId) }
-                    }
-                    "CUSTOM" -> if (proxySettingsCache.username.isNotBlank())
-                        Credentials.basic(proxySettingsCache.username, proxySettingsCache.password)
-                    else null
-                    else -> null
-                } ?: return@Authenticator null
-                response.request.newBuilder().header("Proxy-Authorization", creds).build()
-            } else null
-        }
-
+    fun provideOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .proxySelector(selector)
-            .proxyAuthenticator(authenticator)
             .build()
     }
 
@@ -202,14 +156,4 @@ object NetworkModule {
             .create(SportsApiService::class.java)
     }
 
-    @Provides
-    @Singleton
-    fun provideProxyUsageApiService(okHttpClient: OkHttpClient): ProxyUsageApiService {
-        return Retrofit.Builder()
-            .baseUrl("https://nexstream.uk/api/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(ProxyUsageApiService::class.java)
-    }
 }
