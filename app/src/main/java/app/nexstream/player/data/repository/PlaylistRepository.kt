@@ -2132,6 +2132,8 @@ class PlaylistRepository @Inject constructor(
                 if (rtScore != null || metascore != null) {
                     database.movieDao().updateRtData(movieId, rtScore, null, null, metascore)
                 }
+                val imdbRating = if (!obj.isNull("imdb_rating")) obj.getString("imdb_rating") else null
+                if (imdbRating != null) database.movieDao().updateRating(movieId, imdbRating)
                 RtData(rtScore, null, null, metascore)
             } catch (e: Exception) {
                 android.util.Log.w("OMDB", "fetchOmdb movie failed for $movieName: ${e.message}")
@@ -2148,6 +2150,8 @@ class PlaylistRepository @Inject constructor(
                 if (rtScore != null || metascore != null) {
                     database.seriesDao().updateRtData(seriesId, rtScore, metascore)
                 }
+                val imdbRating = if (!obj.isNull("imdb_rating")) obj.getString("imdb_rating") else null
+                if (imdbRating != null) database.seriesDao().updateRating(seriesId, imdbRating)
                 RtData(rtScore, null, null, metascore)
             } catch (e: Exception) {
                 android.util.Log.w("OMDB", "fetchOmdb series failed for $seriesName: ${e.message}")
@@ -2221,6 +2225,8 @@ class PlaylistRepository @Inject constructor(
             database.movieDao().updateCertification(movieId, cert)
             if (date != null) database.movieDao().updateReleaseDate(movieId, date)
             if (lang != null) database.movieDao().updateOriginalLanguage(movieId, lang)
+            val tmdbRating = obj.optDouble("rating", 0.0).takeIf { it > 0.0 }?.let { String.format(java.util.Locale.US, "%.1f", it) }
+            if (tmdbRating != null) database.movieDao().updateRating(movieId, tmdbRating)
             cert
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchCertMovie error for '$movieName': $e")
@@ -2237,6 +2243,8 @@ class PlaylistRepository @Inject constructor(
             database.seriesDao().updateCertification(seriesId, cert)
             if (date != null) database.seriesDao().updateReleaseDate(seriesId, date)
             if (lang != null) database.seriesDao().updateOriginalLanguage(seriesId, lang)
+            val tmdbRating = obj.optDouble("rating", 0.0).takeIf { it > 0.0 }?.let { String.format(java.util.Locale.US, "%.1f", it) }
+            if (tmdbRating != null) database.seriesDao().updateRating(seriesId, tmdbRating)
             cert
         } catch (e: Exception) {
             android.util.Log.e("TMDB", "fetchCertSingle error for '$seriesName': $e")

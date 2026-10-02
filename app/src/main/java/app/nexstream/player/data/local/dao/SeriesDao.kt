@@ -117,6 +117,9 @@ interface SeriesDao {
     @Query("UPDATE series SET rtCriticsScore = :criticsScore, metascore = :metascore WHERE id = :id")
     suspend fun updateRtData(id: String, criticsScore: Int?, metascore: Int?)
 
+    @Query("UPDATE series SET rating = :rating WHERE id = :id")
+    suspend fun updateRating(id: String, rating: String)
+
     @Query("SELECT id, certification FROM series WHERE playlistId = :playlistId AND certification IS NOT NULL")
     suspend fun getExistingCertifications(playlistId: String): List<SeriesCertRow>
 

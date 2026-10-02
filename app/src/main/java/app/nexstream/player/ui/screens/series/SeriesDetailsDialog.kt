@@ -155,6 +155,8 @@ fun SeriesDetailsDialog(
     onFetchTrailerUrl: (suspend () -> String?)? = null,
     onGoToSeries: (() -> Unit)? = null,
     onRemoveFromRecent: (() -> Unit)? = null,
+    onMarkEpisodeWatched: ((episodeId: String, seriesId: String, durationMs: Long) -> Unit)? = null,
+    onMarkEpisodeUnwatched: ((episodeId: String) -> Unit)? = null,
     onPlayEpisode: (streamUrl: String, episodeId: String, startPosition: Long, seriesId: String, seriesName: String, seasonNum: Int, episodeNum: Int, episodeName: String) -> Unit
 ) {
     val accent     = LocalNsAccent.current
@@ -487,8 +489,8 @@ function onYouTubeIframeAPIReady(){
                         val overlay = infoBarState
                         if (overlay !is InfoBarState.Idle && overlay !is InfoBarState.CheckingSize) {
                             val overlayCount = when (overlay) {
-                                is InfoBarState.ResumeChoice    -> if (onDownloadEpisode != null) 3 else 2
-                                is InfoBarState.PlayChoice      -> if (onDownloadEpisode != null) 2 else 1
+                                is InfoBarState.ResumeChoice    -> if (onDownloadEpisode != null) 4 else 3
+                                is InfoBarState.PlayChoice      -> if (onDownloadEpisode != null) 3 else 2
                                 is InfoBarState.StorageInfo     -> 2
                                 is InfoBarState.LowSpaceWarning -> 2
                                 else -> 0
@@ -503,11 +505,17 @@ function onYouTubeIframeAPIReady(){
                                         is InfoBarState.ResumeChoice -> when (overlayButton) {
                                             0 -> { if (ep != null) playEp(ep, fromStart = true) }
                                             1 -> { if (ep != null) playEp(ep, fromStart = false) }
-                                            2 -> { if (ep != null) startDownloadFlow(ep) }
+                                            2 -> { if (ep != null) { onMarkEpisodeUnwatched?.invoke(ep.id); infoBarState = InfoBarState.Idle } }
+                                            3 -> { if (ep != null) startDownloadFlow(ep) }
                                         }
                                         is InfoBarState.PlayChoice -> when (overlayButton) {
                                             0 -> { if (ep != null) playEp(ep, fromStart = true) }
-                                            1 -> { if (ep != null) startDownloadFlow(ep) }
+                                            1 -> { if (ep != null) {
+                                                val durMs = if (!ep.duration.isNullOrEmpty()) parseDurationToMs(ep.duration!!) else 0L
+                                                onMarkEpisodeWatched?.invoke(ep.id, series.id, durMs)
+                                                infoBarState = InfoBarState.Idle
+                                            } }
+                                            2 -> { if (ep != null) startDownloadFlow(ep) }
                                         }
                                         is InfoBarState.StorageInfo -> when (overlayButton) {
                                             0 -> { infoBarState = InfoBarState.Idle }
@@ -961,9 +969,12 @@ function onYouTubeIframeAPIReady(){
                                 OverlayButton("▶  Resume",    overlayButton == 1) {
                                     if (ep != null) { overlayButton = 1; playEp(ep, fromStart = false) }
                                 }
+                                OverlayButton("↩  Unwatched", overlayButton == 2) {
+                                    if (ep != null) { overlayButton = 2; onMarkEpisodeUnwatched?.invoke(ep.id); infoBarState = InfoBarState.Idle }
+                                }
                                 if (onDownloadEpisode != null)
-                                    OverlayButton("⬇  Download", overlayButton == 2) {
-                                        if (ep != null) { overlayButton = 2; startDownloadFlow(ep) }
+                                    OverlayButton("⬇  Download", overlayButton == 3) {
+                                        if (ep != null) { overlayButton = 3; startDownloadFlow(ep) }
                                     }
                             }
                         }
@@ -977,9 +988,17 @@ function onYouTubeIframeAPIReady(){
                                 OverlayButton("▶  Play", overlayButton == 0) {
                                     if (ep != null) { overlayButton = 0; playEp(ep, fromStart = true) }
                                 }
+                                OverlayButton("✓  Watched", overlayButton == 1) {
+                                    if (ep != null) {
+                                        overlayButton = 1
+                                        val durMs = if (!ep.duration.isNullOrEmpty()) parseDurationToMs(ep.duration!!) else 0L
+                                        onMarkEpisodeWatched?.invoke(ep.id, series.id, durMs)
+                                        infoBarState = InfoBarState.Idle
+                                    }
+                                }
                                 if (onDownloadEpisode != null)
-                                    OverlayButton("⬇  Download", overlayButton == 1) {
-                                        if (ep != null) { overlayButton = 1; startDownloadFlow(ep) }
+                                    OverlayButton("⬇  Download", overlayButton == 2) {
+                                        if (ep != null) { overlayButton = 2; startDownloadFlow(ep) }
                                     }
                             }
                         }

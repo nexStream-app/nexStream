@@ -646,6 +646,8 @@ fun SeriesScreen(
             onFetchOriginalLanguage = { viewModel.fetchOriginalLanguageIfMissing(series.id, series.name) },
             onFetchRtData = { viewModel.fetchRtDataIfMissing(series.id, series.name) },
             onFetchTrailerUrl = { viewModel.fetchTrailerUrl(series.name) },
+            onMarkEpisodeWatched   = { episodeId, seriesId, durationMs -> viewModel.markEpisodeWatched(episodeId, seriesId, durationMs) },
+            onMarkEpisodeUnwatched = { episodeId -> viewModel.markEpisodeUnwatched(episodeId) },
             onToggleWatchlist = {
                 watchlistViewModel.toggleWatchlist(WatchlistEntity(id = series.id,
                     profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",

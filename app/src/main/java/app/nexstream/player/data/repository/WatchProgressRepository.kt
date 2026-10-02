@@ -120,4 +120,21 @@ class WatchProgressRepository @Inject constructor(
     // Batch upsert — used by server pull
     suspend fun upsertAll(items: List<WatchProgressEntity>) =
         dao.upsertAll(items)
+
+    suspend fun markEpisodeWatched(profileId: String, episodeId: String, seriesId: String, durationMs: Long) {
+        val dur = if (durationMs > 0L) durationMs else 3_600_000L
+        dao.upsert(WatchProgressEntity(
+            profileId  = profileId,
+            itemId     = episodeId,
+            itemType   = "episode",
+            seriesId   = seriesId,
+            positionMs = dur,
+            durationMs = dur,
+            updatedAt  = System.currentTimeMillis()
+        ))
+    }
+
+    suspend fun markEpisodeUnwatched(profileId: String, episodeId: String) {
+        dao.clearProgress(profileId, episodeId)
+    }
 }

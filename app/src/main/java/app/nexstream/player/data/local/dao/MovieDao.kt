@@ -89,6 +89,9 @@ interface MovieDao {
     @Query("UPDATE movies SET rtCriticsScore = :criticsScore, rtAudienceScore = :audienceScore, rtConsensus = :consensus, metascore = :metascore WHERE id = :id")
     suspend fun updateRtData(id: String, criticsScore: Int?, audienceScore: Int?, consensus: String?, metascore: Int?)
 
+    @Query("UPDATE movies SET rating = :rating WHERE id = :id")
+    suspend fun updateRating(id: String, rating: String)
+
     @Query("SELECT id, certification FROM movies WHERE playlistId = :playlistId AND certification IS NOT NULL")
     suspend fun getExistingCertifications(playlistId: String): List<MovieCertRow>
 

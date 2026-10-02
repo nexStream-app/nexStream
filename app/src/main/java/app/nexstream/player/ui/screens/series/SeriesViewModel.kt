@@ -12,6 +12,7 @@ import app.nexstream.player.data.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -94,5 +95,19 @@ class SeriesViewModel @Inject constructor(
 
     suspend fun fetchRtDataIfMissing(seriesId: String, seriesName: String) =
         repository.fetchRtDataForSeriesSingle(seriesId, seriesName)
+
+    fun markEpisodeWatched(episodeId: String, seriesId: String, durationMs: Long) {
+        viewModelScope.launch {
+            val profileId = profileManager.activeProfile.value?.id ?: "default"
+            progressRepository.markEpisodeWatched(profileId, episodeId, seriesId, durationMs)
+        }
+    }
+
+    fun markEpisodeUnwatched(episodeId: String) {
+        viewModelScope.launch {
+            val profileId = profileManager.activeProfile.value?.id ?: "default"
+            progressRepository.markEpisodeUnwatched(profileId, episodeId)
+        }
+    }
 
 }
