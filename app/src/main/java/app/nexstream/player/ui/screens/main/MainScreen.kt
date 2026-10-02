@@ -394,6 +394,7 @@ fun MainScreen(
         showCatchUpSearch = false; showRecentSearch = false; showMyListSearch = false
         // Refresh sports guide when Home is selected if data is stale
         if (currentRoute == AppRoute.Home && !isFirstLoad) homePageViewModel.refreshIfStale()
+        val realPreviousRoute = previousRoute
         previousRoute = currentRoute
 
         if (uiStyle == UiStyle.MODERN) {
@@ -412,7 +413,7 @@ fun MainScreen(
         // ── Classic mode ──────────────────────────────────────────────────────
         val isSettingsSubRoute = currentRoute.isSettings
                 && currentRoute != AppRoute.Settings
-                && previousRoute.isSettings
+                && realPreviousRoute.isSettings
 
         val isSilentGoTo = (currentRoute == AppRoute.Movies && pendingMovieGoTo != null) ||
                            (currentRoute == AppRoute.Series && pendingSeriesGoTo != null)

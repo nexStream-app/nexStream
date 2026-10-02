@@ -19,6 +19,8 @@ object AutoUpdateManager {
     private const val APK_URL      = "https://github.com/nexStream-app/nexStream/releases/latest/download/nexStream.apk"
     private const val AUTHORITY    = "app.nexstream.player.fileprovider"
 
+    data class UpdateInfo(val hasUpdate: Boolean, val remoteBuild: Int, val message: String)
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -47,41 +49,38 @@ object AutoUpdateManager {
         return match.groupValues[1].toInt()
     }
 
-    suspend fun checkNow(
-        context: Context,
-        onStatus: ((String) -> Unit)? = null
-    ): String = withContext(Dispatchers.IO) {
-        suspend fun status(msg: String) {
-            onStatus?.let { withContext(Dispatchers.Main) { it(msg) } }
-        }
-
-        status("Checking for update…")
-
+    /** Step 1 — just checks the latest release version, no download. */
+    suspend fun checkForUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
         val remote = try {
             fetchRemoteBuild()
         } catch (e: Exception) {
             Log.e(TAG, "Version check failed", e)
-            return@withContext "Could not check for updates"
+            return@withContext UpdateInfo(false, 0, "Could not check for updates")
         }
-
         val local = BuildConfig.BUILD_NUMBER_INT
         Log.d(TAG, "Local build: $local, Remote build: $remote")
+        if (remote <= local)
+            UpdateInfo(false, local, "You're on the latest version (Build $local)")
+        else
+            UpdateInfo(true, remote, "Update available — Build $remote")
+    }
 
-        if (remote <= local) return@withContext "On the latest version (Build $local)"
-
-        Log.d(TAG, "Update available — downloading Build $remote")
-        status("Downloading Build $remote…")
-
+    /** Step 2 — downloads and launches the system APK installer (user-initiated). */
+    suspend fun downloadAndInstall(
+        context: Context,
+        remoteBuild: Int,
+        onStatus: (String) -> Unit
+    ): String = withContext(Dispatchers.IO) {
+        onStatus("Downloading Build $remoteBuild…")
         val apkFile = downloadApk(context, APK_URL)
-            ?: return@withContext "Download failed"
-
+            ?: return@withContext "Download failed — check your connection"
         try {
             withContext(Dispatchers.Main) { installApk(context, apkFile) }
         } catch (e: Exception) {
             Log.e(TAG, "Install failed", e)
             return@withContext "Download complete — open Files app to install nexStream_update.apk"
         }
-        "Installing Build $remote…"
+        "Installing Build $remoteBuild…"
     }
 
     private fun downloadApk(context: Context, url: String): File? {

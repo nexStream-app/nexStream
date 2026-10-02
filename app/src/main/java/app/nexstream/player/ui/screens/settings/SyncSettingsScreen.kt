@@ -209,8 +209,10 @@ fun SyncSettingsScreen(
     val syncBtnFR  = remember { FocusRequester() }
     val scope      = rememberCoroutineScope()
     val scrollState = rememberScrollState()
-    var isCheckingUpdate  by remember { mutableStateOf(false) }
-    var updateCheckResult by remember { mutableStateOf<String?>(null) }
+    var isCheckingUpdate   by remember { mutableStateOf(false) }
+    var updateInfo         by remember { mutableStateOf<app.nexstream.player.update.AutoUpdateManager.UpdateInfo?>(null) }
+    var isInstallingUpdate by remember { mutableStateOf(false) }
+    var installStatus      by remember { mutableStateOf<String?>(null) }
     val isRefreshingEpg = uiState.isRefreshingEpg
     val epgRefreshResult = uiState.epgRefreshResult
 
@@ -246,30 +248,60 @@ fun SyncSettingsScreen(
                 if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
             }) {
             SettingsSectionContainer(title = stringResource(R.string.sync_section_updates), icon = Icons.Default.SystemUpdate, uiStyle = uiStyle) {
+                val checkDesc = when {
+                    isCheckingUpdate   -> "Checking…"
+                    isInstallingUpdate -> installStatus ?: "Downloading…"
+                    updateInfo != null -> updateInfo!!.message
+                    else               -> "Check for a newer version of nexStream"
+                }
                 SettingsActionItem(
-                    label          = "Check for Update",
-                    description    = updateCheckResult ?: "Check for a newer version of nexStream",
+                    label          = if (isCheckingUpdate) "Checking…" else "Check for Update",
+                    description    = checkDesc,
                     value          = "",
                     uiStyle        = uiStyle,
                     focusRequester = firstFR,
-                    showDivider    = false,
+                    showDivider    = updateInfo?.hasUpdate == true,
                     onClick        = {
-                        if (!isCheckingUpdate) {
+                        if (!isCheckingUpdate && !isInstallingUpdate) {
                             isCheckingUpdate = true
-                            updateCheckResult = null
+                            updateInfo = null
+                            installStatus = null
                             scope.launch {
-                                updateCheckResult = try {
-                                    AutoUpdateManager.checkNow(context) { status ->
-                                        updateCheckResult = status
-                                    }
+                                updateInfo = try {
+                                    AutoUpdateManager.checkForUpdate()
                                 } catch (_: Exception) {
-                                    "Check failed — try again"
+                                    AutoUpdateManager.UpdateInfo(false, 0, "Check failed — try again")
                                 }
                                 isCheckingUpdate = false
                             }
                         }
                     }
                 )
+                if (updateInfo?.hasUpdate == true) {
+                    val info = updateInfo!!
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color    = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+                    SettingsActionItem(
+                        label       = if (isInstallingUpdate) "Downloading…" else "Download & Install (Build ${info.remoteBuild})",
+                        description = installStatus ?: "Downloads the update and opens the system installer",
+                        value       = "",
+                        uiStyle     = uiStyle,
+                        showDivider = false,
+                        onClick     = {
+                            if (!isInstallingUpdate) {
+                                isInstallingUpdate = true
+                                scope.launch {
+                                    installStatus = AutoUpdateManager.downloadAndInstall(context, info.remoteBuild) { s ->
+                                        installStatus = s
+                                    }
+                                    isInstallingUpdate = false
+                                }
+                            }
+                        }
+                    )
+                }
             }
             } // end Box (scroll-to-top on Updates focus)
 
