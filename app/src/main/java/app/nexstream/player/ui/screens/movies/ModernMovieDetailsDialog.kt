@@ -435,7 +435,7 @@ fun ModernMovieDetailsDialog(
                                     btn == 2 && isEffectivelyRestricted && removeRecentBtnCount > 0 -> { onRemoveFromRecent?.invoke(); onDismiss() }
                                     btn == trailerBtnIdx && trailerBtnIdx >= 0 && !trailerUrl.isNullOrBlank() ->
                                         showTrailer = !showTrailer
-                                    btn == 3 + removeRecentBtnCount && !isEffectivelyRestricted -> onPlay(0)
+                                    btn == 3 + removeRecentBtnCount && !isEffectivelyRestricted -> onPlay(1L)
                                     btn == 4 + removeRecentBtnCount && !isEffectivelyRestricted -> onPlay(resumePosition)
                                 }
                             }
@@ -857,7 +857,7 @@ function onYouTubeIframeAPIReady(){
                                         isSelected = selectedButton == 3 + removeRecentBtnCount,
                                         isPressed  = pressedButton == 3 + removeRecentBtnCount,
                                         accent     = accent,
-                                        onClick    = { onPlay(0) },
+                                        onClick    = { onPlay(1L) },
                                     )
                                     MovieDialogPill(
                                         label      = "Resume",

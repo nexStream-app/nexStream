@@ -993,6 +993,7 @@ fun PlayerScreen(
             if (subtitleCueLines.isNotEmpty()) add("sub_delay")
             if (isLiveTV || isCatchup) add("sleep")
             if (hasScrubbing) add("speed")
+            if (hasScrubbing) add("resync_av")
             if (showAspectRatioButton) add("aspect")
             if (onOpenMultiScreen != null) add("multi_screen")
             add("stats")
@@ -1080,6 +1081,7 @@ fun PlayerScreen(
                 "sub_delay" -> showSubtitleDelayDialog = true
                 "sleep"     -> showSleepTimerDialog = true
                 "speed"     -> showSpeedDialog = true
+                "resync_av" -> { val p = player; p?.seekTo(p.currentPosition) }
                 "aspect"    -> {
                     val newResizeMode = when (currentResizeMode) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -1998,6 +2000,34 @@ fun PlayerScreen(
                                                 Icons.Default.Speed,
                                                 contentDescription = "Playback Speed",
                                                 tint = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Resync A/V button — VoD only
+                                if (hasScrubbing) {
+                                    val resyncFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "resync_av"
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(controlBg)
+                                            .then(
+                                                if (resyncFocused)
+                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        IconButton(
+                                            onClick  = { val p = player; p?.seekTo(p.currentPosition) },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.SyncAlt,
+                                                contentDescription = "Resync A/V",
+                                                tint = controlText,
                                                 modifier = Modifier.size(28.dp)
                                             )
                                         }
