@@ -61,7 +61,13 @@ import app.nexstream.player.data.remote.XtreamStream
 import app.nexstream.player.data.remote.XtreamVodStream
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
+import com.google.gson.reflect.TypeToken
+import java.lang.reflect.ParameterizedType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
@@ -1288,6 +1294,10 @@ class PlaylistRepository @Inject constructor(
         }
     }
 
+    private val flexibleGson: Gson = GsonBuilder()
+        .registerTypeAdapterFactory(FlexibleListTypeAdapterFactory())
+        .create()
+
     private fun buildRetrofit(host: String): Retrofit {
         val okHttpClient = OkHttpClient.Builder()
             .readTimeout(120, TimeUnit.SECONDS)
@@ -1296,8 +1306,46 @@ class PlaylistRepository @Inject constructor(
         return Retrofit.Builder()
             .baseUrl(if (host.endsWith("/")) host else "$host/")
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(flexibleGson))
             .build()
+    }
+
+    private class FlexibleListTypeAdapterFactory : TypeAdapterFactory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? {
+            if (!List::class.java.isAssignableFrom(type.rawType)) return null
+            val paramType = type.type as? ParameterizedType ?: return null
+            val elementType = paramType.actualTypeArguments.firstOrNull() ?: return null
+            val elementAdapter = gson.getAdapter(TypeToken.get(elementType)) as TypeAdapter<Any?>
+            return object : TypeAdapter<List<Any?>>() {
+                override fun write(out: JsonWriter, value: List<Any?>?) {
+                    if (value == null) { out.nullValue(); return }
+                    out.beginArray()
+                    value.forEach { elementAdapter.write(out, it) }
+                    out.endArray()
+                }
+                override fun read(reader: JsonReader): List<Any?> {
+                    val result = mutableListOf<Any?>()
+                    when (reader.peek()) {
+                        JsonToken.BEGIN_ARRAY -> {
+                            reader.beginArray()
+                            while (reader.hasNext()) result.add(elementAdapter.read(reader))
+                            reader.endArray()
+                        }
+                        JsonToken.BEGIN_OBJECT -> {
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                reader.nextName()
+                                result.add(elementAdapter.read(reader))
+                            }
+                            reader.endObject()
+                        }
+                        else -> reader.skipValue()
+                    }
+                    return result
+                }
+            } as TypeAdapter<T>
+        }
     }
 
     suspend fun deletePlaylist(playlistId: String) {
