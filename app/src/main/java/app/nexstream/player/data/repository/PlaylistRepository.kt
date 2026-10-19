@@ -60,6 +60,7 @@ import app.nexstream.player.data.remote.XtreamSeries
 import app.nexstream.player.data.remote.XtreamStream
 import app.nexstream.player.data.remote.XtreamVodStream
 import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.google.gson.Gson
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -234,17 +235,29 @@ class PlaylistRepository @Inject constructor(
                 val jsonReader = JsonReader(reader)
                 val batch = mutableListOf<XtreamVodStream>()
 
-                jsonReader.beginArray()
-                while (jsonReader.hasNext()) {
-                    val item = gson.fromJson<XtreamVodStream>(jsonReader, XtreamVodStream::class.java)
-                    batch.add(item)
-                    if (batch.size >= 150) {
-                        onBatch(batch.toList())
-                        batch.clear()
+                when (jsonReader.peek()) {
+                    JsonToken.BEGIN_ARRAY -> {
+                        jsonReader.beginArray()
+                        while (jsonReader.hasNext()) {
+                            val item = gson.fromJson<XtreamVodStream>(jsonReader, XtreamVodStream::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endArray()
                     }
+                    JsonToken.BEGIN_OBJECT -> {
+                        jsonReader.beginObject()
+                        while (jsonReader.hasNext()) {
+                            jsonReader.nextName()
+                            val item = gson.fromJson<XtreamVodStream>(jsonReader, XtreamVodStream::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endObject()
+                    }
+                    else -> {}
                 }
                 if (batch.isNotEmpty()) onBatch(batch.toList())
-                jsonReader.endArray()
             }
         }
     }
@@ -265,17 +278,29 @@ class PlaylistRepository @Inject constructor(
                 val jsonReader = JsonReader(reader)
                 val batch = mutableListOf<XtreamSeries>()
 
-                jsonReader.beginArray()
-                while (jsonReader.hasNext()) {
-                    val item = gson.fromJson<XtreamSeries>(jsonReader, XtreamSeries::class.java)
-                    batch.add(item)
-                    if (batch.size >= 150) {
-                        onBatch(batch.toList())
-                        batch.clear()
+                when (jsonReader.peek()) {
+                    JsonToken.BEGIN_ARRAY -> {
+                        jsonReader.beginArray()
+                        while (jsonReader.hasNext()) {
+                            val item = gson.fromJson<XtreamSeries>(jsonReader, XtreamSeries::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endArray()
                     }
+                    JsonToken.BEGIN_OBJECT -> {
+                        jsonReader.beginObject()
+                        while (jsonReader.hasNext()) {
+                            jsonReader.nextName()
+                            val item = gson.fromJson<XtreamSeries>(jsonReader, XtreamSeries::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endObject()
+                    }
+                    else -> {}
                 }
                 if (batch.isNotEmpty()) onBatch(batch.toList())
-                jsonReader.endArray()
             }
         }
     }
@@ -296,17 +321,29 @@ class PlaylistRepository @Inject constructor(
                 val jsonReader = JsonReader(reader)
                 val batch = mutableListOf<XtreamStream>()
 
-                jsonReader.beginArray()
-                while (jsonReader.hasNext()) {
-                    val item = gson.fromJson<XtreamStream>(jsonReader, XtreamStream::class.java)
-                    batch.add(item)
-                    if (batch.size >= 150) {
-                        onBatch(batch.toList())
-                        batch.clear()
+                when (jsonReader.peek()) {
+                    JsonToken.BEGIN_ARRAY -> {
+                        jsonReader.beginArray()
+                        while (jsonReader.hasNext()) {
+                            val item = gson.fromJson<XtreamStream>(jsonReader, XtreamStream::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endArray()
                     }
+                    JsonToken.BEGIN_OBJECT -> {
+                        jsonReader.beginObject()
+                        while (jsonReader.hasNext()) {
+                            jsonReader.nextName()
+                            val item = gson.fromJson<XtreamStream>(jsonReader, XtreamStream::class.java)
+                            batch.add(item)
+                            if (batch.size >= 150) { onBatch(batch.toList()); batch.clear() }
+                        }
+                        jsonReader.endObject()
+                    }
+                    else -> {}
                 }
                 if (batch.isNotEmpty()) onBatch(batch.toList())
-                jsonReader.endArray()
             }
         }
     }
