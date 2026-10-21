@@ -98,7 +98,7 @@ class ContentRefreshWorker @AssistedInject constructor(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
             Log.d(TAG, "Content refresh scheduled every 24 hours")

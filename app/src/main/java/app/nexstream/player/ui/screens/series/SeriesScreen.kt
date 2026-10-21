@@ -158,7 +158,7 @@ fun SeriesScreen(
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val base = when {
                 needsFavoritesFilter -> _allSeriesList.filter { it.id in watchlistIds }
-                needsRecentFilter    -> _allSeriesList.filter { it.hasNewEpisodes }
+                needsRecentFilter    -> _allSeriesList.filter { it.addedAt > 0L && it.addedAt > (System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000) }
                 else                 -> _allSeriesList
             }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogSeriesId } else base

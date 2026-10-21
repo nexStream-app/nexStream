@@ -206,7 +206,7 @@ fun MoviesScreen(
             val recentCutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
             val base = when {
                 needsFavoritesFilter -> _allMovies.filter { it.id in watchlistIds }
-                needsRecentFilter    -> _allMovies.filter { parseReleaseDateEpochMs(it.releaseDate).let { ms -> ms > 0L && ms > recentCutoff } }
+                needsRecentFilter    -> _allMovies.filter { it.addedAt > 0L && it.addedAt > recentCutoff }
                 else                 -> _allMovies
             }
             val ageFiltered = if (maxAgeRating != null || !allowNr) base.filter { isAllowedByAgeRating(it.certification, maxAgeRating, allowNr) || it.id == openDialogMovieId } else base
