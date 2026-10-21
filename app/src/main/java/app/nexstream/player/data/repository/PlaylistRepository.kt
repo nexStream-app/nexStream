@@ -373,10 +373,22 @@ class PlaylistRepository @Inject constructor(
                     api.getAccountInfo(username, password)
                 } catch (e: Exception) {
                     android.util.Log.e("PlaylistRepository", "Failed to get account info", e)
-                    null
+                    return@withContext Result.failure(Exception("Could not connect to server. Check the URL and try again."))
                 }
 
-                val expiryDate = accountInfo?.userInfo?.expDate
+                val status = accountInfo.userInfo.status?.lowercase()
+                if (status != null && status != "active") {
+                    val expiryDate = accountInfo.userInfo.expDate?.let { epoch ->
+                        try {
+                            val date = java.util.Date(epoch.toLong() * 1000)
+                            java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(date)
+                        } catch (e: Exception) { epoch }
+                    }
+                    val msg = if (expiryDate != null) "Account expired on $expiryDate" else "Account is not active (status: $status)"
+                    return@withContext Result.failure(Exception(msg))
+                }
+
+                val expiryDate = accountInfo.userInfo.expDate
                 android.util.Log.d("PlaylistRepository", "Account expires: $expiryDate")
 
                 val categories = api.getLiveCategories(username, password)
