@@ -53,6 +53,7 @@ import app.nexstream.player.ui.theme.LocalUiStyle
 import app.nexstream.player.ui.theme.UiStyle
 import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -97,6 +99,14 @@ class PicksViewModel @Inject constructor(
 
     private val tmdbToken = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhYzA2NjBlNjM2MGVlNDE0NmQyNDA3MzUyOTQ2ZmRkYiIsIm5iZiI6MTc3Njg3MzQ2OS4wNjA5OTk5LCJzdWIiOiI2OWU4ZWZmZDQyM2ZhZDJlYzhlMGNmY2QiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.1gbVrIUZezfVmRoFk692A__HsaO9GahlPeMT6h2JBKo"
 
+    // Dedicated client for TMDB — higher per-host concurrency, short timeouts
+    private val tmdbClient = OkHttpClient.Builder()
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
+        .dispatcher(okhttp3.Dispatcher().also { it.maxRequestsPerHost = 16 })
+        .build()
+
     private val _groups  = MutableStateFlow<List<PickGroup>>(emptyList())
     private val _loading = MutableStateFlow(false)
 
@@ -111,15 +121,22 @@ class PicksViewModel @Inject constructor(
         repository.getWatchlistForActiveProfile()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Cached once per ViewModel lifetime — playlist rarely changes mid-session
-    private var cachedAvailableNames: Set<String>? = null
-    // Word index: significant word → set of normalized titles containing that word
-    private var cachedWordIndex: Map<String, Set<String>>? = null
     // Track which seeds were last fetched — skip re-fetch if seeds and results haven't changed
     private var lastLoadedSeedKeys: List<String> = emptyList()
 
+    // Index built eagerly in background as soon as ViewModel is created
+    private val indexDeferred: Deferred<Pair<Set<String>, Map<String, Set<String>>>> =
+        viewModelScope.async(Dispatchers.IO) { buildAvailableIndex() }
+
     init {
         viewModelScope.launch { repository.pruneStaleAndBlockedRecentItems() }
+    }
+
+    private suspend fun buildAvailableIndex(): Pair<Set<String>, Map<String, Set<String>>> {
+        val movies = repository.getAllMovieNames().map { normContent(it) }.toSet()
+        val series = repository.getAllSeriesNames().map { normContent(it) }.toSet()
+        val names = movies + series
+        return names to buildWordIndex(names)
     }
 
     private data class PickSeed(val title: String, val mediaType: String)
@@ -140,7 +157,6 @@ class PicksViewModel @Inject constructor(
             .take(8)
         if (dedupedSeeds.isEmpty()) return
 
-        // Skip re-fetch if effective seeds haven't changed and we already have results
         val seedKeys = dedupedSeeds.map { it.title.lowercase().trim() }
         if (seedKeys == lastLoadedSeedKeys && _groups.value.isNotEmpty()) return
         lastLoadedSeedKeys = seedKeys
@@ -148,16 +164,10 @@ class PicksViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
 
-            // Fetch names once; build word index for O(1) candidate lookup during matching
-            val availableNames = cachedAvailableNames ?: withContext(Dispatchers.IO) {
-                val movies = repository.getAllMovieNames().map { normContent(it) }.toSet()
-                val series = repository.getAllSeriesNames().map { normContent(it) }.toSet()
-                (movies + series).also { cachedAvailableNames = it }
-            }
-            val wordIndex = cachedWordIndex ?: buildWordIndex(availableNames).also { cachedWordIndex = it }
-
-            // Process all seeds concurrently; publish each group as items arrive so posters
-            // appear one by one rather than waiting for all seeds to complete.
+            // All seed TMDB searches start immediately in parallel.
+            // The word index builds concurrently — each coroutine awaits it only when
+            // it actually needs to filter recommendations, by which time the index is
+            // almost certainly already done (TMDB search alone takes ~300–500ms).
             val mutex = Mutex()
             val orderedResults = mutableListOf<Pair<Int, PickGroup>>()
             dedupedSeeds.mapIndexed { idx, seed ->
@@ -165,6 +175,7 @@ class PicksViewModel @Inject constructor(
                     val groupTitle = cleanTitle(seed.title)
                     val tmdbId = try { searchTmdbId(seed.title, seed.mediaType) } catch (_: Exception) { null }
                         ?: return@async
+                    val (_, wordIndex) = indexDeferred.await()
                     streamRecommendations(tmdbId, seed.mediaType, seed.title, wordIndex) { item ->
                         mutex.withLock {
                             val existingIdx = orderedResults.indexOfFirst { it.first == idx }
@@ -195,9 +206,14 @@ class PicksViewModel @Inject constructor(
     }
 
     private fun normContent(s: String): String = s.lowercase()
-        .replace(Regex("[^a-z0-9 ]"), " ")
-        .replace(Regex("\\s+"), " ")
+        .replace(NORM_CHAR_REGEX, " ")
+        .replace(NORM_SPACE_REGEX, " ")
         .trim()
+
+    companion object {
+        private val NORM_CHAR_REGEX  = Regex("[^a-z0-9 ]")
+        private val NORM_SPACE_REGEX = Regex("\\s+")
+    }
 
     // Word-level intersection match — both titles must share all meaningful words (4+ chars)
     // from the shorter title. Prevents short words like "It", "Us", "Her" from producing
@@ -220,7 +236,7 @@ class PicksViewModel @Inject constructor(
     ) = withContext(Dispatchers.IO) {
         try {
             val url = "https://api.themoviedb.org/3/$mediaType/$tmdbId/recommendations?language=en-US&page=1"
-            val response = httpClient.newCall(Request.Builder().url(url)
+            val response = tmdbClient.newCall(Request.Builder().url(url)
                 .addHeader("Authorization", "Bearer $tmdbToken").build()).execute()
             val body = response.body?.string() ?: return@withContext
             val results = JSONObject(body).optJSONArray("results") ?: return@withContext
@@ -258,7 +274,7 @@ class PicksViewModel @Inject constructor(
     private fun searchTmdbId(title: String, preferType: String): Int? {
         val encoded = java.net.URLEncoder.encode(cleanTitle(title), "UTF-8")
         val url = "https://api.themoviedb.org/3/search/multi?query=$encoded&language=en-US&include_adult=false&page=1"
-        val response = httpClient.newCall(Request.Builder().url(url)
+        val response = tmdbClient.newCall(Request.Builder().url(url)
             .addHeader("Authorization", "Bearer $tmdbToken").build()).execute()
         val body = response.body?.string() ?: return null
         val results = JSONObject(body).optJSONArray("results") ?: return null
