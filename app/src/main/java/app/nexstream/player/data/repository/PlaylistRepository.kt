@@ -466,7 +466,7 @@ class PlaylistRepository @Inject constructor(
                     // 2. VOD
                     _isLoadingVOD.value = true
                     try {
-                        fetchAndStoreMovies(playlistId, host, username, password)
+                        fetchAndStoreMovies(playlistId, host, username, password, isInitialImport = true)
                         android.util.Log.d("PlaylistRepository", "VOD fetch completed")
                     } catch (e: Exception) {
                         android.util.Log.e("PlaylistRepository", "VOD fetch failed", e)
@@ -479,7 +479,7 @@ class PlaylistRepository @Inject constructor(
                     // 3. Series
                     _isLoadingSeries.value = true
                     try {
-                        fetchAndStoreSeries(playlistId, host, username, password)
+                        fetchAndStoreSeries(playlistId, host, username, password, isInitialImport = true)
                         android.util.Log.d("PlaylistRepository", "Series fetch completed")
                     } catch (e: Exception) {
                         android.util.Log.e("PlaylistRepository", "Series fetch failed", e)
@@ -937,7 +937,8 @@ class PlaylistRepository @Inject constructor(
         playlistId: String,
         host: String,
         username: String,
-        password: String
+        password: String,
+        isInitialImport: Boolean = false
     ) {
         withContext(Dispatchers.IO) {
             try {
@@ -988,7 +989,7 @@ class PlaylistRepository @Inject constructor(
                             playlistId = playlistId,
                             isFavourite = false,
                             certification = existingCerts[movieId],
-                            addedAt = existingMovieAddedAt[movieId] ?: importTime,
+                            addedAt = existingMovieAddedAt[movieId] ?: if (isInitialImport) 0L else importTime,
                             originalLanguage = stream.originalLanguage
                         )
                     }
@@ -1021,7 +1022,8 @@ class PlaylistRepository @Inject constructor(
         playlistId: String,
         host: String,
         username: String,
-        password: String
+        password: String,
+        isInitialImport: Boolean = false
     ) {
         withContext(Dispatchers.IO) {
             try {
@@ -1071,7 +1073,7 @@ class PlaylistRepository @Inject constructor(
                             playlistId = playlistId,
                             certification = existingSeriesCerts[seriesId2],
                             originalLanguage = series.originalLanguage,
-                            addedAt = existingSeriesAddedAt[seriesId2] ?: seriesImportTime,
+                            addedAt = existingSeriesAddedAt[seriesId2] ?: if (isInitialImport) 0L else seriesImportTime,
                             hasNewEpisodes = existingNewEpisodeFlags[seriesId2] ?: false
                         )
                     }
