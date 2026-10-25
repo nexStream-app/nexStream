@@ -273,14 +273,23 @@ class MainActivity : ComponentActivity() {
                             // intercepting first-run flow where profiles synced before playlist added
                             val singleProfileNeedsPin = profiles.size == 1 && profiles[0].pinHash != null
                             if (hasPlaylists && (profiles.size >= 2 || singleProfileNeedsPin) && !profileChosen) {
-                                ProfileSelectScreen(
-                                    profiles = profiles,
-                                    appName  = appName,
-                                    onProfileSelected = { profile ->
-                                        profileManager.setActiveProfile(profile)
-                                        profileChosen = true
-                                    }
-                                )
+                                val startupUiStyle = app.nexstream.player.ui.theme.LocalUiStyle.current
+                                val startupOnSelected: (app.nexstream.player.data.local.entity.ProfileEntity) -> Unit = { profile ->
+                                    profileManager.setActiveProfile(profile)
+                                    profileChosen = true
+                                }
+                                if (startupUiStyle == app.nexstream.player.ui.theme.UiStyle.GLASS) {
+                                    app.nexstream.player.ui.screens.profile.GlassProfileSelect(
+                                        profiles          = profiles,
+                                        onProfileSelected = startupOnSelected,
+                                    )
+                                } else {
+                                    ProfileSelectScreen(
+                                        profiles = profiles,
+                                        appName  = appName,
+                                        onProfileSelected = startupOnSelected,
+                                    )
+                                }
                             } else {
                                 NexStreamNavGraph(
                                     pendingPlayUrl        = playUrl,

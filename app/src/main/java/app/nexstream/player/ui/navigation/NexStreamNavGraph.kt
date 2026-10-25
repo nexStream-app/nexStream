@@ -69,22 +69,31 @@ fun NexStreamNavGraph(
 
         composable(Screen.AddPlaylist.route) {
             val isFirstRun = navController.previousBackStackEntry == null
-            AddPlaylistScreen(
-                isFirstRun = isFirstRun,
-                onBack = {
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
-                    } else if (onboardingDone != true) {
-                        navController.navigate(Screen.Onboarding.route) {
-                            popUpTo(Screen.AddPlaylist.route) { inclusive = true }
-                        }
-                    } else {
-                        navController.navigate(Screen.Main.route) {
-                            popUpTo(Screen.AddPlaylist.route) { inclusive = true }
-                        }
+            val addPlaylistUiStyle = app.nexstream.player.ui.theme.LocalUiStyle.current
+            val onAddPlaylistBack: () -> Unit = {
+                if (navController.previousBackStackEntry != null) {
+                    navController.popBackStack()
+                } else if (onboardingDone != true) {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.AddPlaylist.route) { inclusive = true }
+                    }
+                } else {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.AddPlaylist.route) { inclusive = true }
                     }
                 }
-            )
+            }
+            if (addPlaylistUiStyle == app.nexstream.player.ui.theme.UiStyle.GLASS) {
+                app.nexstream.player.ui.screens.playlist.GlassAddPlaylist(
+                    isFirstRun = isFirstRun,
+                    onBack     = onAddPlaylistBack,
+                )
+            } else {
+                AddPlaylistScreen(
+                    isFirstRun = isFirstRun,
+                    onBack     = onAddPlaylistBack,
+                )
+            }
         }
 
         composable(Screen.Onboarding.route) {

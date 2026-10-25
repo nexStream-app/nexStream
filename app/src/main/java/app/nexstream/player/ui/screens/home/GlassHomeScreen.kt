@@ -65,6 +65,8 @@ fun GlassHomeScreen(
 ) {
     val recentlyWatched by recentlyWatchedViewModel.recentlyWatched.collectAsState()
     val filteredSportsEvents by homePageViewModel.filteredSportsEvents.collectAsState()
+    val sportsCategories     by homePageViewModel.sportsCategories.collectAsState()
+    val selectedSportCategory by homePageViewModel.selectedSportCategory.collectAsState()
     val picksGroups by picksViewModel.groups.collectAsState()
 
     val continueWatching = remember(recentlyWatched) {
@@ -135,23 +137,14 @@ fun GlassHomeScreen(
             }
 
             if (liveEvents.isNotEmpty()) {
-                GlassRail(
-                    title = "Live Now",
-                    items = liveEvents,
-                    tileWidth = 280.dp,
-                ) { _, event: MatchedSportEvent, tileMod ->
-                    GlassTile(
-                        imageUrl = event.matchedChannels.firstOrNull()?.logoUrl,
-                        title = event.eventName,
-                        isLive = true,
-                        modifier = tileMod,
-                        onClick = {
-                            event.matchedChannels.firstOrNull()?.let { ch ->
-                                onChannelPlay(ch.streamUrl, ch.channelName)
-                            }
-                        },
-                    )
-                }
+                GlassSportsScreen(
+                    events            = liveEvents,
+                    categories        = sportsCategories,
+                    selectedCategory  = selectedSportCategory,
+                    onCategorySelect  = { homePageViewModel.selectSportCategory(it) },
+                    onChannelPlay     = onChannelPlay,
+                    onFocusNavBar     = onFocusNavBar,
+                )
             }
 
             if (firstPicksGroup != null && firstPicksGroup.items.isNotEmpty()) {

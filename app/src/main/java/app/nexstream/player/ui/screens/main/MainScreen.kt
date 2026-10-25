@@ -732,18 +732,29 @@ fun MainScreen(
     }
 
     if (showProfileSwitch) {
-        app.nexstream.player.ui.screens.profile.ProfileSwitchDialog(
-            profiles        = allProfiles,
-            activeProfileId = activeProfile?.id,
-            onProfileSelected = { profile ->
-                showProfileSwitch = false
-                scope.launch { watchlistViewModel.profileManager.setActiveProfile(profile) }
-                currentRoute = startRouteStored.asAppRoute(); sidebarPanelExpanded = false; sidebarExpandedRoute = null
-                selectedMovieCategory = null; selectedSeriesCategory = null; selectedGuideCategory = null
-                scope.launch { kotlinx.coroutines.delay(200); zone = Zone.RAIL; sidebarRefocusTick++ }
-            },
-            onDismiss = { showProfileSwitch = false },
-        )
+        val switchUiStyle = LocalUiStyle.current
+        val switchOnSelected: (app.nexstream.player.data.local.entity.ProfileEntity) -> Unit = { profile ->
+            showProfileSwitch = false
+            scope.launch { watchlistViewModel.profileManager.setActiveProfile(profile) }
+            currentRoute = startRouteStored.asAppRoute(); sidebarPanelExpanded = false; sidebarExpandedRoute = null
+            selectedMovieCategory = null; selectedSeriesCategory = null; selectedGuideCategory = null
+            scope.launch { kotlinx.coroutines.delay(200); zone = Zone.RAIL; sidebarRefocusTick++ }
+        }
+        if (switchUiStyle == UiStyle.GLASS) {
+            app.nexstream.player.ui.screens.profile.GlassProfileSelect(
+                profiles        = allProfiles,
+                activeProfileId = activeProfile?.id,
+                onProfileSelected = switchOnSelected,
+                onDismiss = { showProfileSwitch = false },
+            )
+        } else {
+            app.nexstream.player.ui.screens.profile.ProfileSwitchDialog(
+                profiles        = allProfiles,
+                activeProfileId = activeProfile?.id,
+                onProfileSelected = switchOnSelected,
+                onDismiss = { showProfileSwitch = false },
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -2063,13 +2074,39 @@ private fun MainContentArea(
                 }
             )
 
-            AppRoute.Settings           -> app.nexstream.player.ui.screens.settings.SettingsMenuScreen(
-                onNavigate = onNavigateToRoute,
-                playlistsFocusRequester = contentFR,
-            )
-            AppRoute.SettingsPlaylists  -> SettingsScreen(
-                onNavigateToAddPlaylist = onNavigateToAddPlaylist,
-                firstItemFocusRequester = contentFR,
+            AppRoute.Settings,
+            AppRoute.SettingsPlaylists,
+            AppRoute.SettingsAppearance,
+            AppRoute.SettingsLicence,
+            AppRoute.SettingsPlayer,
+            AppRoute.SettingsProfiles,
+            AppRoute.SettingsAccount,
+            AppRoute.SettingsAbout,
+            AppRoute.SettingsNavigation,
+            AppRoute.SettingsSports,
+            AppRoute.SettingsSyncSettings,
+            AppRoute.SettingsChannelGroups,
+            AppRoute.SettingsLanguage -> {
+                val settingsUiStyle = LocalUiStyle.current
+                if (settingsUiStyle == UiStyle.GLASS) {
+                    app.nexstream.player.ui.screens.settings.GlassSettings(
+                        currentRoute            = currentRoute,
+                        firstItemFocusRequester = contentFR,
+                        onSectionSelect         = onNavigateToRoute,
+                        onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                        hasJellyfinPlaylist     = hasJellyfinPlaylist,
+                        activeProfileId         = activeProfileId,
+                        onRefreshSports         = onRefreshSports,
+                        isRefreshingSports      = isRefreshingSports,
+                    )
+                } else when (currentRoute) {
+                    AppRoute.Settings           -> app.nexstream.player.ui.screens.settings.SettingsMenuScreen(
+                        onNavigate = onNavigateToRoute,
+                        playlistsFocusRequester = contentFR,
+                    )
+                    AppRoute.SettingsPlaylists  -> SettingsScreen(
+                        onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                        firstItemFocusRequester = contentFR,
             )
             AppRoute.SettingsSports     -> app.nexstream.player.ui.screens.settings.SportsSettingsScreen(
                 firstItemFocusRequester = contentFR,
@@ -2104,6 +2141,9 @@ private fun MainContentArea(
                 firstItemFocusRequester = contentFR,
                 hasJellyfinPlaylist = hasJellyfinPlaylist,
             )
+            else -> Unit
+        } // end inner settings when
+    } // end settings block
             AppRoute.Picks -> PicksScreen(
                 selectedSeed            = selectedPicksCategory,
                 onContentFocused        = { if (zone == Zone.PANEL || zone == Zone.CONTENT) onZoneContent() },
