@@ -431,7 +431,33 @@ fun MoviesScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                } else if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
+                } else if (uiStyle == UiStyle.GLASS) {
+                    GlassMoviesContent(
+                        movies           = movies,
+                        selectedCategory = selectedCategory,
+                        firstItemFocusRequester = firstItemFocusRequester,
+                        onFocusNavBar    = onRequestSidebarFocus,
+                        onMovieClick     = { movie ->
+                            isLoadingDetails = true
+                            scope.launch {
+                                try {
+                                    val base = viewModel.repository.getMovieById(movie.id)
+                                    movieWithDetails = base
+                                    val detailed = base?.let {
+                                        viewModel.repository.getMovieDetails(
+                                            playlistId = it.playlistId,
+                                            vodId      = it.id.removePrefix("${it.playlistId}-")
+                                        )
+                                    }
+                                    if (detailed != null) movieWithDetails = detailed
+                                } finally {
+                                    isLoadingDetails = false
+                                }
+                            }
+                        },
+                        onCategorySelect = onCategorySelect,
+                    )
+                } else if (uiStyle == UiStyle.MODERN) {
                     ModernMoviesContent(
                         movies           = movies,
                         progressItemIds  = progressItemIds,

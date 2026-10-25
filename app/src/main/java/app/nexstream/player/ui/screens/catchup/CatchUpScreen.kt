@@ -447,7 +447,7 @@ fun CatchUpScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         val uiStyle = LocalUiStyle.current
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
             ModernCatchUpContent(
                 programmes      = programmesForView,
                 thumbnails      = thumbnails,

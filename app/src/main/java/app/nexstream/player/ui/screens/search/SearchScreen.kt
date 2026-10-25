@@ -191,7 +191,7 @@ fun SearchScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         val uiStyle = LocalUiStyle.current
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
             ModernSearchContent(
                 query                  = query,
                 results                = results,

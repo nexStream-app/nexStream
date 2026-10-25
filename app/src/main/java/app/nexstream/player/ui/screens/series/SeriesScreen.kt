@@ -445,7 +445,7 @@ fun SeriesScreen(
 
                 Column(modifier = Modifier.fillMaxSize()
                 ) {
-                    if (uiStyleOuter != UiStyle.MODERN) {
+                    if (uiStyleOuter == UiStyle.CLASSIC) {
                     Box(modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                         contentAlignment = Alignment.CenterStart) {
                         if (silentFilterQuery != null) {
@@ -543,7 +543,30 @@ fun SeriesScreen(
                             }
                         }
                         else -> {
-                            if (uiStyleOuter == UiStyle.MODERN) {
+                            if (uiStyleOuter == UiStyle.GLASS) {
+                                GlassSeriesContent(
+                                    seriesList       = seriesList,
+                                    selectedCategory = selectedCategory,
+                                    firstItemFocusRequester = firstItemFocusRequester,
+                                    onFocusNavBar    = onRequestSidebarFocus,
+                                    onSeriesClick    = { series ->
+                                        isLoadingDetails = true
+                                        selectedSeriesId = null
+                                        scope.launch {
+                                            try {
+                                                val fullSeries = viewModel.repository.getSeriesById(series.id)
+                                                selectedSeries = fullSeries
+                                                val rawId = series.id.removePrefix("${series.playlistId}-")
+                                                viewModel.loadSeriesDetails(playlistId = series.playlistId, seriesId = rawId)
+                                                selectedSeriesId = series.id
+                                            } finally {
+                                                isLoadingDetails = false
+                                            }
+                                        }
+                                    },
+                                    onCategorySelect = onCategorySelect,
+                                )
+                            } else if (uiStyleOuter == UiStyle.MODERN) {
                                 val recentlyWatched by viewModel.repository.getRecentlyWatched().collectAsState(initial = emptyList())
                                 ModernSeriesContent(
                                     seriesList       = seriesList,
