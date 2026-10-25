@@ -9,6 +9,7 @@ import app.nexstream.player.data.local.entity.PlaylistEntity
 import app.nexstream.player.data.profile.ProfileManager
 import app.nexstream.player.data.repository.PlaylistRepository
 import app.nexstream.player.data.repository.WatchProgressRepository
+import app.nexstream.player.data.sync.ProgressSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -19,6 +20,7 @@ import javax.inject.Inject
 class SeriesViewModel @Inject constructor(
     val repository: PlaylistRepository,
     val progressRepository: WatchProgressRepository,
+    private val progressSyncManager: ProgressSyncManager,
 ) : ViewModel() {
 
     @Inject lateinit var profileManager: ProfileManager
@@ -99,7 +101,16 @@ class SeriesViewModel @Inject constructor(
     fun markEpisodeWatched(episodeId: String, seriesId: String, durationMs: Long) {
         viewModelScope.launch {
             val profileId = profileManager.activeProfile.value?.id ?: "default"
+            val dur = if (durationMs > 0L) durationMs else 3_600_000L
             progressRepository.markEpisodeWatched(profileId, episodeId, seriesId, durationMs)
+            progressSyncManager.pushSingle(
+                itemId     = episodeId,
+                itemType   = "episode",
+                seriesId   = seriesId,
+                positionMs = dur,
+                durationMs = dur,
+                profileId  = profileId
+            )
         }
     }
 
@@ -107,6 +118,14 @@ class SeriesViewModel @Inject constructor(
         viewModelScope.launch {
             val profileId = profileManager.activeProfile.value?.id ?: "default"
             progressRepository.markEpisodeUnwatched(profileId, episodeId)
+            progressSyncManager.pushSingle(
+                itemId     = episodeId,
+                itemType   = "episode",
+                seriesId   = null,
+                positionMs = 0L,
+                durationMs = 0L,
+                profileId  = profileId
+            )
         }
     }
 

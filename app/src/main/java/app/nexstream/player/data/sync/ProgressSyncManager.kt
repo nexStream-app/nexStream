@@ -54,18 +54,24 @@ class ProgressSyncManager @Inject constructor(
             }
             Log.d(tag, "pullFromServer: ${items.size} items received")
 
-            val entities = items.mapNotNull { item ->
-                val itemId     = item["item_id"]                     ?: return@mapNotNull null
-                val itemType   = item["item_type"]                   ?: return@mapNotNull null
-                val positionMs = item["position_ms"]?.toLongOrNull() ?: return@mapNotNull null
-                WatchProgressEntity(
+            val entities = mutableListOf<WatchProgressEntity>()
+            for (item in items) {
+                val itemId     = item["item_id"]                     ?: continue
+                val itemType   = item["item_type"]                   ?: continue
+                val positionMs = item["position_ms"]?.toLongOrNull() ?: continue
+                if (positionMs == 0L) {
+                    progressRepository.clearEpisodeProgress(profileId, itemId)
+                    continue
+                }
+                entities.add(WatchProgressEntity(
                     profileId  = profileId,
                     itemId     = itemId,
                     itemType   = itemType,
                     seriesId   = item["series_id"],
                     positionMs = positionMs,
+                    durationMs = item["duration_ms"]?.toLongOrNull() ?: 0L,
                     updatedAt  = item["updated_at"]?.toLongOrNull() ?: System.currentTimeMillis()
-                )
+                ))
             }
             if (entities.isNotEmpty()) {
                 progressRepository.upsertAll(entities)
@@ -92,7 +98,7 @@ class ProgressSyncManager @Inject constructor(
                     item_type   = entity.itemType,
                     series_id   = entity.seriesId,
                     position_ms = entity.positionMs,
-                    duration_ms = 0L,
+                    duration_ms = entity.durationMs,
                     profile_id  = profileId,
                     updated_at  = entity.updatedAt
                 )
