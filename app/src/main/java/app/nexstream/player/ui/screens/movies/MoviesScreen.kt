@@ -431,7 +431,7 @@ fun MoviesScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                } else if (uiStyle == UiStyle.MODERN) {
+                } else if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
                     ModernMoviesContent(
                         movies           = movies,
                         progressItemIds  = progressItemIds,

@@ -134,7 +134,7 @@ fun AccountScreen(
     val uiStyle = rememberUiStyle()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (uiStyle != UiStyle.MODERN) {
+        if (uiStyle == UiStyle.CLASSIC) {
         Box(
             modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterStart

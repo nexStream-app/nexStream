@@ -81,7 +81,7 @@ fun SettingsScreen(
     val firstCardFocus = remember { FocusRequester() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (uiStyle != UiStyle.MODERN) {
+        if (uiStyle == UiStyle.CLASSIC) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
@@ -257,7 +257,7 @@ private fun PlaylistCard(
     val uiStyle = rememberUiStyle()
 
     val disabledAlpha = if (playlist.enabled) 1f else 0.45f
-    val cardModifier = if (uiStyle == UiStyle.MODERN)
+    val cardModifier = if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS)
         Modifier
             .fillMaxWidth()
             .background(

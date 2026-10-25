@@ -158,7 +158,7 @@ fun SettingsMenuScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (uiStyle == UiStyle.MODERN) 12.dp else 0.dp)
+            verticalArrangement = Arrangement.spacedBy(if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) 12.dp else 0.dp)
         ) {
             Box(modifier = Modifier.onFocusChanged { fs ->
                 if (fs.hasFocus) scope.launch { scrollState.animateScrollTo(0) }

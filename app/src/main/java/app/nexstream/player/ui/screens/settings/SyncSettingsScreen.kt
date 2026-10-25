@@ -224,7 +224,7 @@ fun SyncSettingsScreen(
     val strImportFailed      = stringResource(R.string.sync_import_failed)
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (uiStyle != UiStyle.MODERN) {
+        if (uiStyle == UiStyle.CLASSIC) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart

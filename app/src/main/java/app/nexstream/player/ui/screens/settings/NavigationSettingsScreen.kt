@@ -118,7 +118,7 @@ fun NavigationSettingsScreen(
     val moveLimit   = if (settingsIdx >= 0) settingsIdx - 1 else railItems.lastIndex
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (uiStyle != UiStyle.MODERN) {
+        if (uiStyle == UiStyle.CLASSIC) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(headerHeight).padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
@@ -145,7 +145,7 @@ fun NavigationSettingsScreen(
                 uiStyle = uiStyle
             ) {
                 Column(modifier = Modifier.padding(
-                    horizontal = if (uiStyle == UiStyle.MODERN) 16.dp else 0.dp,
+                    horizontal = if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) 16.dp else 0.dp,
                     vertical = 8.dp
                 )) {
                     if (uiStyle == UiStyle.CLASSIC) {
@@ -271,7 +271,7 @@ fun NavigationSettingsScreen(
                 uiStyle = uiStyle
             ) {
                 Column(modifier = Modifier.padding(
-                    horizontal = if (uiStyle == UiStyle.MODERN) 16.dp else 0.dp,
+                    horizontal = if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) 16.dp else 0.dp,
                     vertical = 8.dp
                 )) {
                     if (uiStyle == UiStyle.CLASSIC) {

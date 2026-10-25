@@ -58,7 +58,7 @@ fun SettingsSectionContainer(
     content: @Composable ColumnScope.() -> Unit
 ) {
     when (uiStyle) {
-        UiStyle.MODERN -> {
+        UiStyle.GLASS, UiStyle.MODERN -> {
             Surface(
                 modifier = modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -149,7 +149,7 @@ fun SettingsToggle(
     var nodeHeight by remember { mutableStateOf(0) }
 
     val rowModifier = when (uiStyle) {
-        UiStyle.MODERN -> Modifier
+        UiStyle.GLASS, UiStyle.MODERN -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
             .onSizeChanged { nodeHeight = it.height }
@@ -255,7 +255,7 @@ fun SettingsActionItem(
     var nodeHeight by remember { mutableStateOf(0) }
 
     val rowModifier = when (uiStyle) {
-        UiStyle.MODERN -> Modifier
+        UiStyle.GLASS, UiStyle.MODERN -> Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bvr)
             .onSizeChanged { nodeHeight = it.height }
@@ -398,7 +398,7 @@ fun SettingsSectionLabel(text: String, uiStyle: UiStyle) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 0.dp, vertical = 4.dp)
         )
-        UiStyle.MODERN -> Text(
+        UiStyle.GLASS, UiStyle.MODERN -> Text(
             text = text,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,

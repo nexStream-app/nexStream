@@ -349,7 +349,7 @@ fun MainScreen(
     }
 
     fun focusContent() {
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
             when (currentRoute) {
                 AppRoute.Guide -> epgFocusRequest?.invoke()
                     ?: try { contentFR.requestFocus() } catch (_: Exception) {}
@@ -396,7 +396,7 @@ fun MainScreen(
         val realPreviousRoute = previousRoute
         previousRoute = currentRoute
 
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
             if (isFirstLoad) {
                 isFirstLoad = false; zone = Zone.RAIL
             }
@@ -460,6 +460,12 @@ fun MainScreen(
     BackHandler(enabled = epgPlayerChannel != null) {
         scope.launch { epgPlayerChannel?.let { repository.recordRecentlyWatchedChannel(it) } }
         epgPlayerChannel = null
+    }
+    // Glass: content → top nav (one-step back, no category panel)
+    BackHandler(enabled = uiStyle == UiStyle.GLASS && zone != Zone.RAIL && !isDialogOpen) {
+        if (currentRoute == AppRoute.Movies) { lastMovieIndex = 0; movieGridViewRef?.scrollToIndex(0); pendingMovieGoTo = null }
+        if (currentRoute == AppRoute.Series) { lastSeriesIndex = 0; seriesGridViewRef?.scrollToIndex(0); pendingSeriesGoTo = null }
+        zone = Zone.RAIL; sidebarRefocusTick++
     }
     // Modern: content → category strip → top nav (two-step back)
     BackHandler(enabled = uiStyle == UiStyle.MODERN && zone != Zone.RAIL && !isDialogOpen) {
@@ -531,7 +537,10 @@ fun MainScreen(
     }
 
     val epgOnBack: () -> Unit = {
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.GLASS) {
+            // Glass: no category panel — go straight back to top nav
+            zone = Zone.RAIL; sidebarRefocusTick++
+        } else if (uiStyle == UiStyle.MODERN) {
             // Modern: step back to guide category strip first (if categories exist), then to top nav
             if (guideCategories.isNotEmpty()) { zone = Zone.PANEL; guideStripFocusTick++ }
             else { zone = Zone.RAIL; sidebarRefocusTick++ }
@@ -744,7 +753,7 @@ fun MainScreen(
             label = "dialogScrim"
         )
 
-        if (uiStyle == UiStyle.MODERN) {
+        if (uiStyle == UiStyle.GLASS || uiStyle == UiStyle.MODERN) {
             ModernMainLayout(
                 showPlayer = showPlayer, epgPlayerVisible = epgPlayerVisible,
                 currentRoute = currentRoute, zone = zone, contentFR = contentFR,
@@ -842,6 +851,7 @@ fun MainScreen(
                 sportsEditTick = sportsEditTick,
                 incrSportsEditTick = { sportsEditTick++ },
                 incrProfilesNavTick = { profilesNavTick++ },
+                useGlassNav = uiStyle == UiStyle.GLASS,
             )
         } else {
             // ── Classic layout: sidebar rail + content ────────────────────────
@@ -2290,6 +2300,7 @@ private fun ModernMainLayout(
     sportsEditTick: Int = 0,
     incrSportsEditTick: () -> Unit = {},
     incrProfilesNavTick: () -> Unit = {},
+    useGlassNav: Boolean = false,
 ) {
     val onGoToMovie: (String) -> Unit = { name ->
         setPendingMovieGoTo(name); setShowMovieSearch(false)
@@ -2318,6 +2329,23 @@ private fun ModernMainLayout(
 
     androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
         if (!showPlayer && !epgPlayerVisible) {
+            if (useGlassNav) {
+                GlassTopNav(
+                    currentRoute       = currentRoute,
+                    onNavigate         = { route ->
+                        if (showPlayer) onPlayerBack(currentRoute)
+                        setCurrentRoute(route)
+                        setZone(Zone.CONTENT)
+                        scope.launch { kotlinx.coroutines.delay(50); focusContent() }
+                    },
+                    onDropToContent    = { setZone(Zone.CONTENT); focusContent() },
+                    focusTick          = sidebarRefocusTick,
+                    activeProfileEmoji = activeProfileEmoji,
+                    activeProfileName  = activeProfileName,
+                    onProfileClick     = { setShowProfileSwitch(true) },
+                    onStopPlayer       = { if (showPlayer) onPlayerBack(currentRoute) },
+                )
+            } else {
             ModernNavAndStrips(
                 currentRoute       = currentRoute,
                 zone               = zone,
@@ -2375,6 +2403,7 @@ private fun ModernMainLayout(
                 onBack             = { setZone(Zone.RAIL); incrSidebarRefocusTick() },
                 onStopPlayer       = { if (showPlayer) onPlayerBack(currentRoute) },
             )
+            } // end else (ModernNavAndStrips)
         }
         MainContentArea(
             modifier = Modifier.weight(1f).fillMaxWidth()

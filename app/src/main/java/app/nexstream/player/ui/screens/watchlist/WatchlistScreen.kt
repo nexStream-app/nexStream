@@ -243,7 +243,7 @@ fun WatchlistScreen(
                     NexStreamRecordingManager.deleteRecording(context, item.id)
                 },
             )
-        } else if (uiStyle == UiStyle.MODERN) {
+        } else if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) {
             ModernMyListContent(
                 allItems                = allItems,
                 filteredItems           = filteredItems,

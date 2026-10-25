@@ -631,7 +631,7 @@ fun AppearanceScreen(
                 uiStyle = uiStyle
             ) {
                 Column(modifier = Modifier.padding(
-                    horizontal = if (uiStyle == UiStyle.MODERN) 16.dp else 0.dp,
+                    horizontal = if (uiStyle == UiStyle.MODERN || uiStyle == UiStyle.GLASS) 16.dp else 0.dp,
                     vertical = 8.dp
                 )) {
                     SettingsToggle(
@@ -646,17 +646,69 @@ fun AppearanceScreen(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
                     )
                     val currentUiStyle by context.getUiStyleFlow().collectAsState(initial = UiStyle.CLASSIC)
-                    SettingsToggle(
-                        label       = "Modern Layout",
-                        description = "Full-screen artwork, carousels and rich detail pages. Disable for the classic grid layout.",
-                        checked     = currentUiStyle == UiStyle.MODERN,
-                        uiStyle     = uiStyle,
-                        onToggle    = {
-                            scope.launch {
-                                viewModel.saveUiStyle(if (currentUiStyle == UiStyle.MODERN) UiStyle.CLASSIC else UiStyle.MODERN)
+                    val layoutOptions = listOf(
+                        UiStyle.CLASSIC to "Classic",
+                        UiStyle.MODERN  to "Modern",
+                        UiStyle.GLASS   to "Glass",
+                    )
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            layoutOptions.forEach { (style, label) ->
+                                val isSelected = currentUiStyle == style
+                                var optFocused by remember { mutableStateOf(false) }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primary
+                                            else if (optFocused) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surface
+                                        )
+                                        .border(
+                                            width = if (optFocused && !isSelected) 2.dp else 1.dp,
+                                            color = if (optFocused) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(8.dp),
+                                        )
+                                        .onFocusChanged { optFocused = it.isFocused }
+                                        .onKeyEvent { e ->
+                                            if (e.type == KeyEventType.KeyDown &&
+                                                (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter)) {
+                                                scope.launch { viewModel.saveUiStyle(style) }; true
+                                            } else false
+                                        }
+                                        .clickable { scope.launch { viewModel.saveUiStyle(style) } }
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = when {
+                                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                                            optFocused -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            else       -> MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                }
                             }
                         }
-                    )
+                        Text(
+                            text = when (currentUiStyle) {
+                                UiStyle.CLASSIC -> "Classic sidebar with grid views and D-pad rail."
+                                UiStyle.MODERN  -> "Full-screen artwork, carousels and rich detail pages."
+                                UiStyle.GLASS   -> "Sky Glass-style horizontal nav with glass surfaces."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+                        )
+                    }
                 }
             }
 

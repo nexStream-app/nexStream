@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class UiStyle { CLASSIC, MODERN }
+enum class UiStyle { CLASSIC, MODERN, GLASS }
 
 val LocalUiStyle = staticCompositionLocalOf { UiStyle.CLASSIC }
 
