@@ -735,6 +735,7 @@ fun MoviesScreen(
 
     LaunchedEffect(movieWithDetails) { onDialogOpen(movieWithDetails != null) }
 
+    val detailUiStyle = LocalUiStyle.current
     movieWithDetails?.takeIf { !isLoadingDetails }?.let { movie ->
         val isBookmarked = movie.id in watchlistIds
         val resumePositionState by produceState<Long?>(null, movie.id, profileId) {
@@ -752,6 +753,28 @@ fun MoviesScreen(
                 maxAge == null               -> false
                 else                         -> !isAllowedByAgeRating(cert, maxAge, allowNrVal)
             }
+        }
+        if (detailUiStyle == UiStyle.GLASS && !isContentRestricted) {
+            GlassDetailsSheet(
+                movie             = movie,
+                resumePosition    = resumePosition,
+                isBookmarked      = isBookmarked,
+                moreLikeThis      = allMovies.filter { it.categoryName == movie.categoryName && it.id != movie.id }.take(8),
+                onDismiss         = { movieWithDetails = null; isLoadingDetails = false },
+                onPlay            = { startPosition -> movieWithDetails = null; isLoadingDetails = false; onMovieClick(movie.streamUrl, movie.id, startPosition, movie.name) },
+                onTrailer         = movie.trailerUrl?.takeIf { it.isNotBlank() }?.let { _ -> { scope.launch { viewModel.fetchTrailerUrl(movie) } } },
+                onToggleWatchlist = {
+                    watchlistViewModel.toggleWatchlist(WatchlistEntity(id = movie.id,
+                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                        type = WatchlistType.MOVIE, name = movie.name, posterUrl = movie.posterUrl, streamUrl = movie.streamUrl), isBookmarked)
+                },
+                onDownload        = {
+                    app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(
+                        context = context, streamUrl = movie.streamUrl, title = movie.name, posterUrl = movie.posterUrl)
+                    movieWithDetails = null; isLoadingDetails = false
+                },
+            )
+            return@let
         }
         ModernMovieDetailsDialog(
             movie               = movie,

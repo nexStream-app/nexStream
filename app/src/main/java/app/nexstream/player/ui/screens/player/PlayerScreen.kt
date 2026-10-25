@@ -78,6 +78,8 @@ import app.nexstream.player.ui.theme.getAutoFrameRateFlow
 import app.nexstream.player.ui.theme.getSmartBufferFlow
 import app.nexstream.player.ui.theme.saveAspectRatio
 import app.nexstream.player.ui.theme.LocalNexStreamTheme
+import app.nexstream.player.ui.theme.LocalUiStyle
+import app.nexstream.player.ui.theme.UiStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -1391,7 +1393,48 @@ fun PlayerScreen(
                     }
 
                     // ── Bottom control panel ──────────────────────────────────
-                    Column(
+                    val playerBarUiStyle = LocalUiStyle.current
+                    if (playerBarUiStyle == UiStyle.GLASS) {
+                        GlassPlayerBar(
+                            isPlaying         = effectiveIsPlaying,
+                            sliderPosition    = sliderPosition,
+                            duration          = player?.duration ?: 0L,
+                            hasScrubbing      = hasScrubbing,
+                            title             = nowPlayingTitle,
+                            subtitle          = nowPlayingSubtitle ?: currentProgramme,
+                            nextProgramme     = nextProgramme,
+                            nextEpisode       = nextEpisodeAvailable,
+                            centreButtons     = centreButtons,
+                            centreIndex       = centreIndex,
+                            focusedZone       = dpadZone.name,
+                            showOptionsPanel  = showOptionsPanel,
+                            optionsButtons    = optionsButtons,
+                            optionsIndex      = optionsIndex,
+                            videoQualityLabel = videoQualityLabel,
+                            onPlayPause       = { if (player?.isPlaying == true) player?.pause() else player?.play() },
+                            onSeek            = { f -> player?.seekTo((f * (player?.duration ?: 0L)).toLong()) },
+                            onBack            = { stopPlayback(); onBack() },
+                            onSubtitles       = { showMediaSheet = true },
+                            onSpeed           = { showSpeedDialog = true },
+                            onNextEpisode     = { nextEpisodeAvailable?.let { onPlayNextEpisode?.invoke(it) } },
+                            onAspect          = {
+                                val newResizeMode = when (resizeMode) {
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                    AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                    else                                    -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                }
+                                resizeMode = newResizeMode
+                                val newAspectRatio = when (newResizeMode) {
+                                    AspectRatioFrameLayout.RESIZE_MODE_FIT  -> AspectRatio.FIT
+                                    AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatio.FILL
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatio.ZOOM
+                                    else                                    -> AspectRatio.FIT
+                                }
+                                scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
+                            },
+                            modifier          = Modifier.align(Alignment.BottomCenter),
+                        )
+                    } else Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)

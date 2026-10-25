@@ -1676,6 +1676,7 @@ private fun ClassicMainLayout(
             onRefreshSports        = { homePageViewModel.refreshSports() },
             isRefreshingSports     = homePageViewModel.isLoadingSports.collectAsState().value,
             sportsEditTick         = sportsEditTick,
+            onGuideCategoryChange  = setSelectedGuideCategory,
         )
     }
 }
@@ -1852,6 +1853,7 @@ private fun MainContentArea(
     onRefreshSports: () -> Unit,
     isRefreshingSports: Boolean,
     sportsEditTick: Int = 0,
+    onGuideCategoryChange: (String?) -> Unit = {},
 ) {
     var showMultiScreen by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -1895,6 +1897,8 @@ private fun MainContentArea(
                 onPendingChannelConsumed = onPendingEpgChannelConsumed,
                 onFocusUp               = onEpgFocusUp,
                 panelExpanded           = sidebarPanelExpanded,
+                onCategorySelect        = onGuideCategoryChange,
+                onChannelPlay           = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
             )
         }
 
@@ -2529,6 +2533,7 @@ private fun ModernMainLayout(
             onRefreshSports              = onRefreshSports,
             isRefreshingSports           = isRefreshingSports,
             sportsEditTick               = sportsEditTick,
+            onGuideCategoryChange        = setSelectedGuideCategory,
         )
     }
 }
