@@ -72,6 +72,7 @@ import app.nexstream.player.ui.screens.watchlist.WatchlistScreen
 import app.nexstream.player.ui.screens.watchlist.WatchlistViewModel
 import app.nexstream.player.ui.screens.recentlywatched.RecentlyWatchedScreen
 import app.nexstream.player.ui.screens.home.HomePageViewModel
+import app.nexstream.player.ui.screens.home.GlassHomeScreen
 import app.nexstream.player.ui.screens.home.ModernHomeScreen
 import app.nexstream.player.ui.screens.music.MusicScreen
 import app.nexstream.player.ui.screens.music.MusicViewModel
@@ -2110,17 +2111,33 @@ private fun MainContentArea(
                 onPlayerLaunch          = onPlayerLaunch,
                 viewModel               = picksViewModel
             )
-            AppRoute.Home -> ModernHomeScreen(
-                firstItemFocusRequester = contentFR,
-                homeRestoreTick         = homeRestoreTick,
-                onPickSelected          = onPickSelected,
-                onPlayerLaunch          = onPlayerLaunch,
-                onChannelPlay           = onWatchlistChannelPlay,
-                onGoToEpg               = { channelName ->
-                    onGoToEpgForChannel(channelName)
-                },
-                sportsEditTick          = sportsEditTick,
-            )
+            AppRoute.Home -> {
+                val homeUiStyle = LocalUiStyle.current
+                if (homeUiStyle == UiStyle.GLASS) {
+                    GlassHomeScreen(
+                        firstItemFocusRequester = contentFR,
+                        homeRestoreTick         = homeRestoreTick,
+                        onPickSelected          = onPickSelected,
+                        onPlayerLaunch          = onPlayerLaunch,
+                        onChannelPlay           = onWatchlistChannelPlay,
+                        onGoToEpg               = { channelName -> onGoToEpgForChannel(channelName) },
+                        onFocusNavBar           = onRailBack,
+                        sportsEditTick          = sportsEditTick,
+                    )
+                } else {
+                    ModernHomeScreen(
+                        firstItemFocusRequester = contentFR,
+                        homeRestoreTick         = homeRestoreTick,
+                        onPickSelected          = onPickSelected,
+                        onPlayerLaunch          = onPlayerLaunch,
+                        onChannelPlay           = onWatchlistChannelPlay,
+                        onGoToEpg               = { channelName ->
+                            onGoToEpgForChannel(channelName)
+                        },
+                        sportsEditTick          = sportsEditTick,
+                    )
+                }
+            }
             AppRoute.Music -> MusicScreen(
                 selectedCategory = selectedMusicCategory,
                 onBack           = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
