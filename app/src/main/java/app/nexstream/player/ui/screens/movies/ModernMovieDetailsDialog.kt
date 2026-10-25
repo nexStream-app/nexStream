@@ -111,6 +111,20 @@ private fun extractYoutubeId(url: String): String? {
     return patterns.firstNotNullOfOrNull { it.find(url)?.groupValues?.get(1) }
 }
 
+private fun formatReleaseDate(date: String?): String? {
+    if (date.isNullOrBlank()) return null
+    val parts = date.trim().split("-")
+    val year  = parts.getOrNull(0)?.toIntOrNull() ?: return null
+    val month = parts.getOrNull(1)?.toIntOrNull()
+    val day   = parts.getOrNull(2)?.toIntOrNull()
+    val months = arrayOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+    return when {
+        month != null && month in 1..12 && day != null && day in 1..31 -> "$day ${months[month - 1]} $year"
+        month != null && month in 1..12 -> "${months[month - 1]} $year"
+        else -> "$year"
+    }
+}
+
 // ── Main composable ────────────────────────────────────────────────────────────
 
 @Composable
@@ -621,7 +635,7 @@ function onYouTubeIframeAPIReady(){
                                 .clickable { showRatingPicker = true },
                         )
                     }
-                    if (!movie.releaseDate.isNullOrEmpty()) Text(movie.releaseDate!!, fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f))
+                    formatReleaseDate(movie.releaseDate)?.let { Text(it, fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f)) }
                     if (!movie.duration.isNullOrEmpty())    Text(movie.duration!!,    fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f))
                 }
 

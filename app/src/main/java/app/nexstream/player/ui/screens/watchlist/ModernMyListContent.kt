@@ -177,7 +177,7 @@ fun ModernMyListContent(
     } else {
         // Specific type: poster-style grid (title overlaid, like SeriesScreen cards)
         LazyVerticalGrid(
-            columns               = GridCells.Adaptive(minSize = 130.dp),
+            columns               = GridCells.Fixed(6),
             modifier              = modifier.fillMaxSize().background(background),
             contentPadding        = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement   = Arrangement.spacedBy(12.dp),

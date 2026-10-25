@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -77,7 +78,9 @@ import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 private enum class MovieSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING_MILDEST("Age Rating (Youngest first)"), AGE_RATING_STRONGEST("Age Rating (Strongest first)")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"),
+    RELEASE_DATE_DESC("Release Date ↓"), RELEASE_DATE_ASC("Release Date ↑"),
+    AGE_RATING_ASC("Age Rating ↑"), AGE_RATING_DESC("Age Rating ↓")
 }
 
 private val AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
@@ -219,13 +222,13 @@ fun MoviesScreen(
                 MovieSortOrder.A_Z             -> filtered.sortedBy { it.name.lowercase() }
                 MovieSortOrder.Z_A             -> filtered.sortedByDescending { it.name.lowercase() }
                 MovieSortOrder.RATING          -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
-                MovieSortOrder.NEWEST_RELEASE  -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
-                MovieSortOrder.OLDEST_RELEASE  -> filtered.sortedBy { parseReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
-                MovieSortOrder.AGE_RATING_MILDEST -> filtered.sortedWith(
+                MovieSortOrder.RELEASE_DATE_DESC -> filtered.sortedByDescending { parseReleaseDateSortKey(it.releaseDate) }
+                MovieSortOrder.RELEASE_DATE_ASC  -> filtered.sortedBy { parseReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
+                MovieSortOrder.AGE_RATING_ASC -> filtered.sortedWith(
                     compareBy<MovieGridItem> { movieCertOrder(it.certification) }
                         .thenBy { it.name.lowercase() }
                 )
-                MovieSortOrder.AGE_RATING_STRONGEST -> filtered.sortedWith(
+                MovieSortOrder.AGE_RATING_DESC -> filtered.sortedWith(
                     compareByDescending<MovieGridItem> { movieCertOrder(it.certification).let { v -> if (v == Int.MAX_VALUE) -1 else v } }
                         .thenBy { it.name.lowercase() }
                 )
@@ -301,18 +304,19 @@ fun MoviesScreen(
 
 
     if (showSortDialog) {
+        var pending by remember { mutableStateOf(sortOrder) }
         AlertDialog(
             onDismissRequest = { showSortDialog = false },
             title = { Text("Sort by") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    MovieSortOrder.entries.forEach { option ->
-                        val selected = option == sortOrder
+                    listOf(MovieSortOrder.A_Z, MovieSortOrder.Z_A, MovieSortOrder.RATING).forEach { option ->
+                        val selected = option == pending
                         Surface(
                             modifier = Modifier.fillMaxWidth()
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                                .clickable { scope.launch { context.applicationContext.saveMovieSortOrder(option.name) }; showSortDialog = false },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { pending = option },
+                            shape = RoundedCornerShape(8.dp),
                             color = if (selected) MaterialTheme.colorScheme.primaryContainer
                                     else MaterialTheme.colorScheme.surface,
                         ) {
@@ -330,9 +334,76 @@ fun MoviesScreen(
                             }
                         }
                     }
+                    // Release Date row with ↑ / ↓ direction chips
+                    val releaseDateSelected = pending == MovieSortOrder.RELEASE_DATE_DESC || pending == MovieSortOrder.RELEASE_DATE_ASC
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (releaseDateSelected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Release Date",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (releaseDateSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = pending == MovieSortOrder.RELEASE_DATE_ASC,
+                                    onClick  = { pending = MovieSortOrder.RELEASE_DATE_ASC },
+                                    label    = { Text("↑", fontSize = 12.sp) },
+                                )
+                                FilterChip(
+                                    selected = pending == MovieSortOrder.RELEASE_DATE_DESC,
+                                    onClick  = { pending = MovieSortOrder.RELEASE_DATE_DESC },
+                                    label    = { Text("↓", fontSize = 12.sp) },
+                                )
+                            }
+                        }
+                    }
+                    // Age Rating row with ↑ / ↓ direction chips
+                    val ageRatingSelected = pending == MovieSortOrder.AGE_RATING_ASC || pending == MovieSortOrder.AGE_RATING_DESC
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (ageRatingSelected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Age Rating",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (ageRatingSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = pending == MovieSortOrder.AGE_RATING_ASC,
+                                    onClick  = { pending = MovieSortOrder.AGE_RATING_ASC },
+                                    label    = { Text("↑", fontSize = 12.sp) },
+                                )
+                                FilterChip(
+                                    selected = pending == MovieSortOrder.AGE_RATING_DESC,
+                                    onClick  = { pending = MovieSortOrder.AGE_RATING_DESC },
+                                    label    = { Text("↓", fontSize = 12.sp) },
+                                )
+                            }
+                        }
+                    }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { context.applicationContext.saveMovieSortOrder(pending.name) }
+                    showSortDialog = false
+                }) { Text("OK") }
+            },
             dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Cancel") } }
         )
     }

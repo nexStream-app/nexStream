@@ -133,6 +133,20 @@ private sealed class InfoBarState {
     object LowSpaceWarning : InfoBarState()
 }
 
+private fun formatReleaseDate(date: String?): String? {
+    if (date.isNullOrBlank()) return null
+    val parts = date.trim().split("-")
+    val year  = parts.getOrNull(0)?.toIntOrNull() ?: return null
+    val month = parts.getOrNull(1)?.toIntOrNull()
+    val day   = parts.getOrNull(2)?.toIntOrNull()
+    val months = arrayOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+    return when {
+        month != null && month in 1..12 && day != null && day in 1..31 -> "$day ${months[month - 1]} $year"
+        month != null && month in 1..12 -> "${months[month - 1]} $year"
+        else -> "$year"
+    }
+}
+
 @Composable
 fun SeriesDetailsDialog(
     series: SeriesEntity,
@@ -715,10 +729,10 @@ function onYouTubeIframeAPIReady(){
                                 color    = Color.White.copy(alpha = 0.70f),
                             )
                         }
-                        val releaseYear = series.releaseDate?.takeIf { it.isNotBlank() }?.take(4)?.takeIf { it.all { c -> c.isDigit() } }
-                        if (releaseYear != null) {
+                        val formattedDate = formatReleaseDate(series.releaseDate)
+                        if (formattedDate != null) {
                             Text("·", color = Color.White.copy(alpha = 0.40f), fontSize = 13.sp)
-                            Text(releaseYear, fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f))
+                            Text(formattedDate, fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f))
                         }
                         if (!series.genre.isNullOrEmpty()) {
                             Text("·", color = Color.White.copy(alpha = 0.40f), fontSize = 13.sp)

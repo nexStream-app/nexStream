@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.draw.clip
 import app.nexstream.player.data.local.entity.EpisodeEntity
@@ -61,7 +62,9 @@ import app.nexstream.player.ui.theme.getSeriesSortOrderFlow
 import app.nexstream.player.ui.theme.saveSeriesSortOrder
 
 private enum class SeriesSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING_MILDEST("Age Rating (Youngest first)"), AGE_RATING_STRONGEST("Age Rating (Strongest first)")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"),
+    RELEASE_DATE_DESC("Release Date ↓"), RELEASE_DATE_ASC("Release Date ↑"),
+    AGE_RATING_ASC("Age Rating ↑"), AGE_RATING_DESC("Age Rating ↓")
 }
 
 private val SERIES_AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
@@ -179,20 +182,20 @@ fun SeriesScreen(
                 SeriesSortOrder.A_Z            -> filtered.sortedBy { it.name.lowercase() }
                 SeriesSortOrder.Z_A            -> filtered.sortedByDescending { it.name.lowercase() }
                 SeriesSortOrder.RATING         -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
-                SeriesSortOrder.NEWEST_RELEASE -> filtered.sortedWith(
+                SeriesSortOrder.RELEASE_DATE_DESC -> filtered.sortedWith(
                     compareByDescending<SeriesGridItem> { parseSeriesReleaseDateSortKey(it.releaseDate) }
                         .thenByDescending { it.addedAt }
                 )
-                SeriesSortOrder.OLDEST_RELEASE -> filtered.sortedWith(
+                SeriesSortOrder.RELEASE_DATE_ASC -> filtered.sortedWith(
                     compareBy<SeriesGridItem> {
                         parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k }
                     }.thenBy { it.addedAt }
                 )
-                SeriesSortOrder.AGE_RATING_MILDEST -> filtered.sortedWith(
+                SeriesSortOrder.AGE_RATING_ASC -> filtered.sortedWith(
                     compareBy<SeriesGridItem> { seriesCertOrder(it.certification) }
                         .thenBy { it.name.lowercase() }
                 )
-                SeriesSortOrder.AGE_RATING_STRONGEST -> filtered.sortedWith(
+                SeriesSortOrder.AGE_RATING_DESC -> filtered.sortedWith(
                     compareByDescending<SeriesGridItem> { seriesCertOrder(it.certification).let { v -> if (v == Int.MAX_VALUE) -1 else v } }
                         .thenBy { it.name.lowercase() }
                 )
@@ -313,17 +316,18 @@ fun SeriesScreen(
     }
 
     if (showSortDialog) {
+        var pending by remember { mutableStateOf(sortOrder) }
         AlertDialog(
             onDismissRequest = { showSortDialog = false },
             title = { Text("Sort by") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SeriesSortOrder.entries.forEach { option ->
-                        val selected = option == sortOrder
+                    listOf(SeriesSortOrder.A_Z, SeriesSortOrder.Z_A, SeriesSortOrder.RATING).forEach { option ->
+                        val selected = option == pending
                         Surface(
                             modifier = Modifier.fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { scope.launch { context.applicationContext.saveSeriesSortOrder(option.name) }; showSortDialog = false },
+                                .clickable { pending = option },
                             shape = RoundedCornerShape(8.dp),
                             color = if (selected) MaterialTheme.colorScheme.primaryContainer
                                     else MaterialTheme.colorScheme.surface,
@@ -342,9 +346,76 @@ fun SeriesScreen(
                             }
                         }
                     }
+                    // Release Date row with ↑ / ↓ direction chips
+                    val releaseDateSelected = pending == SeriesSortOrder.RELEASE_DATE_DESC || pending == SeriesSortOrder.RELEASE_DATE_ASC
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (releaseDateSelected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Release Date",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (releaseDateSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = pending == SeriesSortOrder.RELEASE_DATE_ASC,
+                                    onClick  = { pending = SeriesSortOrder.RELEASE_DATE_ASC },
+                                    label    = { Text("↑", fontSize = 12.sp) },
+                                )
+                                FilterChip(
+                                    selected = pending == SeriesSortOrder.RELEASE_DATE_DESC,
+                                    onClick  = { pending = SeriesSortOrder.RELEASE_DATE_DESC },
+                                    label    = { Text("↓", fontSize = 12.sp) },
+                                )
+                            }
+                        }
+                    }
+                    // Age Rating row with ↑ / ↓ direction chips
+                    val ageRatingSelected = pending == SeriesSortOrder.AGE_RATING_ASC || pending == SeriesSortOrder.AGE_RATING_DESC
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (ageRatingSelected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Age Rating",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (ageRatingSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = pending == SeriesSortOrder.AGE_RATING_ASC,
+                                    onClick  = { pending = SeriesSortOrder.AGE_RATING_ASC },
+                                    label    = { Text("↑", fontSize = 12.sp) },
+                                )
+                                FilterChip(
+                                    selected = pending == SeriesSortOrder.AGE_RATING_DESC,
+                                    onClick  = { pending = SeriesSortOrder.AGE_RATING_DESC },
+                                    label    = { Text("↓", fontSize = 12.sp) },
+                                )
+                            }
+                        }
+                    }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { context.applicationContext.saveSeriesSortOrder(pending.name) }
+                    showSortDialog = false
+                }) { Text("OK") }
+            },
             dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Cancel") } }
         )
     }
