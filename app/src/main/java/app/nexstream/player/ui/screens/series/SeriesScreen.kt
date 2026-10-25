@@ -171,8 +171,15 @@ fun SeriesScreen(
                 SeriesSortOrder.A_Z            -> filtered.sortedBy { it.name.lowercase() }
                 SeriesSortOrder.Z_A            -> filtered.sortedByDescending { it.name.lowercase() }
                 SeriesSortOrder.RATING         -> filtered.sortedByDescending { it.rating?.toDoubleOrNull() ?: -1.0 }
-                SeriesSortOrder.NEWEST_RELEASE -> filtered.sortedByDescending { parseSeriesReleaseDateSortKey(it.releaseDate) }
-                SeriesSortOrder.OLDEST_RELEASE -> filtered.sortedBy { parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k } }
+                SeriesSortOrder.NEWEST_RELEASE -> filtered.sortedWith(
+                    compareByDescending<SeriesGridItem> { parseSeriesReleaseDateSortKey(it.releaseDate) }
+                        .thenByDescending { it.addedAt }
+                )
+                SeriesSortOrder.OLDEST_RELEASE -> filtered.sortedWith(
+                    compareBy<SeriesGridItem> {
+                        parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k }
+                    }.thenBy { it.addedAt }
+                )
                 SeriesSortOrder.AGE_RATING     -> filtered.sortedBy { seriesCertOrder(it.certification) }
             }
         }
