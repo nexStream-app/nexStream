@@ -175,7 +175,7 @@ fun ModernMyListContent(
             }
         }
     } else {
-        // Specific type: flat grid
+        // Specific type: poster-style grid (title overlaid, like SeriesScreen cards)
         LazyVerticalGrid(
             columns               = GridCells.Adaptive(minSize = 130.dp),
             modifier              = modifier.fillMaxSize().background(background),
@@ -194,7 +194,7 @@ fun ModernMyListContent(
                     WatchlistType.MOVIE -> progressMap[item.id] ?: 0f
                     else                -> 0f
                 }
-                MyListCard(
+                PosterCard(
                     item             = item,
                     defaultIcon      = icon,
                     progressFraction = progressFraction,
@@ -308,6 +308,104 @@ private fun MyListCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Poster card — title overlaid on gradient, matching SeriesScreen card style
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun PosterCard(
+    item: WatchlistEntity,
+    defaultIcon: ImageVector,
+    progressFraction: Float,
+    accent: Color,
+    surface: Color,
+    textPrimary: Color,
+    focusRequester: FocusRequester?,
+    onDirectionLeft: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val isFocused = remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isFocused.value) 1.05f else 1.0f, label = "posterScale")
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f / 1.4f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(8.dp))
+            .background(surface)
+            .border(
+                width = if (isFocused.value) 2.dp else 0.dp,
+                color = if (isFocused.value) accent else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { isFocused.value = it.isFocused }
+            .onKeyEvent { ev ->
+                if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (ev.key) {
+                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> { onClick(); true }
+                    Key.DirectionLeft -> if (onDirectionLeft != null) { onDirectionLeft(); true } else false
+                    else -> false
+                }
+            }
+            .clickable { onClick() }
+    ) {
+        if (!item.posterUrl.isNullOrEmpty()) {
+            AsyncImage(
+                model              = item.posterUrl,
+                contentDescription = null,
+                contentScale       = ContentScale.Crop,
+                modifier           = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                imageVector        = defaultIcon,
+                contentDescription = null,
+                tint               = textPrimary.copy(alpha = 0.3f),
+                modifier           = Modifier.align(Alignment.Center).size(36.dp),
+            )
+        }
+        // Bottom gradient + title overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                    )
+                )
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text     = item.name,
+                fontSize = 11.sp,
+                color    = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // Progress bar
+        if (progressFraction > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.4f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progressFraction)
+                        .fillMaxHeight()
+                        .background(accent)
+                )
+            }
+        }
     }
 }
 

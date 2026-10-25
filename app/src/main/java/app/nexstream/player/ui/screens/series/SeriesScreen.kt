@@ -61,7 +61,7 @@ import app.nexstream.player.ui.theme.getSeriesSortOrderFlow
 import app.nexstream.player.ui.theme.saveSeriesSortOrder
 
 private enum class SeriesSortOrder(val label: String) {
-    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING("Age Rating")
+    A_Z("A → Z"), Z_A("Z → A"), RATING("Top Rated"), NEWEST_RELEASE("Newest Release"), OLDEST_RELEASE("Oldest Release"), AGE_RATING_MILDEST("Age Rating (Youngest first)"), AGE_RATING_STRONGEST("Age Rating (Strongest first)")
 }
 
 private val SERIES_AGE_CERT_ORDER = mapOf("U" to 0, "G" to 0, "PG" to 1, "12" to 2, "12A" to 2, "PG-13" to 2, "15" to 3, "R" to 3, "18" to 4, "R18" to 4, "NC-17" to 4)
@@ -157,7 +157,15 @@ fun SeriesScreen(
         isSorting = true
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val base = when {
-                needsFavoritesFilter -> _allSeriesList.filter { it.id in watchlistIds }
+                needsFavoritesFilter -> {
+                    // Match by composite ID, or by raw Xtream series ID (drop 36-char UUID prefix + dash)
+                    // to handle cases where the same series was bookmarked under a different playlist UUID
+                    val rawWatchlistIds = watchlistIds.map { it.drop(37) }.toSet()
+                    _allSeriesList.filter { item ->
+                        item.id in watchlistIds ||
+                            item.id.removePrefix("${item.playlistId}-") in rawWatchlistIds
+                    }
+                }
                 needsRecentFilter    -> _allSeriesList.filter { it.addedAt > 0L && it.addedAt > (System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000) }
                 else                 -> _allSeriesList
             }
@@ -180,7 +188,14 @@ fun SeriesScreen(
                         parseSeriesReleaseDateSortKey(it.releaseDate).let { k -> if (k == 0L) Long.MAX_VALUE else k }
                     }.thenBy { it.addedAt }
                 )
-                SeriesSortOrder.AGE_RATING     -> filtered.sortedBy { seriesCertOrder(it.certification) }
+                SeriesSortOrder.AGE_RATING_MILDEST -> filtered.sortedWith(
+                    compareBy<SeriesGridItem> { seriesCertOrder(it.certification) }
+                        .thenBy { it.name.lowercase() }
+                )
+                SeriesSortOrder.AGE_RATING_STRONGEST -> filtered.sortedWith(
+                    compareByDescending<SeriesGridItem> { seriesCertOrder(it.certification).let { v -> if (v == Int.MAX_VALUE) -1 else v } }
+                        .thenBy { it.name.lowercase() }
+                )
             }
         }
         if (result.isEmpty() && allSeriesList.isNotEmpty() && _allSeriesList.isEmpty()) {

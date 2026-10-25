@@ -715,6 +715,11 @@ function onYouTubeIframeAPIReady(){
                                 color    = Color.White.copy(alpha = 0.70f),
                             )
                         }
+                        val releaseYear = series.releaseDate?.takeIf { it.isNotBlank() }?.take(4)?.takeIf { it.all { c -> c.isDigit() } }
+                        if (releaseYear != null) {
+                            Text("·", color = Color.White.copy(alpha = 0.40f), fontSize = 13.sp)
+                            Text(releaseYear, fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f))
+                        }
                         if (!series.genre.isNullOrEmpty()) {
                             Text("·", color = Color.White.copy(alpha = 0.40f), fontSize = 13.sp)
                             Text(series.genre!!, fontSize = 13.sp, color = Color.White.copy(alpha = 0.70f))
