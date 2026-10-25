@@ -8,8 +8,10 @@ import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,14 +93,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// D-pad zones: CONTROLS = bottom playback row, ICONS = subtitle/aspect row, SLIDER = progress bar
-private enum class DpadZone { CONTROLS, ICONS, SLIDER }
+// D-pad zones: CONTROLS = bottom playback row, OPTIONS = options panel row, ICONS = cast row, SLIDER = progress bar
+private enum class DpadZone { CONTROLS, OPTIONS, ICONS, SLIDER }
 private enum class ErrorButton { GO_BACK, RETRY }
 
 // ICONS zone sub-positions
-private const val ICON_BACK      = 0
-private const val ICON_SUBTITLES = 1
-private const val ICON_ASPECT    = 2
+private const val ICON_BACK = 0
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
@@ -180,10 +180,12 @@ fun PlayerScreen(
     var isTrialExpired  by remember { mutableStateOf(false) }
     var subtitleAtTop   by remember { mutableStateOf(false) }
 
-    // D-pad: two zones — ICONS row and CONTROLS row (below), then SLIDER
-    var dpadZone     by remember { mutableStateOf(DpadZone.CONTROLS) }
-    var iconIndex    by remember { mutableStateOf(ICON_BACK) }
-    var centreIndex  by remember { mutableStateOf(0) }
+    // D-pad: CONTROLS row, OPTIONS panel, ICONS row, SLIDER
+    var dpadZone         by remember { mutableStateOf(DpadZone.CONTROLS) }
+    var iconIndex        by remember { mutableStateOf(ICON_BACK) }
+    var centreIndex      by remember { mutableStateOf(0) }
+    var showOptionsPanel by remember { mutableStateOf(false) }
+    var optionsIndex     by remember { mutableIntStateOf(0) }
 
     val isAndroidTV  = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
     val showAspectRatioButton = true
@@ -920,6 +922,7 @@ fun PlayerScreen(
     // ── D-pad & controls state ────────────────────────────────────────────────
     LaunchedEffect(showControls) {
         if (showControls) { dpadZone = DpadZone.CONTROLS }
+        if (!showControls) showOptionsPanel = false
     }
     LaunchedEffect(showControls, effectiveIsPlaying, controlsInteractionTick) {
         if (showControls && effectiveIsPlaying) { kotlinx.coroutines.delay(5000); showControls = false }
@@ -932,26 +935,33 @@ fun PlayerScreen(
     val hasChannelPrev = isLiveTV && onPreviousChannel != null
     val hasChannelNext = isLiveTV && onNextChannel != null
 
-    // Centre control button list — order matches visual render order
+    // Options panel button list — secondary controls accessed via the ↑ options button
+    val optionsButtons by remember { derivedStateOf {
+        buildList {
+            if (!(isLiveTV || movieId == "catchup")) add("subtitles")
+            if (hasScrubbing) add("speed")
+            if (hasScrubbing) add("resync_av")
+            if (showAspectRatioButton) add("aspect")
+            if (subtitleCueLines.isNotEmpty()) add("sub_pos")
+            if (subtitleCueLines.isNotEmpty()) add("sub_delay")
+        }
+    }}
+
+    // Centre control button list — order matches visual render order (left → right)
     val centreButtons by remember { derivedStateOf {
         buildList {
             add("back")
+            if (episodeId != null) add("prev")   // prev now left-side, before rewind
             if (hasChannelPrev) add("ch_prev")
             if (hasScrubbing) add("rewind")
             add("playpause")
             if (hasScrubbing) add("forward")
-            if (episodeId != null) add("prev")
             if (episodeId != null) add("next")
-            if (!(isLiveTV || movieId == "catchup")) add("subtitles")
             if (hasChannelNext) add("ch_next")
-            if (subtitleCueLines.isNotEmpty()) add("sub_pos")
-            if (subtitleCueLines.isNotEmpty()) add("sub_delay")
             if (isLiveTV || isCatchup) add("sleep")
-            if (hasScrubbing) add("speed")
-            if (hasScrubbing) add("resync_av")
-            if (showAspectRatioButton) add("aspect")
             if (onOpenMultiScreen != null) add("multi_screen")
             add("stats")
+            if (optionsButtons.isNotEmpty()) add("options")
         }
     }}
     LaunchedEffect(showControls) {
@@ -960,8 +970,12 @@ fun PlayerScreen(
     LaunchedEffect(centreButtons) {
         centreIndex = centreIndex.coerceIn(0, (centreButtons.size - 1).coerceAtLeast(0))
     }
+    LaunchedEffect(optionsButtons) {
+        if (optionsButtons.isEmpty()) showOptionsPanel = false
+        optionsIndex = optionsIndex.coerceIn(0, (optionsButtons.size - 1).coerceAtLeast(0))
+    }
 
-    // Icon row: cast (phone-only); aspect is now in centreButtons
+    // Icon row: cast (phone-only)
     val iconButtons by remember(isAndroidTV) {
         derivedStateOf {
             buildList {
@@ -978,21 +992,24 @@ fun PlayerScreen(
     val sliderFocusRequester = remember { FocusRequester() }
 
     // Stable refs for key handler
-    val currentDpadZone      by rememberUpdatedState(dpadZone)
-    val currentIconIndex     by rememberUpdatedState(iconIndex)
-    val currentCentreIndex   by rememberUpdatedState(centreIndex)
-    val currentCentreButtons by rememberUpdatedState(centreButtons)
-    val currentIconButtons   by rememberUpdatedState(iconButtons)
-    val currentNextEpisode   by rememberUpdatedState(nextEpisodeAvailable)
-    val currentResizeMode    by rememberUpdatedState(resizeMode)
+    val currentDpadZone        by rememberUpdatedState(dpadZone)
+    val currentIconIndex       by rememberUpdatedState(iconIndex)
+    val currentCentreIndex     by rememberUpdatedState(centreIndex)
+    val currentCentreButtons   by rememberUpdatedState(centreButtons)
+    val currentIconButtons     by rememberUpdatedState(iconButtons)
+    val currentOptionsButtons  by rememberUpdatedState(optionsButtons)
+    val currentOptionsIndex    by rememberUpdatedState(optionsIndex)
+    val currentNextEpisode     by rememberUpdatedState(nextEpisodeAvailable)
+    val currentResizeMode      by rememberUpdatedState(resizeMode)
 
     // ── Activate focused control ──────────────────────────────────────────────
     val activateFocusedButtonRef = remember { mutableStateOf<() -> Unit>({}) }
     activateFocusedButtonRef.value = {
         when (currentDpadZone) {
-            DpadZone.ICONS -> when (currentIconButtons.getOrNull(currentIconIndex)) {
+            DpadZone.OPTIONS -> when (currentOptionsButtons.getOrNull(currentOptionsIndex)) {
                 "subtitles" -> showMediaSheet = true
-                "cast"      -> showCastSheet = true
+                "speed"     -> showSpeedDialog = true
+                "resync_av" -> { val p = player; p?.seekTo(p.currentPosition) }
                 "aspect"    -> {
                     val newResizeMode = when (currentResizeMode) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -1008,6 +1025,12 @@ fun PlayerScreen(
                     }
                     scope.launch { context.saveAspectRatio(aspectRatioType, newAspectRatio) }
                 }
+                "sub_pos"   -> subtitleAtTop = !subtitleAtTop
+                "sub_delay" -> showSubtitleDelayDialog = true
+                else -> Unit
+            }
+            DpadZone.ICONS -> when (currentIconButtons.getOrNull(currentIconIndex)) {
+                "cast"      -> showCastSheet = true
                 else -> Unit
             }
             DpadZone.CONTROLS -> when (currentCentreButtons.getOrNull(currentCentreIndex)) {
@@ -1054,6 +1077,10 @@ fun PlayerScreen(
                 }
                 "stats"        -> showStats = !showStats
                 "multi_screen" -> onOpenMultiScreen?.invoke()
+                "options"      -> {
+                    showOptionsPanel = !showOptionsPanel
+                    if (showOptionsPanel) { dpadZone = DpadZone.OPTIONS; optionsIndex = 0 }
+                }
                 else           -> Unit
             }
             DpadZone.SLIDER -> { /* seek already applied on L/R */ }
@@ -1108,23 +1135,34 @@ fun PlayerScreen(
 
                     android.view.KeyEvent.KEYCODE_DPAD_UP -> when (currentDpadZone) {
                         DpadZone.CONTROLS -> {
-                            if (hasScrubbing) dpadZone = DpadZone.SLIDER
+                            val opts = currentOptionsButtons
+                            if (showOptionsPanel && opts.isNotEmpty()) {
+                                dpadZone = DpadZone.OPTIONS
+                                optionsIndex = optionsIndex.coerceIn(0, (opts.size - 1).coerceAtLeast(0))
+                            } else if (hasScrubbing) dpadZone = DpadZone.SLIDER
                             else if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
                             controlsInteractionTick++; true
                         }
                         DpadZone.SLIDER -> {
-                            if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
+                            val opts = currentOptionsButtons
+                            if (showOptionsPanel && opts.isNotEmpty()) {
+                                dpadZone = DpadZone.OPTIONS
+                                optionsIndex = optionsIndex.coerceIn(0, (opts.size - 1).coerceAtLeast(0))
+                            } else if (currentIconButtons.isNotEmpty()) dpadZone = DpadZone.ICONS
                             controlsInteractionTick++; true
                         }
-                        DpadZone.ICONS -> { controlsInteractionTick++; true }
+                        DpadZone.OPTIONS -> { controlsInteractionTick++; true }
+                        DpadZone.ICONS   -> { controlsInteractionTick++; true }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_DOWN -> when (currentDpadZone) {
                         DpadZone.ICONS    -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.CONTROLS; controlsInteractionTick++; true }
+                        DpadZone.OPTIONS  -> { if (hasScrubbing) dpadZone = DpadZone.SLIDER else dpadZone = DpadZone.CONTROLS; controlsInteractionTick++; true }
                         DpadZone.SLIDER   -> { dpadZone = DpadZone.CONTROLS; controlsInteractionTick++; true }
                         DpadZone.CONTROLS -> { showControls = false; true }
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> when (currentDpadZone) {
                         DpadZone.ICONS    -> { if (currentIconIndex > 0) iconIndex--; controlsInteractionTick++; true }
+                        DpadZone.OPTIONS  -> { if (currentOptionsIndex > 0) optionsIndex--; controlsInteractionTick++; true }
                         DpadZone.CONTROLS -> { if (currentCentreIndex > 0) centreIndex--; controlsInteractionTick++; true }
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
@@ -1137,6 +1175,7 @@ fun PlayerScreen(
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> when (currentDpadZone) {
                         DpadZone.ICONS    -> { if (currentIconIndex < iconMax) iconIndex++; controlsInteractionTick++; true }
+                        DpadZone.OPTIONS  -> { if (currentOptionsIndex < currentOptionsButtons.size - 1) optionsIndex++; controlsInteractionTick++; true }
                         DpadZone.CONTROLS -> { if (currentCentreIndex < currentCentreButtons.size - 1) centreIndex++; controlsInteractionTick++; true }
                         DpadZone.SLIDER   -> {
                             val duration = player?.duration ?: 0L
@@ -1593,417 +1632,57 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        // ── CONTROLS ROW: back │ rewind │ play/pause │ forward │ next │ subtitles ─
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                        // ── OPTIONS PANEL (slides in above main controls) ──────
+                        AnimatedVisibility(
+                            visible = showOptionsPanel,
+                            enter   = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                            exit    = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
                         ) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Back button (always first)
-                                val backCtrlFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                        currentCentreButtons.getOrNull(currentCentreIndex) == "back"
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(controlBg)
-                                        .then(
-                                            if (backCtrlFocused)
-                                                Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                            else Modifier
-                                        )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    IconButton(
-                                        onClick  = { stopPlayback(); onBack() },
-                                        modifier = Modifier.size(52.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.ArrowBack,
-                                            contentDescription = "Back",
-                                            tint = controlText,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                }
-
-                                if (hasChannelPrev) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_prev"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { onPreviousChannel?.invoke() },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.KeyboardArrowUp,
-                                                contentDescription = "Previous Channel",
-                                                tint = controlText,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (hasScrubbing) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "rewind"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { player?.seekBack() },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.FastRewind,
-                                                contentDescription = "Rewind 60s",
-                                                tint = controlText,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Play / Pause — slightly larger
-                                val playFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                        currentCentreButtons.getOrNull(currentCentreIndex) == "playpause"
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(controlBg)
-                                        .then(
-                                            if (playFocused)
-                                                Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                            else Modifier
-                                        )
-                                ) {
-                                    IconButton(
-                                        onClick  = {
-                                            if (isCasting) {
-                                                if (castIsPlaying) { castManager.pause(); castIsPlaying = false }
-                                                else { castManager.play(); castIsPlaying = true }
-                                            } else {
-                                                if (player?.isPlaying == true) player?.pause() else player?.play()
+                                    if (!isLiveTV && movieId != "catchup") {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "subtitles"
+                                        Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                            IconButton(onClick = { showMediaSheet = true }, modifier = Modifier.size(52.dp)) {
+                                                Icon(Icons.Default.Subtitles, contentDescription = "Audio & Subtitles", tint = controlText, modifier = Modifier.size(28.dp))
                                             }
-                                        },
-                                        modifier = Modifier.size(64.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (effectiveIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
-                                            tint = controlText,
-                                            modifier = Modifier.size(40.dp)
-                                        )
-                                    }
-                                }
-
-                                if (hasScrubbing) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "forward"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { player?.seekForward() },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.FastForward,
-                                                contentDescription = "Forward 60s",
-                                                tint = controlText,
-                                                modifier = Modifier.size(32.dp)
-                                            )
                                         }
                                     }
-                                }
-
-                                if (episodeId != null) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "prev"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { previousEpisodeAvailable?.let { onPlayNextEpisode?.invoke(it) } },
-                                            enabled  = hasPrev,
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SkipPrevious,
-                                                contentDescription = "Previous Episode",
-                                                tint = if (hasPrev) controlText else controlText.copy(alpha = 0.35f),
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                if (episodeId != null) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "next"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { if (hasNext) { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) } },
-                                            enabled  = hasNext,
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SkipNext,
-                                                contentDescription = "Next Episode",
-                                                tint = if (hasNext) controlText else controlText.copy(alpha = 0.35f),
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                // Subtitles button — VOD only (live TV uses CC button below)
-                                if (!isLiveTV && movieId != "catchup") {
-                                    val subFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "subtitles"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (subFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(onClick = { showMediaSheet = true }, modifier = Modifier.size(52.dp)) {
-                                            Icon(
-                                                Icons.Default.Subtitles,
-                                                contentDescription = "Audio & Subtitles",
-                                                tint = controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                if (hasChannelNext) {
-                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_next"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (focused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { onNextChannel?.invoke() },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.KeyboardArrowDown,
-                                                contentDescription = "Next Channel",
-                                                tint = controlText,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-
-                                // Subtitle position toggle — visible when any subtitles are showing
-                                if (subtitleCueLines.isNotEmpty()) {
-                                    val subPosFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sub_pos"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (subPosFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { subtitleAtTop = !subtitleAtTop },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (subtitleAtTop) Icons.Default.VerticalAlignBottom else Icons.Default.VerticalAlignTop,
-                                                contentDescription = if (subtitleAtTop) "Move subtitles to bottom" else "Move subtitles to top",
-                                                tint = controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Subtitle delay button — visible when subtitles are active
-                                if (subtitleCueLines.isNotEmpty()) {
-                                    val subDelayFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sub_delay"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
-                                            .then(
-                                                if (subDelayFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { showSubtitleDelayDialog = true },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Timer,
-                                                contentDescription = "Subtitle Delay",
-                                                tint = if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary else controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Sleep timer button — live TV and catchup
-                                if (isLiveTV || isCatchup) {
-                                    val sleepFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sleep"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
-                                            .then(
-                                                if (sleepFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { showSleepTimerDialog = true },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Snooze,
-                                                contentDescription = "Sleep Timer",
-                                                tint = if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary else controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Playback speed button — VOD and episodes
-                                if (hasScrubbing) {
-                                    val speedFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "speed"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
+                                    if (hasScrubbing) {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "speed"
+                                        Box(modifier = Modifier.clip(CircleShape)
                                             .background(if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
-                                            .then(
-                                                if (speedFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { showSpeedDialog = true },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Speed,
-                                                contentDescription = "Playback Speed",
-                                                tint = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary else controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                            IconButton(onClick = { showSpeedDialog = true }, modifier = Modifier.size(52.dp)) {
+                                                Icon(Icons.Default.Speed, contentDescription = "Playback Speed", tint = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary else controlText, modifier = Modifier.size(28.dp))
+                                            }
                                         }
                                     }
-                                }
-
-                                // Resync A/V button — VoD only
-                                if (hasScrubbing) {
-                                    val resyncFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "resync_av"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (resyncFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { val p = player; p?.seekTo(p.currentPosition) },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SyncAlt,
-                                                contentDescription = "Resync A/V",
-                                                tint = controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
+                                    if (hasScrubbing) {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "resync_av"
+                                        Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                            IconButton(onClick = { val p = player; p?.seekTo(p.currentPosition) }, modifier = Modifier.size(52.dp)) {
+                                                Icon(Icons.Default.SyncAlt, contentDescription = "Resync A/V", tint = controlText, modifier = Modifier.size(28.dp))
+                                            }
                                         }
                                     }
-                                }
-
-                                // Aspect ratio button
-                                if (showAspectRatioButton) {
-                                    val aspectFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "aspect"
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(CircleShape)
-                                                .background(controlBg)
-                                                .then(
-                                                    if (aspectFocused)
-                                                        Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                    else Modifier
-                                                )
-                                        ) {
+                                    if (showAspectRatioButton) {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "aspect"
+                                        Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
                                             IconButton(
                                                 onClick = {
                                                     val newResizeMode = when (resizeMode) {
@@ -2026,68 +1705,217 @@ fun PlayerScreen(
                                                     imageVector = when (resizeMode) {
                                                         AspectRatioFrameLayout.RESIZE_MODE_FIT  -> Icons.Default.FitScreen
                                                         AspectRatioFrameLayout.RESIZE_MODE_FILL -> Icons.Default.Fullscreen
-                                                        else                                    -> Icons.Default.ZoomOutMap
+                                                        else -> Icons.Default.ZoomOutMap
                                                     },
-                                                    contentDescription = "Aspect Ratio",
-                                                    tint = controlText,
-                                                    modifier = Modifier.size(28.dp)
+                                                    contentDescription = "Aspect Ratio", tint = controlText, modifier = Modifier.size(28.dp)
                                                 )
                                             }
                                         }
                                     }
-                                }
-
-                                // Multi-screen (live TV only)
-                                if (onOpenMultiScreen != null) {
-                                    val multiScreenFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                            currentCentreButtons.getOrNull(currentCentreIndex) == "multi_screen"
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(controlBg)
-                                            .then(
-                                                if (multiScreenFocused)
-                                                    Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                                else Modifier
-                                            )
-                                    ) {
-                                        IconButton(
-                                            onClick  = { onOpenMultiScreen.invoke() },
-                                            modifier = Modifier.size(52.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.GridView,
-                                                contentDescription = "Multi-view",
-                                                tint = controlText,
-                                                modifier = Modifier.size(28.dp)
-                                            )
+                                    if (subtitleCueLines.isNotEmpty()) {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "sub_pos"
+                                        Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                            IconButton(onClick = { subtitleAtTop = !subtitleAtTop }, modifier = Modifier.size(52.dp)) {
+                                                Icon(
+                                                    imageVector = if (subtitleAtTop) Icons.Default.VerticalAlignBottom else Icons.Default.VerticalAlignTop,
+                                                    contentDescription = if (subtitleAtTop) "Move subtitles to bottom" else "Move subtitles to top",
+                                                    tint = controlText, modifier = Modifier.size(28.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (subtitleCueLines.isNotEmpty()) {
+                                        val focused = showControls && currentDpadZone == DpadZone.OPTIONS &&
+                                                currentOptionsButtons.getOrNull(currentOptionsIndex) == "sub_delay"
+                                        Box(modifier = Modifier.clip(CircleShape)
+                                            .background(if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                            .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                            IconButton(onClick = { showSubtitleDelayDialog = true }, modifier = Modifier.size(52.dp)) {
+                                                Icon(Icons.Default.Timer, contentDescription = "Subtitle Delay", tint = if (subtitleDelayMs > 0) MaterialTheme.colorScheme.primary else controlText, modifier = Modifier.size(28.dp))
+                                            }
                                         }
                                     }
                                 }
+                            }
+                        }
 
-                                // Stats overlay toggle — always visible
-                                val statsFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
-                                        currentCentreButtons.getOrNull(currentCentreIndex) == "stats"
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(if (showStats) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
-                                        .then(
-                                            if (statsFocused)
-                                                Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint)
-                                            else Modifier
-                                        )
-                                ) {
+                        // ── CONTROLS ROW: 3-column layout — left | centre | right ─
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Left: exit + prev episode + prev channel
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterStart),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val backCtrlFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                        currentCentreButtons.getOrNull(currentCentreIndex) == "back"
+                                Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                    .then(if (backCtrlFocused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                    IconButton(onClick = { stopPlayback(); onBack() }, modifier = Modifier.size(52.dp)) {
+                                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = controlText, modifier = Modifier.size(28.dp))
+                                    }
+                                }
+                                if (episodeId != null) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "prev"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { previousEpisodeAvailable?.let { onPlayNextEpisode?.invoke(it) } }, enabled = hasPrev, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Episode", tint = if (hasPrev) controlText else controlText.copy(alpha = 0.35f), modifier = Modifier.size(32.dp))
+                                        }
+                                    }
+                                }
+                                if (hasChannelPrev) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_prev"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { onPreviousChannel?.invoke() }, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous Channel", tint = controlText, modifier = Modifier.size(32.dp))
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Centre: rewind + play/pause + forward (truly centred)
+                            Row(
+                                modifier = Modifier.align(Alignment.Center),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (hasScrubbing) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "rewind"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(
+                                            onClick = {
+                                                if (isCasting) { val np = (castPositionMs - 60_000L).coerceAtLeast(0L); castPositionMs = np; castManager.seekTo(np) }
+                                                else player?.seekBack()
+                                            },
+                                            modifier = Modifier.size(52.dp)
+                                        ) { Icon(Icons.Default.FastRewind, contentDescription = "Rewind 60s", tint = controlText, modifier = Modifier.size(32.dp)) }
+                                    }
+                                }
+                                val playFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                        currentCentreButtons.getOrNull(currentCentreIndex) == "playpause"
+                                Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                    .then(if (playFocused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
                                     IconButton(
-                                        onClick  = { showStats = !showStats },
-                                        modifier = Modifier.size(52.dp)
+                                        onClick = {
+                                            if (isCasting) {
+                                                if (castIsPlaying) { castManager.pause(); castIsPlaying = false }
+                                                else { castManager.play(); castIsPlaying = true }
+                                            } else {
+                                                if (player?.isPlaying == true) player?.pause() else player?.play()
+                                            }
+                                        },
+                                        modifier = Modifier.size(64.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.BarChart,
-                                            contentDescription = "Stats",
-                                            tint = if (showStats) MaterialTheme.colorScheme.primary else controlText,
-                                            modifier = Modifier.size(28.dp)
+                                            imageVector = if (effectiveIsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (effectiveIsPlaying) "Pause" else "Play",
+                                            tint = controlText, modifier = Modifier.size(40.dp)
                                         )
+                                    }
+                                }
+                                if (hasScrubbing) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "forward"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(
+                                            onClick = {
+                                                if (isCasting) { val dur = player?.duration ?: Long.MAX_VALUE; val np = (castPositionMs + 60_000L).coerceAtMost(dur); castPositionMs = np; castManager.seekTo(np) }
+                                                else player?.seekForward()
+                                            },
+                                            modifier = Modifier.size(52.dp)
+                                        ) { Icon(Icons.Default.FastForward, contentDescription = "Forward 60s", tint = controlText, modifier = Modifier.size(32.dp)) }
+                                    }
+                                }
+                            }
+
+                            // Right: next episode + next channel + sleep + multi_screen + stats + options↑
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (episodeId != null) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "next"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { if (hasNext) { showNextEpisodePrompt = false; onPlayNextEpisode?.invoke(nextEpisodeAvailable!!) } }, enabled = hasNext, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.SkipNext, contentDescription = "Next Episode", tint = if (hasNext) controlText else controlText.copy(alpha = 0.35f), modifier = Modifier.size(32.dp))
+                                        }
+                                    }
+                                }
+                                if (hasChannelNext) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "ch_next"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { onNextChannel?.invoke() }, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next Channel", tint = controlText, modifier = Modifier.size(32.dp))
+                                        }
+                                    }
+                                }
+                                if (isLiveTV || isCatchup) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "sleep"
+                                    Box(modifier = Modifier.clip(CircleShape)
+                                        .background(if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { showSleepTimerDialog = true }, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.Snooze, contentDescription = "Sleep Timer", tint = if (sleepTimerEndsAt > 0L) MaterialTheme.colorScheme.primary else controlText, modifier = Modifier.size(28.dp))
+                                        }
+                                    }
+                                }
+                                if (onOpenMultiScreen != null) {
+                                    val focused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "multi_screen"
+                                    Box(modifier = Modifier.clip(CircleShape).background(controlBg)
+                                        .then(if (focused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(onClick = { onOpenMultiScreen.invoke() }, modifier = Modifier.size(52.dp)) {
+                                            Icon(Icons.Default.GridView, contentDescription = "Multi-view", tint = controlText, modifier = Modifier.size(28.dp))
+                                        }
+                                    }
+                                }
+                                val statsFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                        currentCentreButtons.getOrNull(currentCentreIndex) == "stats"
+                                Box(modifier = Modifier.clip(CircleShape)
+                                    .background(if (showStats) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                    .then(if (statsFocused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                    IconButton(onClick = { showStats = !showStats }, modifier = Modifier.size(52.dp)) {
+                                        Icon(Icons.Default.BarChart, contentDescription = "Stats", tint = if (showStats) MaterialTheme.colorScheme.primary else controlText, modifier = Modifier.size(28.dp))
+                                    }
+                                }
+                                if (optionsButtons.isNotEmpty()) {
+                                    val optFocused = showControls && currentDpadZone == DpadZone.CONTROLS &&
+                                            currentCentreButtons.getOrNull(currentCentreIndex) == "options"
+                                    Box(modifier = Modifier.clip(CircleShape)
+                                        .background(if (showOptionsPanel) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else controlBg)
+                                        .then(if (optFocused) Modifier.border(2.dp, focusBorder, CircleShape).background(focusBgTint) else Modifier)) {
+                                        IconButton(
+                                            onClick = {
+                                                showOptionsPanel = !showOptionsPanel
+                                                if (showOptionsPanel) { dpadZone = DpadZone.OPTIONS; optionsIndex = 0 }
+                                            },
+                                            modifier = Modifier.size(52.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (showOptionsPanel) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                                contentDescription = "Options",
+                                                tint = if (showOptionsPanel) MaterialTheme.colorScheme.primary else controlText,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
