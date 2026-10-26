@@ -51,7 +51,7 @@ import java.util.*
 import kotlinx.coroutines.launch
 
 private val QUALITY_RE = Regex(
-    """[\s._\-([](4K|UHD|2160[Pp]?|FHD|1080[Pp]?|HD|720[Pp]?|576[Pp]?|480[Pp]?|SD)[\s.)_\]-]*$""",
+    """[\s._\-(\[](4K|UHD|2160[Pp]?|FHD|1080[Pp]?|HD|720[Pp]?|576[Pp]?|480[Pp]?|SD)[\s.)_\]-]*$""",
     setOf(RegexOption.IGNORE_CASE)
 )
 private val QUALITY_RANK = mapOf(
