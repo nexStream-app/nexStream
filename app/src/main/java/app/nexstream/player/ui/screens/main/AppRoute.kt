@@ -20,6 +20,7 @@ sealed interface AppRoute {
     data object Picks       : AppRoute
     data object Music       : AppRoute
     data object Device      : AppRoute
+    data object Sports      : AppRoute
 
     // ── Settings sub-destinations ─────────────────────────────────────────────
     data object Settings             : AppRoute
@@ -54,6 +55,7 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
     AppRoute.Picks                                    -> AppRoute.Picks
     AppRoute.Music                                    -> AppRoute.Music
     AppRoute.Device                                   -> AppRoute.Device
+    AppRoute.Sports                                   -> AppRoute.Sports
     AppRoute.Settings,
     AppRoute.SettingsPlaylists,
     AppRoute.SettingsAppearance,

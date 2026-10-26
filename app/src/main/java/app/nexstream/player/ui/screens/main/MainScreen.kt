@@ -3,6 +3,8 @@ package app.nexstream.player.ui.screens.main
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -110,6 +112,7 @@ private fun String?.asAppRoute(): AppRoute = when (this) {
     "MyList"    -> AppRoute.MyList
     "Reminders" -> AppRoute.Reminders
     "Downloads"   -> AppRoute.Downloads
+    "Sports"      -> AppRoute.Sports
     else          -> AppRoute.Guide
 }
 
@@ -1867,6 +1870,7 @@ private fun MainContentArea(
     onGuideCategoryChange: (String?) -> Unit = {},
 ) {
     var showMultiScreen by remember { mutableStateOf(false) }
+    val contentUiStyle = LocalUiStyle.current
     Box(modifier = modifier) {
         val epgActive = currentRoute == AppRoute.Guide
         Box(
@@ -1882,35 +1886,60 @@ private fun MainContentArea(
                     }
                 } else Modifier)
         ) {
-            EPGScreen(
-                selectedCategory          = selectedGuideCategory,
-                isContentFocused          = epgActive && zone == Zone.CONTENT,
-                onPlayerVisibilityChanged = onEpgPlayerVisibleChange,
-                onBack                    = epgOnBack,
-                onGridFocusRequesterReady = { fn -> onEpgFocusRequestReady(fn) },
-                onDialogOpen              = onDialogOpen,
-                watchlistIds              = watchlistIds,
-                onToggleChannelWatchlist  = { channelId, channelName, logoUrl, streamUrl ->
-                    val isBookmarked = channelId in watchlistIds
-                    watchlistViewModel.toggleWatchlist(
-                        app.nexstream.player.data.local.entity.WatchlistEntity(
-                            id        = channelId,
-                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                            type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
-                            name      = channelName,
-                            posterUrl = logoUrl,
-                            streamUrl = streamUrl
-                        ),
-                        isBookmarked
-                    )
-                },
-                pendingChannelName       = pendingEpgChannelName,
-                onPendingChannelConsumed = onPendingEpgChannelConsumed,
-                onFocusUp               = onEpgFocusUp,
-                panelExpanded           = sidebarPanelExpanded,
-                onCategorySelect        = onGuideCategoryChange,
-                onChannelPlay           = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
-            )
+            if (contentUiStyle == UiStyle.GLASS) {
+                app.nexstream.player.ui.screens.epg.GlassGuide(
+                    selectedCategory         = selectedGuideCategory,
+                    isContentFocused         = epgActive && zone == Zone.CONTENT,
+                    watchlistIds             = watchlistIds,
+                    onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
+                        val isBookmarked = channelId in watchlistIds
+                        watchlistViewModel.toggleWatchlist(
+                            app.nexstream.player.data.local.entity.WatchlistEntity(
+                                id        = channelId,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                                name      = channelName,
+                                posterUrl = logoUrl,
+                                streamUrl = streamUrl
+                            ),
+                            isBookmarked
+                        )
+                    },
+                    onFocusUp        = onEpgFocusUp,
+                    onChannelPlay    = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
+                    onCategorySelect = onGuideCategoryChange,
+                )
+            } else {
+                EPGScreen(
+                    selectedCategory          = selectedGuideCategory,
+                    isContentFocused          = epgActive && zone == Zone.CONTENT,
+                    onPlayerVisibilityChanged = onEpgPlayerVisibleChange,
+                    onBack                    = epgOnBack,
+                    onGridFocusRequesterReady = { fn -> onEpgFocusRequestReady(fn) },
+                    onDialogOpen              = onDialogOpen,
+                    watchlistIds              = watchlistIds,
+                    onToggleChannelWatchlist  = { channelId, channelName, logoUrl, streamUrl ->
+                        val isBookmarked = channelId in watchlistIds
+                        watchlistViewModel.toggleWatchlist(
+                            app.nexstream.player.data.local.entity.WatchlistEntity(
+                                id        = channelId,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                                name      = channelName,
+                                posterUrl = logoUrl,
+                                streamUrl = streamUrl
+                            ),
+                            isBookmarked
+                        )
+                    },
+                    pendingChannelName       = pendingEpgChannelName,
+                    onPendingChannelConsumed = onPendingEpgChannelConsumed,
+                    onFocusUp               = onEpgFocusUp,
+                    panelExpanded           = sidebarPanelExpanded,
+                    onCategorySelect        = onGuideCategoryChange,
+                    onChannelPlay           = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
+                )
+            }
         }
 
         when (currentRoute) {
@@ -2182,6 +2211,29 @@ private fun MainContentArea(
                     )
                 }
             }
+            AppRoute.Sports -> {
+                val sportsHomeVm: app.nexstream.player.ui.screens.home.HomePageViewModel = hiltViewModel()
+                val sportsEvents by sportsHomeVm.filteredSportsEvents.collectAsState()
+                val sportsCategories by sportsHomeVm.sportsCategories.collectAsState()
+                val selectedSportCat by sportsHomeVm.selectedSportCategory.collectAsState()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.material3.MaterialTheme.colorScheme.background)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = app.nexstream.player.ui.theme.GlassTokens.ScreenGutter, vertical = 24.dp),
+                ) {
+                    app.nexstream.player.ui.screens.home.GlassSportsScreen(
+                        events           = sportsEvents,
+                        categories       = sportsCategories,
+                        selectedCategory = selectedSportCat,
+                        onCategorySelect = { sportsHomeVm.selectSportCategory(it) },
+                        onChannelPlay    = onSearchChannelPlay,
+                        onFocusNavBar    = onRailBack,
+                        firstItemFocusRequester = contentFR,
+                    )
+                }
+            }
             AppRoute.Music -> MusicScreen(
                 selectedCategory = selectedMusicCategory,
                 onBack           = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
@@ -2404,6 +2456,16 @@ private fun ModernMainLayout(
                     activeProfileEmoji = activeProfileEmoji,
                     activeProfileName  = activeProfileName,
                     onProfileClick     = { setShowProfileSwitch(true) },
+                    onSearchClick      = {
+                        setCurrentRoute(AppRoute.Search)
+                        setZone(Zone.CONTENT)
+                        scope.launch { kotlinx.coroutines.delay(50); focusContent() }
+                    },
+                    onSettingsClick    = {
+                        setCurrentRoute(AppRoute.Settings)
+                        setZone(Zone.CONTENT)
+                        scope.launch { kotlinx.coroutines.delay(50); focusContent() }
+                    },
                     onStopPlayer       = { if (showPlayer) onPlayerBack(currentRoute) },
                 )
             } else {

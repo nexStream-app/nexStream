@@ -7,13 +7,13 @@ import app.nexstream.player.data.local.entity.ChannelIconProjection
 
 @Dao
 interface ChannelDao {
-    @Query("SELECT * FROM channels WHERE playlistId = :playlistId ORDER BY sortIndex ASC")
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId ORDER BY sortIndex ASC, name ASC")
     fun getChannelsByPlaylist(playlistId: String): Flow<List<ChannelEntity>>
 
-    @Query("SELECT * FROM channels WHERE isFavourite = 1 ORDER BY sortIndex ASC")
+    @Query("SELECT * FROM channels WHERE isFavourite = 1 ORDER BY sortIndex ASC, name ASC")
     fun getFavouriteChannels(): Flow<List<ChannelEntity>>
 
-    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' ORDER BY sortIndex ASC")
+    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' ORDER BY sortIndex ASC, name ASC")
     fun searchChannels(query: String): Flow<List<ChannelEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -25,18 +25,18 @@ interface ChannelDao {
     @Update
     suspend fun update(channel: ChannelEntity)
 
-    @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
+    @Query("SELECT * FROM channels ORDER BY sortIndex ASC, name ASC")
     fun getAllChannels(): Flow<List<ChannelEntity>>
 
     @Query("SELECT c.* FROM channels c INNER JOIN playlists p ON c.playlistId = p.id WHERE p.enabled = 1 ORDER BY c.sortIndex ASC")
     fun getEnabledChannels(): Flow<List<ChannelEntity>>
 
-    @Query("SELECT * FROM channels ORDER BY sortIndex ASC")
+    @Query("SELECT * FROM channels ORDER BY sortIndex ASC, name ASC")
     suspend fun getAllChannelsOnce(): List<ChannelEntity>
 
     @Query("SELECT * FROM channels WHERE streamUrl = :streamUrl LIMIT 1")
     fun getChannelByStreamUrl(streamUrl: String): Flow<ChannelEntity?>
-    @Query("SELECT groupTitle FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' GROUP BY groupTitle ORDER BY MIN(sortIndex) ASC")
+    @Query("SELECT groupTitle FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' GROUP BY groupTitle ORDER BY MIN(sortIndex) ASC, MIN(name) ASC")
     fun getAllCategories(): Flow<List<String>>
 
     @Query("SELECT groupTitle, COUNT(*) as count FROM channels WHERE groupTitle IS NOT NULL AND groupTitle != '' GROUP BY groupTitle")
