@@ -119,6 +119,7 @@ private fun String?.asAppRoute(): AppRoute = when (this) {
     "Reminders" -> AppRoute.Reminders
     "Downloads"   -> AppRoute.Downloads
     "Sports"      -> AppRoute.Sports
+    "LiveTV"      -> AppRoute.LiveTV
     else          -> AppRoute.Guide
 }
 
@@ -363,6 +364,7 @@ fun MainScreen(
             when (currentRoute) {
                 AppRoute.Guide -> epgFocusRequest?.invoke()
                     ?: try { contentFR.requestFocus() } catch (_: Exception) {}
+                AppRoute.LiveTV -> try { contentFR.requestFocus() } catch (_: Exception) {}
                 else -> try { contentFR.requestFocus() } catch (_: Exception) {}
             }
             return
@@ -1885,44 +1887,48 @@ private fun MainContentArea(
         glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
     }
     Box(modifier = modifier) {
-        val epgActive = currentRoute == AppRoute.Guide
-        Box(
-            modifier = Modifier.fillMaxSize()
-                .graphicsLayer { alpha = if (epgActive) 1f else 0f }
-                .then(if (!epgActive) Modifier.focusProperties { canFocus = false } else Modifier)
-                .then(if (!epgActive) Modifier.pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            event.changes.forEach { it.consume() }
+        // Glass: Live TV channel browser — only rendered when active so preview player is disposed on exit
+        if (contentUiStyle == UiStyle.GLASS && currentRoute == AppRoute.LiveTV) {
+            app.nexstream.player.ui.screens.epg.GlassGuide(
+                selectedCategory         = selectedGuideCategory,
+                isContentFocused         = zone == Zone.CONTENT,
+                watchlistIds             = watchlistIds,
+                onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
+                    val isBookmarked = channelId in watchlistIds
+                    watchlistViewModel.toggleWatchlist(
+                        app.nexstream.player.data.local.entity.WatchlistEntity(
+                            id        = channelId,
+                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                            type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                            name      = channelName,
+                            posterUrl = logoUrl,
+                            streamUrl = streamUrl
+                        ),
+                        isBookmarked
+                    )
+                },
+                onFocusUp        = onEpgFocusUp,
+                onChannelPlay    = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
+                onCategorySelect = onGuideCategoryChange,
+            )
+        }
+
+        // Classic/Modern: EPG always in composition (alpha trick so EPG grid state is preserved)
+        if (contentUiStyle != UiStyle.GLASS) {
+            val epgActive = currentRoute == AppRoute.Guide
+            Box(
+                modifier = Modifier.fillMaxSize()
+                    .graphicsLayer { alpha = if (epgActive) 1f else 0f }
+                    .then(if (!epgActive) Modifier.focusProperties { canFocus = false } else Modifier)
+                    .then(if (!epgActive) Modifier.pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                event.changes.forEach { it.consume() }
+                            }
                         }
-                    }
-                } else Modifier)
-        ) {
-            if (contentUiStyle == UiStyle.GLASS) {
-                app.nexstream.player.ui.screens.epg.GlassGuide(
-                    selectedCategory         = selectedGuideCategory,
-                    isContentFocused         = epgActive && zone == Zone.CONTENT,
-                    watchlistIds             = watchlistIds,
-                    onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
-                        val isBookmarked = channelId in watchlistIds
-                        watchlistViewModel.toggleWatchlist(
-                            app.nexstream.player.data.local.entity.WatchlistEntity(
-                                id        = channelId,
-                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                                type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
-                                name      = channelName,
-                                posterUrl = logoUrl,
-                                streamUrl = streamUrl
-                            ),
-                            isBookmarked
-                        )
-                    },
-                    onFocusUp        = onEpgFocusUp,
-                    onChannelPlay    = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
-                    onCategorySelect = onGuideCategoryChange,
-                )
-            } else {
+                    } else Modifier)
+            ) {
                 EPGScreen(
                     selectedCategory          = selectedGuideCategory,
                     isContentFocused          = epgActive && zone == Zone.CONTENT,
@@ -2374,6 +2380,39 @@ private fun MainContentArea(
                 isContentFocused        = zone == Zone.CONTENT,
                 onPlayerLaunch          = onPlayerLaunch,
             )
+            // Glass Guide = EPG programme grid; Live TV is handled by GlassGuide block above
+            AppRoute.Guide -> if (contentUiStyle == UiStyle.GLASS) {
+                EPGScreen(
+                    selectedCategory          = selectedGuideCategory,
+                    isContentFocused          = zone == Zone.CONTENT,
+                    onPlayerVisibilityChanged = onEpgPlayerVisibleChange,
+                    onBack                    = epgOnBack,
+                    onGridFocusRequesterReady = { fn -> onEpgFocusRequestReady(fn) },
+                    onDialogOpen              = onDialogOpen,
+                    watchlistIds              = watchlistIds,
+                    onToggleChannelWatchlist  = { channelId, channelName, logoUrl, streamUrl ->
+                        val isBookmarked = channelId in watchlistIds
+                        watchlistViewModel.toggleWatchlist(
+                            app.nexstream.player.data.local.entity.WatchlistEntity(
+                                id        = channelId,
+                                profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                                name      = channelName,
+                                posterUrl = logoUrl,
+                                streamUrl = streamUrl
+                            ),
+                            isBookmarked
+                        )
+                    },
+                    pendingChannelName       = pendingEpgChannelName,
+                    onPendingChannelConsumed = onPendingEpgChannelConsumed,
+                    onFocusUp               = onEpgFocusUp,
+                    panelExpanded           = false,
+                    onCategorySelect        = onGuideCategoryChange,
+                    onChannelPlay           = { url, name -> onPlayerLaunch(url, null, null, null, 0L, name, null, null) },
+                )
+            }
+            AppRoute.LiveTV -> Unit // handled by GlassGuide block above the when()
             else -> Unit
         }
 

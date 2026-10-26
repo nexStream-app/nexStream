@@ -40,6 +40,7 @@ import java.time.format.DateTimeFormatter
 
 private val GLASS_NAV_ITEMS = listOf(
     AppRoute.Home    to "Home",
+    AppRoute.LiveTV  to "Live TV",
     AppRoute.Guide   to "Guide",
     AppRoute.Sports  to "Sports",
     AppRoute.Movies  to "Movies",

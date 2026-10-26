@@ -21,6 +21,7 @@ sealed interface AppRoute {
     data object Music       : AppRoute
     data object Device      : AppRoute
     data object Sports      : AppRoute
+    data object LiveTV      : AppRoute  // Glass-only: channel browser with live preview
 
     // ── Settings sub-destinations ─────────────────────────────────────────────
     data object Settings             : AppRoute
@@ -56,6 +57,7 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
     AppRoute.Music                                    -> AppRoute.Music
     AppRoute.Device                                   -> AppRoute.Device
     AppRoute.Sports                                   -> AppRoute.Sports
+    AppRoute.LiveTV                                   -> AppRoute.LiveTV
     AppRoute.Settings,
     AppRoute.SettingsPlaylists,
     AppRoute.SettingsAppearance,
@@ -73,7 +75,7 @@ fun AppRoute.rootSection(): AppRoute = when (this) {
 
 /** True for routes that have a category panel. */
 val AppRoute.hasCategoryPanel: Boolean
-    get() = this == AppRoute.Home || this == AppRoute.Guide || this == AppRoute.Movies ||
+    get() = this == AppRoute.Home || this == AppRoute.Guide || this == AppRoute.LiveTV || this == AppRoute.Movies ||
             this == AppRoute.Series || this == AppRoute.CatchUp || this.isSettings ||
             this == AppRoute.Recent || this == AppRoute.Search ||
             this == AppRoute.MyList || this == AppRoute.Reminders ||

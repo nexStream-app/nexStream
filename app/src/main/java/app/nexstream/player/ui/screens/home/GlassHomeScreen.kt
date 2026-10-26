@@ -106,15 +106,15 @@ fun GlassHomeScreen(
             modifier = Modifier.padding(
                 start = GlassTokens.ScreenGutter,
                 end = GlassTokens.ScreenGutter,
-                top = 32.dp,
+                top = 20.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(32.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (continueWatching.isNotEmpty()) {
                 GlassRail(
                     title = "Continue Watching",
                     items = continueWatching,
-                    tileWidth = 280.dp,
+                    tileWidth = 200.dp,
                 ) { _, item: RecentlyWatchedEntity, tileMod ->
                     GlassTile(
                         imageUrl = item.logoUrl,
@@ -177,7 +177,7 @@ private fun GlassHeroBanner(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(400.dp),
+            .height(260.dp),
     ) {
         AsyncImage(
             model = heroItem?.posterUrl,
@@ -210,24 +210,24 @@ private fun GlassHeroBanner(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = GlassTokens.ScreenGutter, bottom = 48.dp)
-                .widthIn(max = 500.dp),
+                .padding(start = GlassTokens.ScreenGutter, bottom = 20.dp)
+                .widthIn(max = 460.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (heroItem != null) {
                 Text(
                     text = heroItem.title,
                     color = GlassTokens.TextPrimary,
-                    fontSize = 32.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = heroItem.overview,
                     color = GlassTokens.TextSecondary,
-                    fontSize = 13.sp,
-                    maxLines = 2,
+                    fontSize = 12.sp,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
