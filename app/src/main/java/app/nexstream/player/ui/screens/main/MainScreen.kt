@@ -57,10 +57,16 @@ import app.nexstream.player.ui.screens.catchup.CatchUpScreen
 import app.nexstream.player.ui.screens.catchup.catchUpDateLabel
 import app.nexstream.player.ui.screens.catchup.todayStart
 import app.nexstream.player.ui.screens.epg.EPGScreen
+import app.nexstream.player.ui.screens.movies.GlassDetailsSheet
+import app.nexstream.player.ui.screens.movies.GlassMoviesContent
+import app.nexstream.player.ui.screens.movies.ModernMovieDetailsDialog
 import app.nexstream.player.ui.screens.movies.MoviesScreen
 import app.nexstream.player.ui.screens.search.SearchScreen
+import app.nexstream.player.ui.screens.series.GlassSeriesContent
+import app.nexstream.player.ui.screens.series.SeriesDetailsDialog
 import app.nexstream.player.ui.screens.series.SeriesScreen
 import app.nexstream.player.ui.screens.series.SeriesViewModel
+import app.nexstream.player.data.local.entity.SeriesEntity
 import app.nexstream.player.ui.screens.settings.SettingsScreen
 import app.nexstream.player.ui.screens.movies.MoviesViewModel
 import app.nexstream.player.ui.screens.epg.EPGViewModel
@@ -1871,6 +1877,13 @@ private fun MainContentArea(
 ) {
     var showMultiScreen by remember { mutableStateOf(false) }
     val contentUiStyle = LocalUiStyle.current
+
+    // Glass movie dialog
+    var glassSelectedMovieId by remember { mutableStateOf<String?>(null) }
+    var glassMovieEntity by remember { mutableStateOf<MovieEntity?>(null) }
+    LaunchedEffect(glassSelectedMovieId) {
+        glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
+    }
     Box(modifier = modifier) {
         val epgActive = currentRoute == AppRoute.Guide
         Box(
@@ -1943,66 +1956,182 @@ private fun MainContentArea(
         }
 
         when (currentRoute) {
-            AppRoute.Movies -> MoviesScreen(
-                restoreIndex  = lastMovieIndex,
-                restoreTick   = movieRestoreTick,
-                onItemFocused = onMovieIndexChange,
-                selectedCategory        = selectedMovieCategory,
-                showSearch              = showMovieSearch,
-                firstItemFocusRequester = null,
-                onMovieClick = { streamUrl, movieId, startPosition, movieName ->
-                    onPlayerLaunch(streamUrl, movieId, null, null, startPosition, movieName, null, null)
-                    scope.launch {
-                        movieId?.let { id -> repository.getMovieById(id)?.let { movie ->
-                            repository.recordRecentlyWatchedMovie(movie)
-                            onNowPlayingDescriptionChange(movie.plot)
-                        }}
-                    }
-                },
-                onBack                  = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
-                onNavigateToAddPlaylist = onNavigateToAddPlaylist,
-                onRequestSidebarFocus   = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
-                onGridViewReady         = onMovieGridViewReady,
-                onContentFocused        = { if (zone == Zone.PANEL || zone == Zone.CONTENT) onZoneContent() },
-                onDialogOpen            = onDialogOpen,
-                silentFilterQuery       = pendingMovieGoTo,
-                onSilentFilterConsumed  = onSilentMovieFilterConsumed,
-                onKeyboardDismissed      = onKeyboardMovieDismissed,
-                onKeyboardDismissedEmpty = onKeyboardMovieDismissedEmpty,
-                onCategorySelect         = onMovieCategoryChange
-            )
-
-            AppRoute.Series -> SeriesScreen(
-                restoreIndex  = lastSeriesIndex,
-                restoreTick   = seriesRestoreTick,
-                onItemFocused = onSeriesIndexChange,
-                selectedCategory        = selectedSeriesCategory,
-                showSearch              = showSeriesSearch,
-                firstItemFocusRequester = null,
-                onPlayEpisode = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
-                    onPlayerLaunch(streamUrl, null, episodeId, seriesId, startPosition, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
-                    scope.launch {
-                        val series  = repository.getSeriesById(seriesId)
-                        val episode = repository.getEpisodeById(episodeId)
-                        if (series != null && episode != null) {
-                            repository.recordRecentlyWatchedEpisode(series, episode)
-                            onNowPlayingDescriptionChange(episode.plot ?: series.plot)
+            AppRoute.Movies -> if (contentUiStyle == UiStyle.GLASS) {
+                val glassMoviesVm: MoviesViewModel = hiltViewModel()
+                val glassMovieList by remember(glassMoviesVm, selectedMovieCategory) {
+                    val cat = if (selectedMovieCategory == "__favourites__" || selectedMovieCategory == "__recent__") null
+                              else selectedMovieCategory
+                    glassMoviesVm.getMoviesByCategory(cat)
+                }.collectAsState(initial = emptyList())
+                GlassMoviesContent(
+                    movies                  = glassMovieList,
+                    selectedCategory        = selectedMovieCategory,
+                    firstItemFocusRequester = contentFR,
+                    onFocusNavBar           = onRailBack,
+                    onMovieClick            = { movie -> glassSelectedMovieId = movie.id },
+                    onCategorySelect        = onMovieCategoryChange,
+                    viewModel               = glassMoviesVm,
+                )
+                glassMovieEntity?.let { movie ->
+                    GlassDetailsSheet(
+                        movie          = movie,
+                        resumePosition = movie.lastPlayedPosition,
+                        isBookmarked   = movie.id in watchlistIds,
+                        onDismiss      = { glassSelectedMovieId = null },
+                        onPlay         = { startPos ->
+                            glassSelectedMovieId = null
+                            onPlayerLaunch(movie.streamUrl, movie.id, null, null, startPos, movie.name, null, null)
+                            scope.launch {
+                                repository.recordRecentlyWatchedMovie(movie)
+                                onNowPlayingDescriptionChange(movie.plot)
+                            }
+                        },
+                        onToggleWatchlist = {
+                            watchlistViewModel.toggleWatchlist(
+                                app.nexstream.player.data.local.entity.WatchlistEntity(
+                                    id        = movie.id,
+                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                    type      = app.nexstream.player.data.local.entity.WatchlistType.MOVIE,
+                                    name      = movie.name,
+                                    posterUrl = movie.posterUrl,
+                                    streamUrl = movie.streamUrl,
+                                ),
+                                movie.id in watchlistIds
+                            )
+                        },
+                    )
+                }
+            } else {
+                MoviesScreen(
+                    restoreIndex  = lastMovieIndex,
+                    restoreTick   = movieRestoreTick,
+                    onItemFocused = onMovieIndexChange,
+                    selectedCategory        = selectedMovieCategory,
+                    showSearch              = showMovieSearch,
+                    firstItemFocusRequester = null,
+                    onMovieClick = { streamUrl, movieId, startPosition, movieName ->
+                        onPlayerLaunch(streamUrl, movieId, null, null, startPosition, movieName, null, null)
+                        scope.launch {
+                            movieId?.let { id -> repository.getMovieById(id)?.let { movie ->
+                                repository.recordRecentlyWatchedMovie(movie)
+                                onNowPlayingDescriptionChange(movie.plot)
+                            }}
                         }
-                    }
-                },
-                onBack                  = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
-                onRequestSidebarFocus   = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
-                onNavigateToAddPlaylist = onNavigateToAddPlaylist,
-                onGridViewReady         = onSeriesGridViewReady,
-                onContentFocused        = { if (zone == Zone.PANEL || zone == Zone.CONTENT) onZoneContent() },
-                onDialogOpen            = onDialogOpen,
-                onDownloadEpisode       = onDownloadEpisode,
-                silentFilterQuery       = pendingSeriesGoTo,
-                onSilentFilterConsumed  = onSilentSeriesFilterConsumed,
-                onKeyboardDismissed      = onKeyboardSeriesDismissed,
-                onKeyboardDismissedEmpty = onKeyboardSeriesDismissedEmpty,
-                onCategorySelect         = onSeriesCategoryChange,
-            )
+                    },
+                    onBack                  = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
+                    onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                    onRequestSidebarFocus   = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
+                    onGridViewReady         = onMovieGridViewReady,
+                    onContentFocused        = { if (zone == Zone.PANEL || zone == Zone.CONTENT) onZoneContent() },
+                    onDialogOpen            = onDialogOpen,
+                    silentFilterQuery       = pendingMovieGoTo,
+                    onSilentFilterConsumed  = onSilentMovieFilterConsumed,
+                    onKeyboardDismissed      = onKeyboardMovieDismissed,
+                    onKeyboardDismissedEmpty = onKeyboardMovieDismissedEmpty,
+                    onCategorySelect         = onMovieCategoryChange
+                )
+            }
+
+            AppRoute.Series -> if (contentUiStyle == UiStyle.GLASS) {
+                val glassSeriesVm: SeriesViewModel = hiltViewModel()
+                val glassSeriesList by remember(glassSeriesVm, selectedSeriesCategory) {
+                    val cat = if (selectedSeriesCategory == "__favourites__" || selectedSeriesCategory == "__recent__") null
+                              else selectedSeriesCategory
+                    glassSeriesVm.getSeriesByCategory(cat)
+                }.collectAsState(initial = emptyList())
+                var glassSelectedSeries by remember { mutableStateOf<SeriesEntity?>(null) }
+                var glassSelectedSeriesId by remember { mutableStateOf<String?>(null) }
+                val glassEpisodes by remember(glassSelectedSeriesId) {
+                    if (glassSelectedSeriesId != null) repository.getEpisodesForSeries(glassSelectedSeriesId!!)
+                    else kotlinx.coroutines.flow.flowOf(emptyList())
+                }.collectAsState(initial = emptyList())
+                val glassSeasons = remember(glassEpisodes) {
+                    glassEpisodes.map { it.seasonNum }.distinct().sorted()
+                }
+                GlassSeriesContent(
+                    seriesList              = glassSeriesList,
+                    selectedCategory        = selectedSeriesCategory,
+                    firstItemFocusRequester = contentFR,
+                    onFocusNavBar           = onRailBack,
+                    onSeriesClick           = { seriesItem ->
+                        scope.launch {
+                            glassSelectedSeries = repository.getSeriesById(seriesItem.id)
+                            glassSelectedSeriesId = seriesItem.id
+                        }
+                    },
+                    onCategorySelect        = onSeriesCategoryChange,
+                    viewModel               = glassSeriesVm,
+                )
+                glassSelectedSeries?.let { series ->
+                    SeriesDetailsDialog(
+                        series             = series,
+                        episodes           = glassEpisodes,
+                        seasons            = glassSeasons,
+                        episodeProgressMap = emptyMap(),
+                        isLoading          = false,
+                        isBookmarked       = series.id in watchlistIds,
+                        onDismiss          = { glassSelectedSeries = null; glassSelectedSeriesId = null },
+                        onToggleWatchlist  = {
+                            watchlistViewModel.toggleWatchlist(
+                                app.nexstream.player.data.local.entity.WatchlistEntity(
+                                    id        = series.id,
+                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                    type      = app.nexstream.player.data.local.entity.WatchlistType.SERIES,
+                                    name      = series.name,
+                                    posterUrl = series.posterUrl,
+                                    streamUrl = null,
+                                ),
+                                series.id in watchlistIds
+                            )
+                        },
+                        onDownloadEpisode  = onDownloadEpisode,
+                        onPlayEpisode      = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
+                            glassSelectedSeries = null; glassSelectedSeriesId = null
+                            onPlayerLaunch(streamUrl, null, episodeId, seriesId, startPosition, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
+                            scope.launch {
+                                val fullSeries = repository.getSeriesById(seriesId)
+                                val episode    = repository.getEpisodeById(episodeId)
+                                if (fullSeries != null && episode != null) {
+                                    repository.recordRecentlyWatchedEpisode(fullSeries, episode)
+                                    onNowPlayingDescriptionChange(episode.plot ?: fullSeries.plot)
+                                }
+                            }
+                        },
+                    )
+                }
+            } else {
+                SeriesScreen(
+                    restoreIndex  = lastSeriesIndex,
+                    restoreTick   = seriesRestoreTick,
+                    onItemFocused = onSeriesIndexChange,
+                    selectedCategory        = selectedSeriesCategory,
+                    showSearch              = showSeriesSearch,
+                    firstItemFocusRequester = null,
+                    onPlayEpisode = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
+                        onPlayerLaunch(streamUrl, null, episodeId, seriesId, startPosition, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
+                        scope.launch {
+                            val series  = repository.getSeriesById(seriesId)
+                            val episode = repository.getEpisodeById(episodeId)
+                            if (series != null && episode != null) {
+                                repository.recordRecentlyWatchedEpisode(series, episode)
+                                onNowPlayingDescriptionChange(episode.plot ?: series.plot)
+                            }
+                        }
+                    },
+                    onBack                  = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
+                    onRequestSidebarFocus   = { if (sidebarPanelExpanded) onPanelBack() else onRailBack() },
+                    onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                    onGridViewReady         = onSeriesGridViewReady,
+                    onContentFocused        = { if (zone == Zone.PANEL || zone == Zone.CONTENT) onZoneContent() },
+                    onDialogOpen            = onDialogOpen,
+                    onDownloadEpisode       = onDownloadEpisode,
+                    silentFilterQuery       = pendingSeriesGoTo,
+                    onSilentFilterConsumed  = onSilentSeriesFilterConsumed,
+                    onKeyboardDismissed      = onKeyboardSeriesDismissed,
+                    onKeyboardDismissedEmpty = onKeyboardSeriesDismissedEmpty,
+                    onCategorySelect         = onSeriesCategoryChange,
+                )
+            }
 
             AppRoute.Downloads -> app.nexstream.player.ui.screens.downloads.DownloadsScreen(
                 firstItemFocusRequester = contentFR,
