@@ -121,23 +121,6 @@ fun EPGScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         }
         else -> {
-            val uiStyle = app.nexstream.player.ui.theme.LocalUiStyle.current
-            if (uiStyle == app.nexstream.player.ui.theme.UiStyle.GLASS) {
-                GlassGuide(
-                    selectedCategory          = selectedCategory,
-                    isContentFocused          = isContentFocused,
-                    watchlistIds              = watchlistIds,
-                    onToggleChannelWatchlist  = { channelId, channelName, logoUrl, streamUrl ->
-                        onToggleChannelWatchlist?.invoke(channelId, channelName, logoUrl, streamUrl)
-                    },
-                    onFocusUp                 = onFocusUp,
-                    onChannelPlay             = onChannelPlay,
-                    onCategorySelect          = onCategorySelect,
-                    mainViewModel             = mainViewModel,
-                    viewModel                 = viewModel,
-                )
-                return
-            }
             // Resolve group channel IDs when category is a group
             var groupChannelIds by remember { mutableStateOf<Set<String>?>(null) }
             LaunchedEffect(selectedCategory) {

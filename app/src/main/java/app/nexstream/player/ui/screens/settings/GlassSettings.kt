@@ -29,6 +29,8 @@ import app.nexstream.player.ui.screens.appearance.AppearanceScreen
 import app.nexstream.player.ui.screens.appearance.AppearanceViewModel
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.theme.GlassTokens
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private data class GlassSettingsSection(
     val route: AppRoute,
@@ -63,15 +65,25 @@ fun GlassSettings(
     isRefreshingSports: Boolean = false,
     viewModel: AppearanceViewModel = hiltViewModel(),
 ) {
+    val scope = rememberCoroutineScope()
     val sectionFRs = remember { settingsSections.map { FocusRequester() } }
     val initialIndex = settingsSections.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val contentFirstFR = remember { FocusRequester() }
 
-    // Auto-focus first item in section list when entering settings
+    // Focus section list when entering settings at top level
     val panelFR = firstItemFocusRequester
     LaunchedEffect(panelFR) {
         if (panelFR != null) {
-            kotlinx.coroutines.delay(160)
+            delay(160)
             try { panelFR.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    // Auto-focus content area when navigating into a sub-section
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != AppRoute.Settings) {
+            delay(80)
+            try { contentFirstFR.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -110,6 +122,10 @@ fun GlassSettings(
                                 if (index < sectionFRs.lastIndex) try { sectionFRs[index + 1].requestFocus() } catch (_: Exception) {}
                                 true
                             }
+                            Key.DirectionRight -> {
+                                scope.launch { try { contentFirstFR.requestFocus() } catch (_: Exception) {} }
+                                true
+                            }
                             else -> false
                         }
                     },
@@ -125,9 +141,12 @@ fun GlassSettings(
                 .fillMaxHeight(),
         ) {
             when (currentRoute) {
-                AppRoute.SettingsAppearance -> AppearanceScreen()
+                AppRoute.SettingsAppearance -> AppearanceScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
                 AppRoute.SettingsPlaylists  -> SettingsScreen(
                     onNavigateToAddPlaylist = onNavigateToAddPlaylist,
+                    firstItemFocusRequester = contentFirstFR,
                 )
                 AppRoute.SettingsProfiles -> {
                     var editingProfile by remember { mutableStateOf<app.nexstream.player.data.local.entity.ProfileEntity?>(null) }
@@ -141,25 +160,41 @@ fun GlassSettings(
                     } else {
                         app.nexstream.player.ui.screens.profile.ProfilesSettingsScreen(
                             onEditProfile = { p: app.nexstream.player.data.local.entity.ProfileEntity? -> editingProfile = p; showEdit = true },
+                            firstItemFocusRequester = contentFirstFR,
                         )
                     }
                 }
                 AppRoute.SettingsPlayer -> PlayerSettingsScreen(
                     profileId = activeProfileId ?: "default",
+                    firstItemFocusRequester = contentFirstFR,
                 )
                 AppRoute.SettingsSports -> SportsSettingsScreen(
                     onRefresh = onRefreshSports,
                     isRefreshing = isRefreshingSports,
+                    firstItemFocusRequester = contentFirstFR,
                 )
                 AppRoute.SettingsNavigation -> NavigationSettingsScreen(
                     hasJellyfinPlaylist = hasJellyfinPlaylist,
+                    firstItemFocusRequester = contentFirstFR,
                 )
-                AppRoute.SettingsLanguage -> LanguageSettingsScreen()
-                AppRoute.SettingsChannelGroups -> ChannelGroupsScreen()
-                AppRoute.SettingsSyncSettings -> SyncSettingsScreen()
-                AppRoute.SettingsAccount -> AccountScreen()
-                AppRoute.SettingsLicence -> LicenceScreen()
-                AppRoute.SettingsAbout -> AboutScreen()
+                AppRoute.SettingsLanguage -> LanguageSettingsScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
+                AppRoute.SettingsChannelGroups -> ChannelGroupsScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
+                AppRoute.SettingsSyncSettings -> SyncSettingsScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
+                AppRoute.SettingsAccount -> AccountScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
+                AppRoute.SettingsLicence -> LicenceScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
+                AppRoute.SettingsAbout -> AboutScreen(
+                    firstItemFocusRequester = contentFirstFR,
+                )
                 else -> SettingsMenuScreen(
                     onNavigate = onSectionSelect,
                 )

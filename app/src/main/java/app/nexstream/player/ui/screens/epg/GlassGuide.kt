@@ -132,7 +132,6 @@ fun GlassGuide(
             .filter { it.groupTitle == null || it.groupTitle.trim() !in trimmedBlocked }
             .mapNotNull { it.groupTitle?.trim() }
             .distinct()
-            .sorted()
     }
 
     // Background preview player
