@@ -8,7 +8,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -79,9 +81,12 @@ fun GlassSeriesDetailScreen(
     val firstEpFR     = remember { FocusRequester() }
     val firstSimFR    = remember { FocusRequester() }
 
+    val scrollState = rememberScrollState()
+
     LaunchedEffect(series.id) {
         delay(120)
         try { playFR.requestFocus() } catch (_: Exception) {}
+        scrollState.scrollTo(0)
     }
 
     val onFocusDownFromButtons: () -> Unit = {
@@ -91,17 +96,22 @@ fun GlassSeriesDetailScreen(
         } catch (_: Exception) {}
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(GlassTokens.Background),
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(scrollState),
     ) {
 
         // ── Hero backdrop ──────────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .height(260.dp),
         ) {
             AsyncImage(
                 model              = series.backdropUrl ?: series.posterUrl,
@@ -331,6 +341,7 @@ fun GlassSeriesDetailScreen(
             }
         }
     }
+    } // end outer Box
 }
 
 // ── Season pill ─────────────────────────────────────────────────────────────

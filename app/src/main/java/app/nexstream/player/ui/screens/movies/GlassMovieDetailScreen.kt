@@ -8,7 +8,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -52,26 +54,33 @@ fun GlassMovieDetailScreen(
     BackHandler(onBack = onBack)
 
     val hasProgress = resumePosition > 0L
-    val playFR     = remember { FocusRequester() }
-    val firstSimFR = remember { FocusRequester() }
-    val hasSim     = moreLikeThis.isNotEmpty()
+    val playFR      = remember { FocusRequester() }
+    val firstSimFR  = remember { FocusRequester() }
+    val hasSim      = moreLikeThis.isNotEmpty()
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(movie.id) {
         delay(120)
         try { playFR.requestFocus() } catch (_: Exception) {}
+        scrollState.scrollTo(0)
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(GlassTokens.Background),
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(scrollState),
     ) {
 
         // ── Hero backdrop ─────────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .height(260.dp),
         ) {
             AsyncImage(
                 model              = movie.backdropUrl ?: movie.posterUrl,
@@ -225,6 +234,7 @@ fun GlassMovieDetailScreen(
             }
         }
     }
+    } // end outer Box
 }
 
 @Composable
