@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -22,6 +23,8 @@ fun GlassSeriesContent(
     seriesList: List<SeriesGridItem>,
     selectedCategory: String?,
     firstItemFocusRequester: FocusRequester? = null,
+    restoreIndex: Int = 0,
+    restoreTick: Int = 0,
     onFocusNavBar: () -> Unit = {},
     onSeriesClick: (SeriesGridItem) -> Unit = {},
     onCategorySelect: (String?) -> Unit = {},
@@ -30,6 +33,18 @@ fun GlassSeriesContent(
     val categories by remember(viewModel) { viewModel.getCategories() }
         .collectAsState(initial = emptyList())
     val firstTileFR = firstItemFocusRequester ?: remember { FocusRequester() }
+    val restoreFR   = remember { FocusRequester() }
+    val gridState   = rememberLazyGridState()
+
+    LaunchedEffect(restoreTick) {
+        if (restoreTick == 0) return@LaunchedEffect
+        if (restoreIndex > 0) gridState.scrollToItem(restoreIndex)
+        kotlinx.coroutines.delay(80)
+        try {
+            if (restoreIndex == 0) firstTileFR.requestFocus()
+            else restoreFR.requestFocus()
+        } catch (_: Exception) {}
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(GlassTokens.Background)) {
         GlasCategoryPills(
@@ -43,6 +58,7 @@ fun GlassSeriesContent(
         )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 160.dp),
+            state   = gridState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(
                 horizontal = GlassTokens.ScreenGutter,
@@ -59,14 +75,17 @@ fun GlassSeriesContent(
                         ?: series.rating,
                     ageRating = series.certification,
                     hasNewEpisode = series.hasNewEpisodes,
-                    modifier = if (index == 0) Modifier
-                        .focusRequester(firstTileFR)
-                        .onKeyEvent { ev ->
-                            if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp) {
-                                onFocusNavBar(); true
-                            } else false
-                        }
-                    else Modifier,
+                    modifier = when (index) {
+                        0            -> Modifier
+                            .focusRequester(firstTileFR)
+                            .onKeyEvent { ev ->
+                                if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp) {
+                                    onFocusNavBar(); true
+                                } else false
+                            }
+                        restoreIndex -> Modifier.focusRequester(restoreFR)
+                        else         -> Modifier
+                    },
                     onClick = { onSeriesClick(series) },
                 )
             }

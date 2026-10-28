@@ -2078,7 +2078,7 @@ private fun MainContentArea(
                               else selectedSeriesCategory
                     glassSeriesVm.getSeriesByCategory(cat)
                 }.collectAsState(initial = emptyList())
-                var glassSelectedSeries by remember { mutableStateOf<SeriesEntity?>(null) }
+                var glassSelectedSeries   by remember { mutableStateOf<SeriesEntity?>(null) }
                 var glassSelectedSeriesId by remember { mutableStateOf<String?>(null) }
                 val glassEpisodes by remember(glassSelectedSeriesId) {
                     if (glassSelectedSeriesId != null) repository.getEpisodesForSeries(glassSelectedSeriesId!!)
@@ -2087,44 +2087,24 @@ private fun MainContentArea(
                 val glassSeasons = remember(glassEpisodes) {
                     glassEpisodes.map { it.seasonNum }.distinct().sorted()
                 }
-                GlassSeriesContent(
-                    seriesList              = glassSeriesList,
-                    selectedCategory        = selectedSeriesCategory,
-                    firstItemFocusRequester = contentFR,
-                    onFocusNavBar           = onRailBack,
-                    onSeriesClick           = { seriesItem ->
-                        scope.launch {
-                            glassSelectedSeries = repository.getSeriesById(seriesItem.id)
-                            glassSelectedSeriesId = seriesItem.id
-                        }
-                    },
-                    onCategorySelect        = onSeriesCategoryChange,
-                    viewModel               = glassSeriesVm,
-                )
-                glassSelectedSeries?.let { series ->
-                    SeriesDetailsDialog(
-                        series             = series,
-                        episodes           = glassEpisodes,
-                        seasons            = glassSeasons,
-                        episodeProgressMap = emptyMap(),
-                        isLoading          = false,
-                        isBookmarked       = series.id in watchlistIds,
-                        onDismiss          = { glassSelectedSeries = null; glassSelectedSeriesId = null },
-                        onToggleWatchlist  = {
-                            watchlistViewModel.toggleWatchlist(
-                                app.nexstream.player.data.local.entity.WatchlistEntity(
-                                    id        = series.id,
-                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                                    type      = app.nexstream.player.data.local.entity.WatchlistType.SERIES,
-                                    name      = series.name,
-                                    posterUrl = series.posterUrl,
-                                    streamUrl = null,
-                                ),
-                                series.id in watchlistIds
-                            )
+                var glassSeriesRestoreIdx  by remember { mutableStateOf(0) }
+                var glassSeriesRestoreTick by remember { mutableStateOf(0) }
+
+                val glassSeries = glassSelectedSeries
+                if (glassSeries != null) {
+                    app.nexstream.player.ui.screens.series.GlassSeriesDetailScreen(
+                        series          = glassSeries,
+                        episodes        = glassEpisodes,
+                        seasons         = glassSeasons,
+                        moreLikeThis    = glassSeriesList
+                            .filter { it.categoryName == glassSeries.categoryName && it.id != glassSeries.id }
+                            .take(12),
+                        isBookmarked    = glassSeries.id in watchlistIds,
+                        onBack          = {
+                            glassSelectedSeries = null; glassSelectedSeriesId = null
+                            glassSeriesRestoreTick++
                         },
-                        onDownloadEpisode  = onDownloadEpisode,
-                        onPlayEpisode      = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
+                        onPlayEpisode   = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
                             glassSelectedSeries = null; glassSelectedSeriesId = null
                             onPlayerLaunch(streamUrl, null, episodeId, seriesId, startPosition, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
                             scope.launch {
@@ -2136,6 +2116,44 @@ private fun MainContentArea(
                                 }
                             }
                         },
+                        onToggleWatchlist = {
+                            watchlistViewModel.toggleWatchlist(
+                                app.nexstream.player.data.local.entity.WatchlistEntity(
+                                    id        = glassSeries.id,
+                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                    type      = app.nexstream.player.data.local.entity.WatchlistType.SERIES,
+                                    name      = glassSeries.name,
+                                    posterUrl = glassSeries.posterUrl,
+                                    streamUrl = null,
+                                ),
+                                glassSeries.id in watchlistIds
+                            )
+                        },
+                        onSeriesClick   = { seriesItem ->
+                            glassSeriesRestoreIdx = glassSeriesList.indexOfFirst { it.id == seriesItem.id }.coerceAtLeast(0)
+                            scope.launch {
+                                glassSelectedSeries   = repository.getSeriesById(seriesItem.id)
+                                glassSelectedSeriesId = seriesItem.id
+                            }
+                        },
+                    )
+                } else {
+                    GlassSeriesContent(
+                        seriesList              = glassSeriesList,
+                        selectedCategory        = selectedSeriesCategory,
+                        firstItemFocusRequester = contentFR,
+                        restoreIndex            = glassSeriesRestoreIdx,
+                        restoreTick             = glassSeriesRestoreTick,
+                        onFocusNavBar           = onRailBack,
+                        onSeriesClick           = { seriesItem ->
+                            glassSeriesRestoreIdx = glassSeriesList.indexOfFirst { it.id == seriesItem.id }.coerceAtLeast(0)
+                            scope.launch {
+                                glassSelectedSeries   = repository.getSeriesById(seriesItem.id)
+                                glassSelectedSeriesId = seriesItem.id
+                            }
+                        },
+                        onCategorySelect        = onSeriesCategoryChange,
+                        viewModel               = glassSeriesVm,
                     )
                 }
             } else {
