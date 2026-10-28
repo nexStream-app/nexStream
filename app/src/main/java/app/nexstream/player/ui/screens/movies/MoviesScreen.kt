@@ -147,8 +147,10 @@ fun MoviesScreen(
     val isLoadingVod by viewModel.repository.isLoadingVOD.collectAsState()
     val vodLoaded by viewModel.vodLoadedCount.collectAsState()
     val vodTotal by viewModel.vodTotalCount.collectAsState()
-    var movieWithDetails by remember { mutableStateOf<MovieEntity?>(null) }
-    var isLoadingDetails by remember { mutableStateOf(false) }
+    var movieWithDetails   by remember { mutableStateOf<MovieEntity?>(null) }
+    var isLoadingDetails   by remember { mutableStateOf(false) }
+    var glassRestoreIndex  by remember { mutableStateOf(0) }
+    var glassRestoreTick   by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val watchlistIds by watchlistViewModel.watchlistIds.collectAsState()
@@ -432,31 +434,124 @@ fun MoviesScreen(
                         CircularProgressIndicator()
                     }
                 } else if (uiStyle == UiStyle.GLASS) {
-                    GlassMoviesContent(
-                        movies           = movies,
-                        selectedCategory = selectedCategory,
-                        firstItemFocusRequester = firstItemFocusRequester,
-                        onFocusNavBar    = onRequestSidebarFocus,
-                        onMovieClick     = { movie ->
-                            isLoadingDetails = true
-                            scope.launch {
-                                try {
-                                    val base = viewModel.repository.getMovieById(movie.id)
-                                    movieWithDetails = base
-                                    val detailed = base?.let {
-                                        viewModel.repository.getMovieDetails(
-                                            playlistId = it.playlistId,
-                                            vodId      = it.id.removePrefix("${it.playlistId}-")
-                                        )
-                                    }
-                                    if (detailed != null) movieWithDetails = detailed
-                                } finally {
-                                    isLoadingDetails = false
-                                }
+                    val glassMovie = movieWithDetails?.takeIf { !isLoadingDetails }
+                    if (glassMovie != null) {
+                        val cert       = glassMovie.certification
+                        val maxAge     = activeProfile?.maxAgeRating
+                        val allowNrVal = activeProfile?.allowNr ?: true
+                        val isRestricted = when {
+                            cert == "NR" || cert == null -> !allowNrVal
+                            maxAge == null               -> false
+                            else -> !isAllowedByAgeRating(cert, maxAge, allowNrVal)
+                        }
+                        if (!isRestricted) {
+                            val isBookmarked = glassMovie.id in watchlistIds
+                            val resumePos by produceState(0L, glassMovie.id, profileId) {
+                                value = viewModel.progressRepository.getMoviePosition(profileId, glassMovie.id)
                             }
-                        },
-                        onCategorySelect = onCategorySelect,
-                    )
+                            GlassMovieDetailScreen(
+                                movie          = glassMovie,
+                                resumePosition = resumePos,
+                                isBookmarked   = isBookmarked,
+                                moreLikeThis   = allMovies
+                                    .filter { it.categoryName == glassMovie.categoryName && it.id != glassMovie.id }
+                                    .take(12),
+                                onBack    = {
+                                    movieWithDetails = null
+                                    isLoadingDetails = false
+                                    glassRestoreTick++
+                                },
+                                onPlay    = { pos ->
+                                    movieWithDetails = null
+                                    isLoadingDetails = false
+                                    onMovieClick(glassMovie.streamUrl, glassMovie.id, pos, glassMovie.name)
+                                },
+                                onToggleWatchlist = {
+                                    watchlistViewModel.toggleWatchlist(
+                                        WatchlistEntity(
+                                            id        = glassMovie.id,
+                                            profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                            type      = WatchlistType.MOVIE,
+                                            name      = glassMovie.name,
+                                            posterUrl = glassMovie.posterUrl,
+                                            streamUrl = glassMovie.streamUrl,
+                                        ), isBookmarked
+                                    )
+                                },
+                                onDownload = {
+                                    app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(
+                                        context   = context,
+                                        streamUrl = glassMovie.streamUrl,
+                                        title     = glassMovie.name,
+                                        posterUrl = glassMovie.posterUrl,
+                                    )
+                                    movieWithDetails = null
+                                    isLoadingDetails = false
+                                },
+                                onMovieClick = { gridItem ->
+                                    glassRestoreIndex = movies.indexOfFirst { it.id == gridItem.id }.coerceAtLeast(0)
+                                    isLoadingDetails = true
+                                    scope.launch {
+                                        try {
+                                            val base = viewModel.repository.getMovieById(gridItem.id)
+                                            movieWithDetails = base
+                                            val detailed = base?.let { m ->
+                                                viewModel.repository.getMovieDetails(
+                                                    playlistId = m.playlistId,
+                                                    vodId      = m.id.removePrefix("${m.playlistId}-"),
+                                                )
+                                            }
+                                            if (detailed != null) movieWithDetails = detailed
+                                        } finally {
+                                            isLoadingDetails = false
+                                        }
+                                    }
+                                },
+                            )
+                        } else {
+                            // Content restricted — clear and show grid
+                            LaunchedEffect(glassMovie.id) { movieWithDetails = null; isLoadingDetails = false }
+                            GlassMoviesContent(
+                                movies                  = movies,
+                                selectedCategory        = selectedCategory,
+                                firstItemFocusRequester = firstItemFocusRequester,
+                                restoreIndex            = glassRestoreIndex,
+                                restoreTick             = glassRestoreTick,
+                                onFocusNavBar           = onRequestSidebarFocus,
+                                onMovieClick            = { /* no-op while clearing */ },
+                                onCategorySelect        = onCategorySelect,
+                            )
+                        }
+                    } else {
+                        GlassMoviesContent(
+                            movies                  = movies,
+                            selectedCategory        = selectedCategory,
+                            firstItemFocusRequester = firstItemFocusRequester,
+                            restoreIndex            = glassRestoreIndex,
+                            restoreTick             = glassRestoreTick,
+                            onFocusNavBar           = onRequestSidebarFocus,
+                            onMovieClick            = { movie ->
+                                glassRestoreIndex = movies.indexOfFirst { it.id == movie.id }.coerceAtLeast(0)
+                                isLoadingDetails = true
+                                scope.launch {
+                                    try {
+                                        val base = viewModel.repository.getMovieById(movie.id)
+                                        movieWithDetails = base
+                                        val detailed = base?.let {
+                                            viewModel.repository.getMovieDetails(
+                                                playlistId = it.playlistId,
+                                                vodId      = it.id.removePrefix("${it.playlistId}-"),
+                                            )
+                                        }
+                                        if (detailed != null) movieWithDetails = detailed
+                                    } finally {
+                                        isLoadingDetails = false
+                                    }
+                                }
+                            },
+                            onCategorySelect        = onCategorySelect,
+                        )
+                    }
                 } else if (uiStyle == UiStyle.MODERN) {
                     ModernMoviesContent(
                         movies           = movies,
@@ -754,28 +849,8 @@ fun MoviesScreen(
                 else                         -> !isAllowedByAgeRating(cert, maxAge, allowNrVal)
             }
         }
-        if (detailUiStyle == UiStyle.GLASS && !isContentRestricted) {
-            GlassDetailsSheet(
-                movie             = movie,
-                resumePosition    = resumePosition,
-                isBookmarked      = isBookmarked,
-                moreLikeThis      = allMovies.filter { it.categoryName == movie.categoryName && it.id != movie.id }.take(8),
-                onDismiss         = { movieWithDetails = null; isLoadingDetails = false },
-                onPlay            = { startPosition -> movieWithDetails = null; isLoadingDetails = false; onMovieClick(movie.streamUrl, movie.id, startPosition, movie.name) },
-                onTrailer         = movie.trailerUrl?.takeIf { it.isNotBlank() }?.let { _ -> { scope.launch { viewModel.fetchTrailerUrl(movie) } } },
-                onToggleWatchlist = {
-                    watchlistViewModel.toggleWatchlist(WatchlistEntity(id = movie.id,
-                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                        type = WatchlistType.MOVIE, name = movie.name, posterUrl = movie.posterUrl, streamUrl = movie.streamUrl), isBookmarked)
-                },
-                onDownload        = {
-                    app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(
-                        context = context, streamUrl = movie.streamUrl, title = movie.name, posterUrl = movie.posterUrl)
-                    movieWithDetails = null; isLoadingDetails = false
-                },
-            )
-            return@let
-        }
+        // Glass mode renders the detail screen inline — skip the dialog entirely
+        if (detailUiStyle == UiStyle.GLASS) return@let
         ModernMovieDetailsDialog(
             movie               = movie,
             isBookmarked        = isBookmarked,
