@@ -1882,9 +1882,11 @@ private fun MainContentArea(
     var showMultiScreen by remember { mutableStateOf(false) }
     val contentUiStyle = LocalUiStyle.current
 
-    // Glass movie dialog
-    var glassSelectedMovieId by remember { mutableStateOf<String?>(null) }
-    var glassMovieEntity by remember { mutableStateOf<MovieEntity?>(null) }
+    // Glass movie detail state
+    var glassSelectedMovieId  by remember { mutableStateOf<String?>(null) }
+    var glassMovieEntity      by remember { mutableStateOf<MovieEntity?>(null) }
+    var glassMovieRestoreIdx  by remember { mutableStateOf(0) }
+    var glassMovieRestoreTick by remember { mutableStateOf(0) }
     LaunchedEffect(glassSelectedMovieId) {
         glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
     }
@@ -1971,42 +1973,71 @@ private fun MainContentArea(
                               else selectedMovieCategory
                     glassMoviesVm.getMoviesByCategory(cat)
                 }.collectAsState(initial = emptyList())
-                GlassMoviesContent(
-                    movies                  = glassMovieList,
-                    selectedCategory        = selectedMovieCategory,
-                    firstItemFocusRequester = contentFR,
-                    onFocusNavBar           = onRailBack,
-                    onMovieClick            = { movie -> glassSelectedMovieId = movie.id },
-                    onCategorySelect        = onMovieCategoryChange,
-                    viewModel               = glassMoviesVm,
-                )
-                glassMovieEntity?.let { movie ->
-                    GlassDetailsSheet(
-                        movie          = movie,
-                        resumePosition = movie.lastPlayedPosition,
-                        isBookmarked   = movie.id in watchlistIds,
-                        onDismiss      = { glassSelectedMovieId = null },
+                val glassMovie = glassMovieEntity
+                if (glassMovie != null) {
+                    app.nexstream.player.ui.screens.movies.GlassMovieDetailScreen(
+                        movie          = glassMovie,
+                        resumePosition = glassMovie.lastPlayedPosition,
+                        isBookmarked   = glassMovie.id in watchlistIds,
+                        moreLikeThis   = glassMovieList
+                            .filter { it.categoryName == glassMovie.categoryName && it.id != glassMovie.id }
+                            .take(12),
+                        onBack         = {
+                            glassSelectedMovieId = null
+                            glassMovieEntity = null
+                            glassMovieRestoreTick++
+                        },
                         onPlay         = { startPos ->
                             glassSelectedMovieId = null
-                            onPlayerLaunch(movie.streamUrl, movie.id, null, null, startPos, movie.name, null, null)
+                            glassMovieEntity = null
+                            onPlayerLaunch(glassMovie.streamUrl, glassMovie.id, null, null, startPos, glassMovie.name, null, null)
                             scope.launch {
-                                repository.recordRecentlyWatchedMovie(movie)
-                                onNowPlayingDescriptionChange(movie.plot)
+                                repository.recordRecentlyWatchedMovie(glassMovie)
+                                onNowPlayingDescriptionChange(glassMovie.plot)
                             }
                         },
                         onToggleWatchlist = {
                             watchlistViewModel.toggleWatchlist(
                                 app.nexstream.player.data.local.entity.WatchlistEntity(
-                                    id        = movie.id,
+                                    id        = glassMovie.id,
                                     profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
                                     type      = app.nexstream.player.data.local.entity.WatchlistType.MOVIE,
-                                    name      = movie.name,
-                                    posterUrl = movie.posterUrl,
-                                    streamUrl = movie.streamUrl,
+                                    name      = glassMovie.name,
+                                    posterUrl = glassMovie.posterUrl,
+                                    streamUrl = glassMovie.streamUrl,
                                 ),
-                                movie.id in watchlistIds
+                                glassMovie.id in watchlistIds
                             )
                         },
+                        onDownload = {
+                            app.nexstream.player.downloads.NexStreamDownloadManager.startDownload(
+                                context   = context,
+                                streamUrl = glassMovie.streamUrl,
+                                title     = glassMovie.name,
+                                posterUrl = glassMovie.posterUrl,
+                            )
+                            glassSelectedMovieId = null
+                            glassMovieEntity = null
+                        },
+                        onMovieClick = { gridItem ->
+                            glassMovieRestoreIdx = glassMovieList.indexOfFirst { it.id == gridItem.id }.coerceAtLeast(0)
+                            glassSelectedMovieId = gridItem.id
+                        },
+                    )
+                } else {
+                    GlassMoviesContent(
+                        movies                  = glassMovieList,
+                        selectedCategory        = selectedMovieCategory,
+                        firstItemFocusRequester = contentFR,
+                        restoreIndex            = glassMovieRestoreIdx,
+                        restoreTick             = glassMovieRestoreTick,
+                        onFocusNavBar           = onRailBack,
+                        onMovieClick            = { movie ->
+                            glassMovieRestoreIdx = glassMovieList.indexOfFirst { it.id == movie.id }.coerceAtLeast(0)
+                            glassSelectedMovieId = movie.id
+                        },
+                        onCategorySelect        = onMovieCategoryChange,
+                        viewModel               = glassMoviesVm,
                     )
                 }
             } else {
