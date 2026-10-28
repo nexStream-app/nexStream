@@ -1887,6 +1887,8 @@ private fun MainContentArea(
     var glassMovieEntity      by remember { mutableStateOf<MovieEntity?>(null) }
     var glassMovieRestoreIdx  by remember { mutableStateOf(0) }
     var glassMovieRestoreTick by remember { mutableStateOf(0) }
+    // Home → series deep-link (Glass only)
+    var pendingHomeSeriesOpenId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(glassSelectedMovieId) {
         glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
     }
@@ -2089,6 +2091,14 @@ private fun MainContentArea(
                 }
                 var glassSeriesRestoreIdx  by remember { mutableStateOf(0) }
                 var glassSeriesRestoreTick by remember { mutableStateOf(0) }
+
+                // Deep-link from Home "Continue Watching"
+                LaunchedEffect(pendingHomeSeriesOpenId) {
+                    val id = pendingHomeSeriesOpenId ?: return@LaunchedEffect
+                    pendingHomeSeriesOpenId = null
+                    glassSelectedSeries   = repository.getSeriesById(id)
+                    glassSelectedSeriesId = id
+                }
 
                 val glassSeries = glassSelectedSeries
                 if (glassSeries != null) {
@@ -2374,14 +2384,33 @@ private fun MainContentArea(
                 val homeUiStyle = LocalUiStyle.current
                 if (homeUiStyle == UiStyle.GLASS) {
                     GlassHomeScreen(
-                        firstItemFocusRequester = contentFR,
-                        homeRestoreTick         = homeRestoreTick,
-                        onPickSelected          = onPickSelected,
-                        onPlayerLaunch          = onPlayerLaunch,
-                        onChannelPlay           = onWatchlistChannelPlay,
-                        onGoToEpg               = { channelName -> onGoToEpgForChannel(channelName) },
-                        onFocusNavBar           = onRailBack,
-                        sportsEditTick          = sportsEditTick,
+                        firstItemFocusRequester  = contentFR,
+                        homeRestoreTick          = homeRestoreTick,
+                        profileId                = activeProfileId,
+                        watchlistIds             = watchlistIds,
+                        onPickSelected           = onPickSelected,
+                        onPlayerLaunch           = onPlayerLaunch,
+                        onChannelPlay            = onWatchlistChannelPlay,
+                        onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
+                            watchlistViewModel.toggleWatchlist(
+                                app.nexstream.player.data.local.entity.WatchlistEntity(
+                                    id        = channelId,
+                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                    type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                                    name      = channelName,
+                                    posterUrl = logoUrl,
+                                    streamUrl = streamUrl,
+                                ),
+                                channelId in watchlistIds
+                            )
+                        },
+                        onSeriesOpen             = { seriesId ->
+                            pendingHomeSeriesOpenId = seriesId
+                            onNavigateToRoute(AppRoute.Series)
+                        },
+                        onGoToEpg                = { channelName -> onGoToEpgForChannel(channelName) },
+                        onFocusNavBar            = onRailBack,
+                        sportsEditTick           = sportsEditTick,
                     )
                 } else {
                     ModernHomeScreen(

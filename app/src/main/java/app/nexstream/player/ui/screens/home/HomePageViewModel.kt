@@ -6,7 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.local.dao.ChannelDao
 import app.nexstream.player.data.local.dao.ProgramDao
+import app.nexstream.player.data.local.dao.RecentlyWatchedDao
+import app.nexstream.player.data.local.dao.WatchlistDao
 import app.nexstream.player.data.local.entity.ChannelEntity
+import app.nexstream.player.data.local.entity.RecentlyWatchedType
+import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.ui.theme.getSportsCategoryOrderFlow
 import app.nexstream.player.ui.theme.getSportsHiddenCategoriesFlow
@@ -53,13 +57,72 @@ data class MatchedSportEvent(
     val endEpochMs: Long? = null,
 )
 
+data class LiveHeroItem(
+    val channelId: String,
+    val channelName: String,
+    val streamUrl: String,
+    val channelLogoUrl: String?,
+    val programTitle: String,
+    val programDescription: String?,
+    val programStartMs: Long,
+    val programEndMs: Long,
+    val artworkUrl: String?,
+)
+
 @HiltViewModel
 class HomePageViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val channelDao: ChannelDao,
     private val sportsApiService: SportsApiService,
     private val programDao: ProgramDao,
+    private val watchlistDao: WatchlistDao,
+    private val recentlyWatchedDao: RecentlyWatchedDao,
 ) : ViewModel() {
+
+    private val _liveHeroItems = MutableStateFlow<List<LiveHeroItem>>(emptyList())
+    val liveHeroItems: StateFlow<List<LiveHeroItem>> = _liveHeroItems
+
+    fun refreshLiveHeroItems(profileId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val allChannels = channelDao.getAllChannelsOnce()
+            val first30 = allChannels.take(30)
+
+            val myListIds = watchlistDao
+                .getItemsSuspendByProfileAndType(profileId, WatchlistType.CHANNEL)
+                .map { it.id }.toSet()
+
+            val recentIds = recentlyWatchedDao.getRecentlyWatchedSuspend(profileId)
+                .filter { it.type == RecentlyWatchedType.CHANNEL }
+                .map { it.id }.toSet()
+
+            val prioritized = (
+                first30.filter { it.id in myListIds } +
+                first30.filter { it.id !in myListIds && it.id in recentIds } +
+                first30.filter { it.id !in myListIds && it.id !in recentIds }.shuffled()
+            ).distinctBy { it.id }
+
+            val items = mutableListOf<LiveHeroItem>()
+            for (channel in prioritized) {
+                if (items.size >= 5) break
+                val epgId = channel.epgChannelId ?: channel.id
+                val prog = programDao.getCurrentProgram(epgId, now).first() ?: continue
+                if (prog.title.isBlank()) continue
+                items.add(LiveHeroItem(
+                    channelId          = channel.id,
+                    channelName        = channel.name,
+                    streamUrl          = channel.streamUrl,
+                    channelLogoUrl     = channel.logoUrl,
+                    programTitle       = prog.title,
+                    programDescription = prog.description?.takeIf { it.isNotBlank() },
+                    programStartMs     = prog.startTime,
+                    programEndMs       = prog.endTime,
+                    artworkUrl         = prog.icon?.takeIf { it.isNotBlank() } ?: channel.logoUrl,
+                ))
+            }
+            _liveHeroItems.value = items
+        }
+    }
 
     private val _sportsEvents = MutableStateFlow<List<MatchedSportEvent>>(emptyList())
     val sportsEvents: StateFlow<List<MatchedSportEvent>> = _sportsEvents

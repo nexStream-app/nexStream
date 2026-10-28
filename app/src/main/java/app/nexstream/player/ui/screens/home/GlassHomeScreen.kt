@@ -4,19 +4,23 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -28,7 +32,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import app.nexstream.player.data.local.entity.RecentlyWatchedEntity
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
 import app.nexstream.player.ui.components.GlasPosterTile
 import app.nexstream.player.ui.components.GlassRail
@@ -39,11 +42,16 @@ import app.nexstream.player.ui.screens.recentlywatched.RecentlyWatchedViewModel
 import app.nexstream.player.ui.theme.GlassTokens
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun GlassHomeScreen(
     firstItemFocusRequester: FocusRequester? = null,
     homeRestoreTick: Int = 0,
+    profileId: String = "default",
+    watchlistIds: Set<String> = emptySet(),
     onPickSelected: (PickItem) -> Unit = {},
     onPlayerLaunch: (
         url: String,
@@ -56,6 +64,8 @@ fun GlassHomeScreen(
         description: String?
     ) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onChannelPlay: (streamUrl: String, channelName: String) -> Unit = { _, _ -> },
+    onToggleChannelWatchlist: (channelId: String, channelName: String, logoUrl: String?, streamUrl: String) -> Unit = { _, _, _, _ -> },
+    onSeriesOpen: (seriesId: String) -> Unit = {},
     onGoToEpg: (channelName: String) -> Unit = {},
     onFocusNavBar: () -> Unit = {},
     sportsEditTick: Int = 0,
@@ -63,21 +73,41 @@ fun GlassHomeScreen(
     homePageViewModel: HomePageViewModel = hiltViewModel(),
     picksViewModel: PicksViewModel = hiltViewModel(),
 ) {
-    val recentlyWatched by recentlyWatchedViewModel.recentlyWatched.collectAsState()
-    val filteredSportsEvents by homePageViewModel.filteredSportsEvents.collectAsState()
-    val sportsCategories     by homePageViewModel.sportsCategories.collectAsState()
-    val selectedSportCategory by homePageViewModel.selectedSportCategory.collectAsState()
-    val picksGroups by picksViewModel.groups.collectAsState()
+    val recentlyWatched    by recentlyWatchedViewModel.recentlyWatched.collectAsState()
+    val filteredSports     by homePageViewModel.filteredSportsEvents.collectAsState()
+    val sportsCategories   by homePageViewModel.sportsCategories.collectAsState()
+    val selectedSportCat   by homePageViewModel.selectedSportCategory.collectAsState()
+    val picksGroups        by picksViewModel.groups.collectAsState()
+    val liveHeroItems      by homePageViewModel.liveHeroItems.collectAsState()
 
-    val continueWatching = remember(recentlyWatched) {
-        recentlyWatched.filter {
-            it.type == RecentlyWatchedType.MOVIE || it.type == RecentlyWatchedType.EPISODE
+    // Refresh live hero items on first composition and when profileId changes
+    LaunchedEffect(profileId) {
+        homePageViewModel.refreshLiveHeroItems(profileId)
+    }
+
+    // Auto-rotate hero index
+    var heroIndex by remember { mutableIntStateOf(0) }
+    LaunchedEffect(liveHeroItems.size) {
+        heroIndex = 0
+        if (liveHeroItems.size <= 1) return@LaunchedEffect
+        var idx = 0
+        while (true) {
+            delay(7_000L)
+            idx = (idx + 1) % liveHeroItems.size
+            heroIndex = idx
         }
     }
-    val liveEvents = remember(filteredSportsEvents) {
-        filteredSportsEvents.filter { !it.isReplay && it.matchedChannels.isNotEmpty() }.take(8)
+
+    val continueWatchingSeries = remember(recentlyWatched) {
+        recentlyWatched
+            .filter { it.type == RecentlyWatchedType.EPISODE && it.seriesId != null }
+            .distinctBy { it.seriesId }
+            .take(10)
     }
-    val heroItem = picksGroups.firstOrNull()?.items?.firstOrNull()
+
+    val liveEvents = remember(filteredSports) {
+        filteredSports.filter { !it.isReplay && it.matchedChannels.isNotEmpty() }.take(8)
+    }
     val firstPicksGroup = picksGroups.firstOrNull()
 
     val heroFR = firstItemFocusRequester ?: remember { FocusRequester() }
@@ -95,69 +125,73 @@ fun GlassHomeScreen(
             .background(GlassTokens.Background)
             .verticalScroll(rememberScrollState()),
     ) {
-        GlassHeroBanner(
-            heroItem = heroItem,
-            heroFR = heroFR,
-            onFocusNavBar = onFocusNavBar,
-            onPlay = { heroItem?.let { onPickSelected(it) } },
+        // ── Live hero banner ───────────────────────────────────────────────────
+        LiveHeroBanner(
+            items        = liveHeroItems,
+            heroIndex    = heroIndex,
+            isBookmarked = liveHeroItems.getOrNull(heroIndex)?.channelId in watchlistIds,
+            heroFR       = heroFR,
+            onFocusNavBar      = onFocusNavBar,
+            onWatchLive        = {
+                liveHeroItems.getOrNull(heroIndex)?.let { item ->
+                    onChannelPlay(item.streamUrl, item.channelName)
+                }
+            },
+            onToggleWatchlist  = {
+                liveHeroItems.getOrNull(heroIndex)?.let { item ->
+                    onToggleChannelWatchlist(item.channelId, item.channelName, item.channelLogoUrl, item.streamUrl)
+                }
+            },
         )
 
         Column(
             modifier = Modifier.padding(
                 start = GlassTokens.ScreenGutter,
-                end = GlassTokens.ScreenGutter,
-                top = 20.dp,
+                end   = GlassTokens.ScreenGutter,
+                top   = 20.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            if (continueWatching.isNotEmpty()) {
+            // ── Continue Watching (series only) ───────────────────────────────
+            if (continueWatchingSeries.isNotEmpty()) {
                 GlassRail(
-                    title = "Continue Watching",
-                    items = continueWatching,
-                    tileWidth = 200.dp,
-                ) { _, item: RecentlyWatchedEntity, tileMod ->
-                    GlassTile(
-                        imageUrl = item.logoUrl,
-                        title = item.name,
-                        modifier = tileMod,
-                        onClick = {
-                            onPlayerLaunch(
-                                item.streamUrl,
-                                item.movieId,
-                                item.episodeId,
-                                item.seriesId,
-                                0L,
-                                item.name,
-                                item.subtitle,
-                                null,
-                            )
-                        },
+                    title     = "Continue Watching",
+                    items     = continueWatchingSeries,
+                    tileWidth = 160.dp,
+                ) { _, item, tileMod ->
+                    GlasPosterTile(
+                        imageUrl      = item.logoUrl,
+                        title         = item.name,
+                        modifier      = tileMod,
+                        onClick       = { item.seriesId?.let { onSeriesOpen(it) } },
                     )
                 }
             }
 
+            // ── Live sports ───────────────────────────────────────────────────
             if (liveEvents.isNotEmpty()) {
                 GlassSportsScreen(
-                    events            = liveEvents,
-                    categories        = sportsCategories,
-                    selectedCategory  = selectedSportCategory,
-                    onCategorySelect  = { homePageViewModel.selectSportCategory(it) },
-                    onChannelPlay     = onChannelPlay,
-                    onFocusNavBar     = onFocusNavBar,
+                    events           = liveEvents,
+                    categories       = sportsCategories,
+                    selectedCategory = selectedSportCat,
+                    onCategorySelect = { homePageViewModel.selectSportCategory(it) },
+                    onChannelPlay    = onChannelPlay,
+                    onFocusNavBar    = onFocusNavBar,
                 )
             }
 
+            // ── Picks For You ─────────────────────────────────────────────────
             if (firstPicksGroup != null && firstPicksGroup.items.isNotEmpty()) {
                 GlassRail(
-                    title = "Picks For You",
-                    items = firstPicksGroup.items,
+                    title     = "Picks For You",
+                    items     = firstPicksGroup.items,
                     tileWidth = 160.dp,
                 ) { _, pick: PickItem, tileMod ->
                     GlasPosterTile(
                         imageUrl = pick.posterUrl,
-                        title = pick.title,
+                        title    = pick.title,
                         modifier = tileMod,
-                        onClick = { onPickSelected(pick) },
+                        onClick  = { onPickSelected(pick) },
                     )
                 }
             }
@@ -167,98 +201,168 @@ fun GlassHomeScreen(
     }
 }
 
+// ── Live hero banner ──────────────────────────────────────────────────────────
+
 @Composable
-private fun GlassHeroBanner(
-    heroItem: PickItem?,
+private fun LiveHeroBanner(
+    items: List<LiveHeroItem>,
+    heroIndex: Int,
+    isBookmarked: Boolean,
     heroFR: FocusRequester,
     onFocusNavBar: () -> Unit,
-    onPlay: () -> Unit,
+    onWatchLive: () -> Unit,
+    onToggleWatchlist: () -> Unit,
 ) {
+    val item = items.getOrNull(heroIndex)
+    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(260.dp),
+            .height(280.dp),
     ) {
         AsyncImage(
-            model = heroItem?.posterUrl,
+            model              = item?.artworkUrl,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
+            contentScale       = ContentScale.Crop,
+            modifier           = Modifier.fillMaxSize(),
         )
-        // Left-to-right scrim
+        // Left-to-right gradient so text is readable
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
-                        0f to Color(0xCC000000),
-                        0.6f to Color.Transparent,
+                        0f    to Color(0xDD000000),
+                        0.65f to Color.Transparent,
                     )
                 ),
         )
-        // Bottom scrim (blends into background)
+        // Bottom fade into background
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(160.dp)
+                .height(130.dp)
                 .align(Alignment.BottomStart)
                 .background(
                     Brush.verticalGradient(listOf(Color.Transparent, GlassTokens.Background))
                 ),
         )
-        // Title + buttons
+
+        // Rotation indicator dots (top-right)
+        if (items.size > 1) {
+            Row(
+                modifier              = Modifier.align(Alignment.TopEnd).padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                repeat(items.size) { idx ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (idx == heroIndex) 8.dp else 5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (idx == heroIndex) GlassTokens.AccentDefault
+                                else GlassTokens.TextSecondary.copy(alpha = 0.45f)
+                            )
+                    )
+                }
+            }
+        }
+
+        // Content overlaid at bottom-left
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = GlassTokens.ScreenGutter, bottom = 20.dp)
-                .widthIn(max = 460.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .widthIn(max = 500.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (heroItem != null) {
+            if (item != null) {
+                // LIVE badge + channel + time
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = GlassTokens.LiveBadge,
+                    ) {
+                        Text(
+                            text       = "LIVE",
+                            color      = Color.White,
+                            fontSize   = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                    Text(
+                        text  = "${item.channelName} · ${timeFmt.format(Date(item.programStartMs))} – ${timeFmt.format(Date(item.programEndMs))}",
+                        color = GlassTokens.TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // Programme title
                 Text(
-                    text = heroItem.title,
-                    color = GlassTokens.TextPrimary,
-                    fontSize = 22.sp,
+                    text       = item.programTitle,
+                    color      = GlassTokens.TextPrimary,
+                    fontSize   = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines   = 2,
+                    overflow   = TextOverflow.Ellipsis,
+                    lineHeight = 28.sp,
                 )
-                Text(
-                    text = heroItem.overview,
-                    color = GlassTokens.TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Programme description
+                item.programDescription?.let {
+                    Text(
+                        text     = it,
+                        color    = GlassTokens.TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+
+            // Action buttons
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
-                    onClick = onPlay,
+                    onClick  = onWatchLive,
                     modifier = Modifier
                         .focusRequester(heroFR)
                         .onKeyEvent { ev ->
                             if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
                             if (ev.key == Key.DirectionUp) { onFocusNavBar(); true } else false
                         },
-                    shape = RoundedCornerShape(GlassTokens.RadiusPill),
+                    shape  = RoundedCornerShape(GlassTokens.RadiusPill),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = GlassTokens.AccentDefault,
-                        contentColor = GlassTokens.AccentOnDark,
+                        contentColor   = GlassTokens.AccentOnDark,
                     ),
+                    enabled = item != null,
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(18.dp))
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Play", fontWeight = FontWeight.SemiBold)
+                    Text("Watch Live", fontWeight = FontWeight.SemiBold)
                 }
                 OutlinedButton(
-                    onClick = {},
-                    shape = RoundedCornerShape(GlassTokens.RadiusPill),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GlassTokens.TextPrimary),
-                    border = BorderStroke(1.dp, GlassTokens.GlassBorder),
+                    onClick = onToggleWatchlist,
+                    shape   = RoundedCornerShape(GlassTokens.RadiusPill),
+                    colors  = ButtonDefaults.outlinedButtonColors(contentColor = GlassTokens.TextPrimary),
+                    border  = BorderStroke(
+                        1.dp,
+                        if (isBookmarked) GlassTokens.AccentDefault else GlassTokens.GlassBorder,
+                    ),
+                    enabled = item != null,
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, Modifier.size(18.dp))
+                    Icon(
+                        if (isBookmarked) Icons.Default.Bookmark else Icons.Default.Add,
+                        null, Modifier.size(18.dp)
+                    )
                     Spacer(Modifier.width(4.dp))
-                    Text("My List")
+                    Text(if (isBookmarked) "In My List" else "My List")
                 }
             }
         }
