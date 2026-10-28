@@ -32,7 +32,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.nexstream.player.data.local.entity.MovieGridItem
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
+import app.nexstream.player.data.local.entity.SeriesGridItem
 import app.nexstream.player.ui.components.GlasPosterTile
 import app.nexstream.player.ui.components.GlassRail
 import app.nexstream.player.ui.components.GlassTile
@@ -66,6 +68,7 @@ fun GlassHomeScreen(
     onChannelPlay: (streamUrl: String, channelName: String) -> Unit = { _, _ -> },
     onToggleChannelWatchlist: (channelId: String, channelName: String, logoUrl: String?, streamUrl: String) -> Unit = { _, _, _, _ -> },
     onSeriesOpen: (seriesId: String) -> Unit = {},
+    onMovieSelected: (movieId: String) -> Unit = {},
     onGoToEpg: (channelName: String) -> Unit = {},
     onFocusNavBar: () -> Unit = {},
     sportsEditTick: Int = 0,
@@ -79,6 +82,8 @@ fun GlassHomeScreen(
     val selectedSportCat   by homePageViewModel.selectedSportCategory.collectAsState()
     val picksGroups        by picksViewModel.groups.collectAsState()
     val liveHeroItems      by homePageViewModel.liveHeroItems.collectAsState()
+    val recentMovies       by homePageViewModel.recentMovies.collectAsState()
+    val newSeries          by homePageViewModel.newSeries.collectAsState()
 
     // Refresh live hero items on first composition and when profileId changes
     LaunchedEffect(profileId) {
@@ -164,6 +169,56 @@ fun GlassHomeScreen(
                         title         = item.name,
                         modifier      = tileMod,
                         onClick       = { item.seriesId?.let { onSeriesOpen(it) } },
+                    )
+                }
+            }
+
+            // ── New Series / New Episodes ──────────────────────────────────────
+            if (newSeries.isNotEmpty()) {
+                val newEpSeries = remember(newSeries) { newSeries.filter { it.hasNewEpisodes } }
+                val recentSeries = remember(newSeries) { if (newEpSeries.size >= 10) emptyList() else newSeries.filter { !it.hasNewEpisodes } }
+                val rowTitle = if (newEpSeries.isNotEmpty()) "New Episodes" else "New Series"
+                val rowItems = if (newEpSeries.isNotEmpty()) newEpSeries else newSeries
+                GlassRail(
+                    title     = rowTitle,
+                    items     = rowItems,
+                    tileWidth = 160.dp,
+                ) { _, item: SeriesGridItem, tileMod ->
+                    GlasPosterTile(
+                        imageUrl = item.posterUrl,
+                        title    = item.name,
+                        modifier = tileMod,
+                        onClick  = { onSeriesOpen(item.id) },
+                    )
+                }
+                if (newEpSeries.isNotEmpty() && recentSeries.isNotEmpty()) {
+                    GlassRail(
+                        title     = "New Series",
+                        items     = recentSeries,
+                        tileWidth = 160.dp,
+                    ) { _, item: SeriesGridItem, tileMod ->
+                        GlasPosterTile(
+                            imageUrl = item.posterUrl,
+                            title    = item.name,
+                            modifier = tileMod,
+                            onClick  = { onSeriesOpen(item.id) },
+                        )
+                    }
+                }
+            }
+
+            // ── New Movies ────────────────────────────────────────────────────
+            if (recentMovies.isNotEmpty()) {
+                GlassRail(
+                    title     = "New Movies",
+                    items     = recentMovies,
+                    tileWidth = 160.dp,
+                ) { _, item: MovieGridItem, tileMod ->
+                    GlasPosterTile(
+                        imageUrl = item.posterUrl,
+                        title    = item.name,
+                        modifier = tileMod,
+                        onClick  = { onMovieSelected(item.id) },
                     )
                 }
             }

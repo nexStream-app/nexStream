@@ -150,4 +150,7 @@ interface SeriesDao {
     suspend fun getExistingNewEpisodeFlags(playlistId: String): List<HasNewEpisodesRow>
 
     data class HasNewEpisodesRow(val id: String, val hasNewEpisodes: Boolean)
+
+    @Query("SELECT id, name, posterUrl, categoryName, playlistId, seasonCount, certification, rating, releaseDate, hasNewEpisodes, addedAt FROM series WHERE addedAt > 0 ORDER BY hasNewEpisodes DESC, addedAt DESC LIMIT :limit")
+    suspend fun getRecentlyAddedSeries(limit: Int = 20): List<SeriesGridItem>
 }

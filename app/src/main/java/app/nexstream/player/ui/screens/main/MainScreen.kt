@@ -1887,8 +1887,9 @@ private fun MainContentArea(
     var glassMovieEntity      by remember { mutableStateOf<MovieEntity?>(null) }
     var glassMovieRestoreIdx  by remember { mutableStateOf(0) }
     var glassMovieRestoreTick by remember { mutableStateOf(0) }
-    // Home → series deep-link (Glass only)
+    // Home → series/movie deep-link (Glass only)
     var pendingHomeSeriesOpenId by remember { mutableStateOf<String?>(null) }
+    var pendingHomeMovieOpenId  by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(glassSelectedMovieId) {
         glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
     }
@@ -1975,6 +1976,13 @@ private fun MainContentArea(
                               else selectedMovieCategory
                     glassMoviesVm.getMoviesByCategory(cat)
                 }.collectAsState(initial = emptyList())
+                // Deep-link from Home "New Movies"
+                LaunchedEffect(pendingHomeMovieOpenId) {
+                    val id = pendingHomeMovieOpenId ?: return@LaunchedEffect
+                    pendingHomeMovieOpenId = null
+                    glassSelectedMovieId = id
+                }
+
                 val glassMovie = glassMovieEntity
                 if (glassMovie != null) {
                     app.nexstream.player.ui.screens.movies.GlassMovieDetailScreen(
@@ -2407,6 +2415,10 @@ private fun MainContentArea(
                         onSeriesOpen             = { seriesId ->
                             pendingHomeSeriesOpenId = seriesId
                             onNavigateToRoute(AppRoute.Series)
+                        },
+                        onMovieSelected          = { movieId ->
+                            pendingHomeMovieOpenId = movieId
+                            onNavigateToRoute(AppRoute.Movies)
                         },
                         onGoToEpg                = { channelName -> onGoToEpgForChannel(channelName) },
                         onFocusNavBar            = onRailBack,

@@ -114,4 +114,7 @@ interface MovieDao {
 
     @Query("SELECT * FROM movies WHERE streamUrl LIKE '%/' || :streamId || '.%' OR streamUrl LIKE '%/' || :streamId LIMIT 1")
     suspend fun getByXtreamStreamId(streamId: String): MovieEntity?
+
+    @Query("SELECT id, name, posterUrl, categoryName, streamUrl, playlistId, lastPlayedPosition, certification, rating, addedAt, releaseDate FROM movies WHERE addedAt > 0 ORDER BY addedAt DESC LIMIT :limit")
+    suspend fun getRecentlyAddedMovies(limit: Int = 20): List<MovieGridItem>
 }

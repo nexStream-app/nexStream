@@ -110,3 +110,15 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
+# ── Suppress R8 missing-class warnings for internal app classes ───────────────
+-dontwarn app.nexstream.player.data.local.dao.**
+-dontwarn app.nexstream.player.data.local.entity.**
+-dontwarn app.nexstream.player.data.profile.**
+-dontwarn app.nexstream.player.data.remote.**
+-dontwarn app.nexstream.player.data.repository.**
+-dontwarn app.nexstream.player.data.sync.**
+-dontwarn app.nexstream.player.downloads.**
+-dontwarn app.nexstream.player.license.**
+-dontwarn app.nexstream.player.recording.**
+-dontwarn app.nexstream.player.service.**
+

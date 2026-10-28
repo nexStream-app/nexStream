@@ -5,11 +5,15 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nexstream.player.data.local.dao.ChannelDao
+import app.nexstream.player.data.local.dao.MovieDao
 import app.nexstream.player.data.local.dao.ProgramDao
 import app.nexstream.player.data.local.dao.RecentlyWatchedDao
+import app.nexstream.player.data.local.dao.SeriesDao
 import app.nexstream.player.data.local.dao.WatchlistDao
 import app.nexstream.player.data.local.entity.ChannelEntity
+import app.nexstream.player.data.local.entity.MovieGridItem
 import app.nexstream.player.data.local.entity.RecentlyWatchedType
+import app.nexstream.player.data.local.entity.SeriesGridItem
 import app.nexstream.player.data.local.entity.WatchlistType
 import app.nexstream.player.data.remote.SportsApiService
 import app.nexstream.player.ui.theme.getSportsCategoryOrderFlow
@@ -20,6 +24,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +37,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import org.json.JSONObject
 import javax.inject.Inject
 
 data class ChannelMatch(
@@ -77,10 +86,19 @@ class HomePageViewModel @Inject constructor(
     private val programDao: ProgramDao,
     private val watchlistDao: WatchlistDao,
     private val recentlyWatchedDao: RecentlyWatchedDao,
+    private val movieDao: MovieDao,
+    private val seriesDao: SeriesDao,
+    private val okHttpClient: OkHttpClient,
 ) : ViewModel() {
 
     private val _liveHeroItems = MutableStateFlow<List<LiveHeroItem>>(emptyList())
     val liveHeroItems: StateFlow<List<LiveHeroItem>> = _liveHeroItems
+
+    private val _recentMovies = MutableStateFlow<List<MovieGridItem>>(emptyList())
+    val recentMovies: StateFlow<List<MovieGridItem>> = _recentMovies
+
+    private val _newSeries = MutableStateFlow<List<SeriesGridItem>>(emptyList())
+    val newSeries: StateFlow<List<SeriesGridItem>> = _newSeries
 
     fun refreshLiveHeroItems(profileId: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -117,10 +135,44 @@ class HomePageViewModel @Inject constructor(
                     programDescription = prog.description?.takeIf { it.isNotBlank() },
                     programStartMs     = prog.startTime,
                     programEndMs       = prog.endTime,
-                    artworkUrl         = prog.icon?.takeIf { it.isNotBlank() } ?: channel.logoUrl,
+                    artworkUrl         = prog.icon?.takeIf { it.isNotBlank() },
                 ))
             }
-            _liveHeroItems.value = items
+
+            // Fetch TMDB backdrop for items missing artwork, in parallel
+            val enriched = coroutineScope {
+                items.map { item ->
+                    async {
+                        if (!item.artworkUrl.isNullOrBlank()) return@async item
+                        val backdrop = fetchTmdbBackdrop(item.programTitle)
+                        item.copy(artworkUrl = backdrop ?: item.channelLogoUrl)
+                    }
+                }.awaitAll()
+            }
+            _liveHeroItems.value = enriched
+        }
+    }
+
+    private fun fetchTmdbBackdrop(title: String): String? = try {
+        val encoded = java.net.URLEncoder.encode(title, "UTF-8")
+        val url = "https://nexstream.uk/api/tmdb.php?title=$encoded&type=tv"
+        val response = okHttpClient.newCall(
+            okhttp3.Request.Builder().url(url).build()
+        ).execute()
+        if (response.isSuccessful) {
+            val body = response.body?.string()
+            if (!body.isNullOrBlank()) {
+                val json = JSONObject(body)
+                val backdrop = json.optString("backdrop_url").takeIf { it.isNotBlank() }
+                backdrop ?: json.optString("poster_url").takeIf { it.isNotBlank() }
+            } else null
+        } else null
+    } catch (_: Exception) { null }
+
+    fun loadRecentContent() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _recentMovies.value = movieDao.getRecentlyAddedMovies(20)
+            _newSeries.value = seriesDao.getRecentlyAddedSeries(20)
         }
     }
 
@@ -175,6 +227,7 @@ class HomePageViewModel @Inject constructor(
 
     init {
         loadSports()
+        loadRecentContent()
         viewModelScope.launch {
             while (true) {
                 val msToNextMinute = 60_000L - (System.currentTimeMillis() % 60_000L)
