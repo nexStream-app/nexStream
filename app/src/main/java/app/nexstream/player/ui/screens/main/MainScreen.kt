@@ -1903,6 +1903,19 @@ private fun MainContentArea(
         } catch (_: Exception) { null }
         if (detailed != null) glassMovieEntity = detailed
     }
+    // Home → series overlay (Glass): show detail screen within AppRoute.Home, no navigation
+    var glassHomeSeriesId     by remember { mutableStateOf<String?>(null) }
+    var glassHomeSeriesEntity by remember { mutableStateOf<SeriesEntity?>(null) }
+    val glassHomeSeriesEps by remember(glassHomeSeriesId) {
+        if (glassHomeSeriesId != null) repository.getEpisodesForSeries(glassHomeSeriesId!!)
+        else kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    val glassHomeSeriesSeasons = remember(glassHomeSeriesEps) {
+        glassHomeSeriesEps.map { it.seasonNum }.distinct().sorted()
+    }
+    LaunchedEffect(glassHomeSeriesId) {
+        glassHomeSeriesEntity = glassHomeSeriesId?.let { repository.getSeriesById(it) }
+    }
     Box(modifier = modifier) {
         // Glass: Live TV channel browser — only rendered when active so preview player is disposed on exit
         if (contentUiStyle == UiStyle.GLASS && currentRoute == AppRoute.LiveTV) {
@@ -2405,39 +2418,83 @@ private fun MainContentArea(
             AppRoute.Home -> {
                 val homeUiStyle = LocalUiStyle.current
                 if (homeUiStyle == UiStyle.GLASS) {
-                    GlassHomeScreen(
-                        firstItemFocusRequester  = contentFR,
-                        homeRestoreTick          = homeRestoreTick,
-                        profileId                = activeProfileId,
-                        watchlistIds             = watchlistIds,
-                        onPickSelected           = onPickSelected,
-                        onPlayerLaunch           = onPlayerLaunch,
-                        onChannelPlay            = onWatchlistChannelPlay,
-                        onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
-                            watchlistViewModel.toggleWatchlist(
-                                app.nexstream.player.data.local.entity.WatchlistEntity(
-                                    id        = channelId,
-                                    profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
-                                    type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
-                                    name      = channelName,
-                                    posterUrl = logoUrl,
-                                    streamUrl = streamUrl,
-                                ),
-                                channelId in watchlistIds
-                            )
-                        },
-                        onSeriesOpen             = { seriesId ->
-                            pendingHomeSeriesOpenId = seriesId
-                            onNavigateToRoute(AppRoute.Series)
-                        },
-                        onMovieSelected          = { movieId ->
-                            pendingHomeMovieOpenId = movieId
-                            onNavigateToRoute(AppRoute.Movies)
-                        },
-                        onGoToEpg                = { channelName -> onGoToEpgForChannel(channelName) },
-                        onFocusNavBar            = onRailBack,
-                        sportsEditTick           = sportsEditTick,
-                    )
+                    val homeSeriesEntity = glassHomeSeriesEntity
+                    if (homeSeriesEntity != null) {
+                        app.nexstream.player.ui.screens.series.GlassSeriesDetailScreen(
+                            series            = homeSeriesEntity,
+                            episodes          = glassHomeSeriesEps,
+                            seasons           = glassHomeSeriesSeasons,
+                            moreLikeThis      = emptyList(),
+                            isBookmarked      = homeSeriesEntity.id in watchlistIds,
+                            onBack            = {
+                                glassHomeSeriesId     = null
+                                glassHomeSeriesEntity = null
+                            },
+                            onPlayEpisode     = { streamUrl, episodeId, startPosition, seriesId, seriesName, seasonNum, episodeNum, episodeName ->
+                                glassHomeSeriesId     = null
+                                glassHomeSeriesEntity = null
+                                onPlayerLaunch(streamUrl, null, episodeId, seriesId, startPosition, seriesName, "S${seasonNum}E${episodeNum} - $episodeName", null)
+                                scope.launch {
+                                    val fullSeries = repository.getSeriesById(seriesId)
+                                    val episode    = repository.getEpisodeById(episodeId)
+                                    if (fullSeries != null && episode != null) {
+                                        repository.recordRecentlyWatchedEpisode(fullSeries, episode)
+                                        onNowPlayingDescriptionChange(episode.plot ?: fullSeries.plot)
+                                    }
+                                }
+                            },
+                            onToggleWatchlist = {
+                                watchlistViewModel.toggleWatchlist(
+                                    app.nexstream.player.data.local.entity.WatchlistEntity(
+                                        id        = homeSeriesEntity.id,
+                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                        type      = app.nexstream.player.data.local.entity.WatchlistType.SERIES,
+                                        name      = homeSeriesEntity.name,
+                                        posterUrl = homeSeriesEntity.posterUrl,
+                                        streamUrl = null,
+                                    ),
+                                    homeSeriesEntity.id in watchlistIds
+                                )
+                            },
+                            onSeriesClick     = { seriesItem ->
+                                scope.launch {
+                                    glassHomeSeriesEntity = repository.getSeriesById(seriesItem.id)
+                                    glassHomeSeriesId     = seriesItem.id
+                                }
+                            },
+                        )
+                    } else {
+                        GlassHomeScreen(
+                            firstItemFocusRequester  = contentFR,
+                            homeRestoreTick          = homeRestoreTick,
+                            profileId                = activeProfileId,
+                            watchlistIds             = watchlistIds,
+                            onPickSelected           = onPickSelected,
+                            onPlayerLaunch           = onPlayerLaunch,
+                            onChannelPlay            = onWatchlistChannelPlay,
+                            onToggleChannelWatchlist = { channelId, channelName, logoUrl, streamUrl ->
+                                watchlistViewModel.toggleWatchlist(
+                                    app.nexstream.player.data.local.entity.WatchlistEntity(
+                                        id        = channelId,
+                                        profileId = watchlistViewModel.profileManager.activeProfile.value?.id ?: "default",
+                                        type      = app.nexstream.player.data.local.entity.WatchlistType.CHANNEL,
+                                        name      = channelName,
+                                        posterUrl = logoUrl,
+                                        streamUrl = streamUrl,
+                                    ),
+                                    channelId in watchlistIds
+                                )
+                            },
+                            onSeriesOpen             = { seriesId -> glassHomeSeriesId = seriesId },
+                            onMovieSelected          = { movieId ->
+                                pendingHomeMovieOpenId = movieId
+                                onNavigateToRoute(AppRoute.Movies)
+                            },
+                            onGoToEpg                = { channelName -> onGoToEpgForChannel(channelName) },
+                            onFocusNavBar            = onRailBack,
+                            sportsEditTick           = sportsEditTick,
+                        )
+                    }
                 } else {
                     ModernHomeScreen(
                         firstItemFocusRequester = contentFR,

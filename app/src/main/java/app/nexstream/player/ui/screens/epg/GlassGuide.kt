@@ -172,151 +172,202 @@ fun GlassGuide(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    // Programme info for the right-panel display (computed from currently focused channel)
+    val previewEpgKey   = previewChannel?.let { ch -> ch.epgChannelId?.takeIf { it.isNotEmpty() } ?: ch.id }
+    val previewProgs    = previewEpgKey?.let { programsMap[it] } ?: emptyList()
+    val previewNow2     = System.currentTimeMillis()
+    val previewCurrent  = previewProgs.firstOrNull { previewNow2 in it.startTime..it.endTime }
+    val previewNext     = previewCurrent?.let { cp -> previewProgs.firstOrNull { it.startTime >= cp.endTime } }
+    val previewProgress = previewCurrent?.let { cp ->
+        ((previewNow2 - cp.startTime).toFloat() / (cp.endTime - cp.startTime).toFloat()).coerceIn(0f, 1f)
+    } ?: 0f
+    val previewTimeFmt  = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
-        // ── Full-screen preview ───────────────────────────────────────────────
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = previewPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { it.player = previewPlayer },
-            modifier = Modifier.fillMaxSize()
-        )
+    Row(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
-        // Gradient scrim over video so panel reads clearly
-        Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to Color.Black.copy(alpha = 0.20f),
-                    0.40f to Color.Black.copy(alpha = 0.55f),
-                    1f to Color.Black.copy(alpha = 0.92f),
-                )
-            )
-        )
-
-        // ── Glass panel (right 55%) ───────────────────────────────────────────
-        Box(
+        // ── Left: channel list panel ──────────────────────────────────────────
+        Column(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .fillMaxWidth(0.56f)
+                .weight(0.5f)
                 .background(
                     GlassTokens.GlassPanelSolid,
-                    RoundedCornerShape(topStart = GlassTokens.RadiusPanel, bottomStart = GlassTokens.RadiusPanel)
+                    RoundedCornerShape(topEnd = GlassTokens.RadiusPanel, bottomEnd = GlassTokens.RadiusPanel)
                 )
                 .border(
                     width = 1.dp,
                     color = GlassTokens.GlassBorder,
-                    shape = RoundedCornerShape(topStart = GlassTokens.RadiusPanel, bottomStart = GlassTokens.RadiusPanel)
+                    shape = RoundedCornerShape(topEnd = GlassTokens.RadiusPanel, bottomEnd = GlassTokens.RadiusPanel)
                 )
-                .clip(RoundedCornerShape(topStart = GlassTokens.RadiusPanel, bottomStart = GlassTokens.RadiusPanel))
+                .clip(RoundedCornerShape(topEnd = GlassTokens.RadiusPanel, bottomEnd = GlassTokens.RadiusPanel))
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-
-                // Header
-                Text(
-                    text = when (selectedCategory) {
-                        "__favourites__" -> "Favourites"
-                        null -> "All Channels"
-                        else -> selectedCategory
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = GlassTokens.TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(
-                        start = GlassTokens.PanelPadding,
-                        end = GlassTokens.PanelPadding,
-                        top = 20.dp,
-                        bottom = 8.dp,
-                    )
+            Text(
+                text = when (selectedCategory) {
+                    "__favourites__" -> "Favourites"
+                    null -> "All Channels"
+                    else -> selectedCategory
+                },
+                style      = MaterialTheme.typography.titleMedium,
+                color      = GlassTokens.TextPrimary,
+                fontWeight = FontWeight.Bold,
+                modifier   = Modifier.padding(
+                    start  = GlassTokens.PanelPadding,
+                    end    = GlassTokens.PanelPadding,
+                    top    = 20.dp,
+                    bottom = 8.dp,
                 )
-
-                // Category chips
-                if (categoryGroups.isNotEmpty()) {
-                    GlasCategoryPills(
-                        categories = categoryGroups,
-                        selectedCategory = selectedCategory.takeIf { it != "__favourites__" },
-                        modifier = Modifier.padding(horizontal = GlassTokens.PanelPadding, vertical = 4.dp),
-                        onSelect = onCategorySelect,
-                        onFocusDown = { try { firstRowFR.requestFocus() } catch (_: Exception) {} },
+            )
+            if (categoryGroups.isNotEmpty()) {
+                GlasCategoryPills(
+                    categories       = categoryGroups,
+                    selectedCategory = selectedCategory.takeIf { it != "__favourites__" },
+                    modifier         = Modifier.padding(horizontal = GlassTokens.PanelPadding, vertical = 4.dp),
+                    onSelect         = onCategorySelect,
+                    onFocusDown      = { try { firstRowFR.requestFocus() } catch (_: Exception) {} },
+                )
+            }
+            HorizontalDivider(
+                color    = GlassTokens.GlassBorder,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+            if (channelRows.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text  = if (selectedCategory == "__favourites__") "No favourites yet" else "No channels",
+                        color = GlassTokens.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-
-                HorizontalDivider(
-                    color = GlassTokens.GlassBorder,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-
-                // Channel list
-                if (channelRows.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (selectedCategory == "__favourites__") "No favourites yet" else "No channels",
-                            color = GlassTokens.TextSecondary,
-                            style = MaterialTheme.typography.bodyMedium,
+            } else {
+                LazyColumn(
+                    state          = listState,
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                ) {
+                    itemsIndexed(channelRows) { index, row ->
+                        GlassChannelRowItem(
+                            row            = row,
+                            programsMap    = programsMap,
+                            modifier       = if (index == 0) Modifier.focusRequester(firstRowFR) else Modifier,
+                            onFocused      = { ch -> previewChannel = ch },
+                            onKeyEvent     = { ev ->
+                                if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp && index == 0) {
+                                    onFocusUp(); true
+                                } else false
+                            },
+                            onPlay         = { url, name ->
+                                previewPlayer.stop()
+                                onChannelPlay(url, name)
+                            },
+                            onLoadMorePrograms = { epgId ->
+                                scope.launch { viewModel.loadProgramsForVisibleChannels(listOf(epgId)) }
+                            }
                         )
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                    ) {
-                        itemsIndexed(channelRows) { index, row ->
-                            GlassChannelRowItem(
-                                row = row,
-                                programsMap = programsMap,
-                                modifier = if (index == 0) Modifier.focusRequester(firstRowFR) else Modifier,
-                                onFocused = { ch -> previewChannel = ch },
-                                onKeyEvent = { ev ->
-                                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp && index == 0) {
-                                        onFocusUp(); true
-                                    } else false
-                                },
-                                onPlay = { url, name ->
-                                    onChannelPlay(url, name)
-                                },
-                                onLoadMorePrograms = { epgId ->
-                                    scope.launch { viewModel.loadProgramsForVisibleChannels(listOf(epgId)) }
-                                }
-                            )
-                        }
                     }
                 }
             }
         }
 
-        // Preview channel name overlay (top-left of video area)
-        previewChannel?.let { ch ->
-            Column(
+        // ── Right: mini player + programme info ───────────────────────────────
+        Column(
+            modifier            = Modifier
+                .fillMaxHeight()
+                .weight(0.5f)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 40.dp, top = 40.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF0A0A0A))
+                    .border(1.dp, GlassTokens.GlassBorder, RoundedCornerShape(12.dp))
             ) {
-                AsyncImage(
-                    model = ch.logoUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.10f)),
-                    contentScale = ContentScale.Fit,
+                AndroidView(
+                    factory  = { ctx ->
+                        PlayerView(ctx).apply {
+                            player        = previewPlayer
+                            useController = false
+                            resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            layoutParams  = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        }
+                    },
+                    update   = { it.player = previewPlayer },
+                    modifier = Modifier.fillMaxSize()
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = channelBaseName(ch.name).ifBlank { ch.name },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (previewChannel == null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Select a channel", color = GlassTokens.TextSecondary, fontSize = 14.sp)
+                    }
+                }
+            }
+
+            previewChannel?.let { ch ->
+                Row(
+                    verticalAlignment     = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    AsyncImage(
+                        model              = ch.logoUrl,
+                        contentDescription = null,
+                        modifier           = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f)),
+                        contentScale       = ContentScale.Fit,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text       = channelBaseName(ch.name).ifBlank { ch.name },
+                            style      = MaterialTheme.typography.titleMedium,
+                            color      = GlassTokens.TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines   = 1,
+                            overflow   = TextOverflow.Ellipsis,
+                        )
+                        if (previewCurrent != null) {
+                            Text(
+                                text     = previewCurrent.title,
+                                style    = MaterialTheme.typography.bodyMedium,
+                                color    = GlassTokens.TextSecondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                if (previewCurrent != null) {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        LinearProgressIndicator(
+                            progress   = { previewProgress },
+                            modifier   = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
+                            color      = GlassTokens.AccentDefault,
+                            trackColor = GlassTokens.GlassBorder,
+                        )
+                        Text(
+                            text     = previewTimeFmt.format(Date(previewCurrent.endTime)),
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = GlassTokens.TextTertiary,
+                            fontSize = 10.sp,
+                        )
+                    }
+                    if (previewNext != null) {
+                        Text(
+                            text     = "Next: ${previewNext.title}",
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = GlassTokens.TextTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }
