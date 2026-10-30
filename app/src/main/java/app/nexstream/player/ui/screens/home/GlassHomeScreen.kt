@@ -280,6 +280,7 @@ private fun LiveHeroBanner(
             model              = item?.artworkUrl,
             contentDescription = null,
             contentScale       = ContentScale.Crop,
+            alignment          = Alignment.TopCenter,
             modifier           = Modifier.fillMaxSize(),
         )
         // Left-to-right gradient so text is readable

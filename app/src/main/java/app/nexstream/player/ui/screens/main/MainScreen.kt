@@ -98,6 +98,7 @@ import app.nexstream.player.ui.theme.getExtPlayerLiveTvFlow
 import app.nexstream.player.ui.theme.getExtPlayerMoviesFlow
 import app.nexstream.player.ui.theme.getExtPlayerSeriesFlow
 import app.nexstream.player.ui.theme.getExtPlayerCatchupFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import app.nexstream.player.ui.screens.main.AppRoute
 import app.nexstream.player.ui.screens.main.hasCategoryPanel
@@ -1891,7 +1892,16 @@ private fun MainContentArea(
     var pendingHomeSeriesOpenId by remember { mutableStateOf<String?>(null) }
     var pendingHomeMovieOpenId  by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(glassSelectedMovieId) {
-        glassMovieEntity = glassSelectedMovieId?.let { repository.getMovieById(it) }
+        val id = glassSelectedMovieId ?: run { glassMovieEntity = null; return@LaunchedEffect }
+        val base = repository.getMovieById(id) ?: run { glassMovieEntity = null; return@LaunchedEffect }
+        glassMovieEntity = base
+        val detailed = try {
+            repository.getMovieDetails(
+                playlistId = base.playlistId,
+                vodId      = base.id.removePrefix("${base.playlistId}-"),
+            )
+        } catch (_: Exception) { null }
+        if (detailed != null) glassMovieEntity = detailed
     }
     Box(modifier = modifier) {
         // Glass: Live TV channel browser — only rendered when active so preview player is disposed on exit
@@ -2100,12 +2110,16 @@ private fun MainContentArea(
                 var glassSeriesRestoreIdx  by remember { mutableStateOf(0) }
                 var glassSeriesRestoreTick by remember { mutableStateOf(0) }
 
-                // Deep-link from Home "Continue Watching"
+                // Deep-link from Home rails
                 LaunchedEffect(pendingHomeSeriesOpenId) {
                     val id = pendingHomeSeriesOpenId ?: return@LaunchedEffect
                     pendingHomeSeriesOpenId = null
                     glassSelectedSeries   = repository.getSeriesById(id)
                     glassSelectedSeriesId = id
+                    if (glassSelectedSeries != null) {
+                        delay(200)
+                        onZoneContent()
+                    }
                 }
 
                 val glassSeries = glassSelectedSeries
